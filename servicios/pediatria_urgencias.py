@@ -13,7 +13,6 @@ from pathlib import Path
 from difflib import SequenceMatcher
 from deep_translator import GoogleTranslator
 from pypdf import PdfReader
-from rapidocr_onnxruntime import RapidOCR
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, Inches
@@ -425,13 +424,16 @@ def guardar_historia(datos):
 
 @st.cache_resource
 def cargar_ocr():
-    return RapidOCR()
+    try:
+        from rapidocr_onnxruntime import RapidOCR
+        return RapidOCR()
+    except Exception:
+        return None
 
 
 def extraer_texto_ocr_de_imagenes(page):
-    try:
-        ocr = cargar_ocr()
-    except Exception:
+    ocr = cargar_ocr()
+    if ocr is None:
         return ""
 
     bloques = []
