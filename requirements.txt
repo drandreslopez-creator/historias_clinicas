@@ -3,3 +3,6 @@ pandas
 openpyxl
 xlrd>=2.0.1
 deep-translator
+python-docx
+pypdf
+rapidocr-onnxruntime
