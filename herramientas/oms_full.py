@@ -1,23 +1,28 @@
-import pandas as pd
 import math
+from pathlib import Path
+
+import pandas as pd
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
 
 # =========================
 # CARGA <5 AÑOS
 # =========================
-df_wfa = pd.read_excel("data/wtageinf.xls")
-df_hfa = pd.read_excel("data/lenageinf.xls")
-df_wfh = pd.read_excel("data/wtleninf.xls")
-df_bfa = pd.read_excel("data/bmiagerev.xls")
-df_hc = pd.read_excel("data/hcageinf.xls")
+df_wfa = pd.read_excel(DATA_DIR / "wtageinf.xls")
+df_hfa = pd.read_excel(DATA_DIR / "lenageinf.xls")
+df_wfh = pd.read_excel(DATA_DIR / "wtleninf.xls")
+df_bfa = pd.read_excel(DATA_DIR / "bmiagerev.xls")
+df_hc = pd.read_excel(DATA_DIR / "hcageinf.xls")
 
 # =========================
 # CARGA 5–19 AÑOS OMS 2007
 # =========================
-df_hfa_boys_519 = pd.read_excel("data/hfa-boys-z-who-2007-exp.xlsx")
-df_hfa_girls_519 = pd.read_excel("data/hfa-girls-z-who-2007-exp.xlsx")
+df_hfa_boys_519 = pd.read_excel(DATA_DIR / "hfa-boys-z-who-2007-exp.xlsx")
+df_hfa_girls_519 = pd.read_excel(DATA_DIR / "hfa-girls-z-who-2007-exp.xlsx")
 
-df_bfa_boys_519 = pd.read_excel("data/bmi-boys-z-who-2007-exp.xlsx")
-df_bfa_girls_519 = pd.read_excel("data/bmi-girls-z-who-2007-exp.xlsx")
+df_bfa_boys_519 = pd.read_excel(DATA_DIR / "bmi-boys-z-who-2007-exp.xlsx")
+df_bfa_girls_519 = pd.read_excel(DATA_DIR / "bmi-girls-z-who-2007-exp.xlsx")
 
 # =========================
 # LMS
