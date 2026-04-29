@@ -4,7 +4,28 @@ import streamlit as st
 from servicios import pediatria_urgencias
 from servicios import neonatologia_adaptacion
 
+PASSWORD_APP = "8041003"
+
 st.set_page_config(page_title="Historias Clínicas", layout="wide")
+
+if "app_autenticada" not in st.session_state:
+    st.session_state["app_autenticada"] = False
+
+if not st.session_state["app_autenticada"]:
+    st.title("🩺 FORMATO DE HISTORIA CLÍNICA DEL DR. ANDRÉS LÓPEZ RUIZ")
+    st.subheader("Acceso")
+    with st.form("login_form"):
+        password_input = st.text_input("Contraseña", type="password")
+        login_submit = st.form_submit_button("Ingresar")
+
+    if login_submit:
+        if password_input == PASSWORD_APP:
+            st.session_state["app_autenticada"] = True
+            st.rerun()
+        else:
+            st.error("Contraseña incorrecta.")
+
+    st.stop()
 
 st.title("🩺 FORMATO DE HISTORIA CLÍNICA DEL DR. ANDRÉS LÓPEZ RUIZ")
 
