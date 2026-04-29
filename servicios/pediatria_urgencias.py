@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 from datetime import date
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import unicodedata
 import json
 import re
@@ -31,6 +32,7 @@ from herramientas.diagnostico_nutricional import (
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 HISTORIAS_PATH = BASE_DIR / "data" / "historias_pediatria_urgencias.jsonl"
+BOGOTA_TZ = ZoneInfo("America/Bogota")
 
 ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO XX GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO Y ECOGRAFÍAS ANTENATALES: NACE VÍA VAGINAL/ CESAREA A LAS XX SEM A TÉRMINO. EGRESO CONJUNTO, PESO XXXX GR - TALLA XX CM.
 INMUNOLÓGICOS: VACUNAS AL DÍA SEGÚN PAI.
@@ -712,7 +714,7 @@ PLAN:
 {plan}
 """
 
-        fecha_guardado = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
 
         guardar_historia({
