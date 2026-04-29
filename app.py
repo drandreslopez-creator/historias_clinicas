@@ -8,8 +8,8 @@ st.set_page_config(page_title="Historias Clínicas", layout="wide")
 
 st.title("🩺 FORMATO DE HISTORIA CLÍNICA DEL DR. ANDRÉS LÓPEZ RUIZ")
 
-tipo_historia = st.selectbox(
-    "Seleccione tipo de historia clínica",
+area_servicio = st.selectbox(
+    "Área de servicio",
     [
         "Pediatría Urgencias",
         "Pediatría Hospitalización",
@@ -20,9 +20,19 @@ tipo_historia = st.selectbox(
     ]
 )
 
+if area_servicio == "Pediatría Urgencias":
+    st.selectbox(
+        "Tipo de historia clínica",
+        [
+            "RESPUESTA DE INTERCONSULTA - SERVICIO DE PEDIATRÍA DE URGENCIAS",
+            "HISTORIA CLINICA DE INGRESO A URGENCIAS PEDIATRICAS",
+        ],
+        key="tipo_historia_clinica_ped_urg",
+    )
+
 # ENRUTADOR 🔥
-if tipo_historia == "Pediatría Urgencias":
+if area_servicio == "Pediatría Urgencias":
     pediatria_urgencias.render()
 
-elif tipo_historia == "Adaptación Neonatal":
+elif area_servicio == "Adaptación Neonatal":
     neonatologia_adaptacion.render()
