@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date
 from datetime import datetime
@@ -6,6 +7,7 @@ from zoneinfo import ZoneInfo
 import unicodedata
 import json
 import re
+from html import escape
 from pathlib import Path
 from difflib import SequenceMatcher
 from deep_translator import GoogleTranslator
@@ -390,6 +392,41 @@ def guardar_historia(datos):
         f.write(json.dumps(datos, ensure_ascii=False) + "\n")
 
 
+def texto_a_html(texto):
+    if not texto:
+        return ""
+    return "<br>".join(escape(str(texto)).splitlines())
+
+
+def render_informe_html(titulo, secciones, texto_copiar):
+    bloques = []
+    for encabezado, contenido in secciones:
+        bloques.append(
+            f"""
+            <div style="margin-top:18px;">
+                <div style="font-weight:700; margin-bottom:8px;">{escape(encabezado)}</div>
+                <div style="line-height:1.55;">{texto_a_html(contenido)}</div>
+            </div>
+            """
+        )
+
+    html = f"""
+    <div style="border:1px solid rgba(250,250,250,.12); border-radius:14px; padding:18px 20px; background:#171923; color:#f5f5f5; font-family:Arial, sans-serif;">
+        <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
+            <button
+                onclick='navigator.clipboard.writeText({json.dumps(texto_copiar)})'
+                style="background:#2b6cb0; color:white; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; font-size:14px;"
+            >
+                Copiar informe
+            </button>
+        </div>
+        <div style="font-size:24px; font-weight:800; text-align:center; margin-bottom:18px;">{escape(titulo)}</div>
+        {''.join(bloques)}
+    </div>
+    """
+    components.html(html, height=1200, scrolling=True)
+
+
 def cargar_historias_guardadas():
     if not HISTORIAS_PATH.exists():
         return []
@@ -417,7 +454,12 @@ def render():
         if key not in st.session_state:
             st.session_state[key] = value
 
-    st.header("📌 HISTORIA CLÍNICA - PEDIATRÍA URGENCIAS")
+    titulo_historia = st.session_state.get(
+        "tipo_historia_clinica_ped_urg",
+        "HISTORIA CLINICA DE INGRESO A URGENCIAS PEDIATRICAS"
+    )
+
+    st.header(f"📌 {titulo_historia}")
 
     col1, col2 = st.columns(2)
 
@@ -658,6 +700,10 @@ def render():
         diagnostico_final = diagnostico_seleccionado or ""
 
         historia = f"""
+{titulo_historia.upper()}
+
+DATOS DE IDENTIFICACIÓN:
+
 NOMBRE: {nombre}
 TIPO DE DOCUMENTO: {tipo_documento}
 DOCUMENTO: {documento}
@@ -727,7 +773,24 @@ PLAN:
         })
 
         st.success("Historia clínica generada")
-        st.text_area("Resultado final", historia.upper(), height=500)
+        secciones_informe = [
+            ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nINFORMANTE: {informante}\nEPS: {eps}\nPROVENIENTE: {proveniente}"),
+            ("MOTIVO DE CONSULTA", motivo),
+            ("ENFERMEDAD ACTUAL", enfermedad_auto),
+            ("REVISIÓN POR SISTEMAS", revision),
+            ("ANTECEDENTES", antecedentes),
+            ("NEURODESARROLLO", neuro_editable),
+            ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C"),
+            ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm\nP/E Z: {z_pe}\nT/E Z: {z_te}\nP/T Z: {z_pt}\nIMC/E Z: {z_imc}\nPC/E Z: {z_pc}"),
+            ("EXAMEN FÍSICO", examen),
+            ("ANÁLISIS", analisis),
+            ("CLASIFICACIÓN DIAGNÓSTICA", clasificacion_diagnostica),
+            ("DIAGNÓSTICOS", diagnostico_final),
+            ("OBSERVACIÓN DIAGNÓSTICA", observacion_diagnostico),
+            ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
+            ("PLAN", plan),
+        ]
+        render_informe_html(titulo_historia.upper(), secciones_informe, historia.upper())
 
     st.divider()
     with st.expander("Historias guardadas", expanded=False):
