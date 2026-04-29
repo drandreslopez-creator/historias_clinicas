@@ -7,10 +7,16 @@ from zoneinfo import ZoneInfo
 import unicodedata
 import json
 import re
+from io import BytesIO
 from html import escape
 from pathlib import Path
 from difflib import SequenceMatcher
 from deep_translator import GoogleTranslator
+from pypdf import PdfReader
+from rapidocr_onnxruntime import RapidOCR
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Pt, Inches
 
 from core.calculos import calcular_edad, edad_en_meses
 from core.clasificacion import grupo_etario
@@ -110,6 +116,12 @@ FORM_DEFAULTS = {
     "dx_cie10": None,
     "obs_dx": "",
     "plan": PLAN_DEFAULT,
+    "paraclinicos_texto": "",
+    "paraclinicos_auto": "",
+    "paraclinicos_pdf_sig": "",
+    "imagenes_texto": "",
+    "imagenes_auto": "",
+    "imagenes_pdf_sig": "",
 }
 
 EQUIVALENCIAS_BUSQUEDA = {
@@ -202,6 +214,22 @@ ALIAS_DESCRIPCION = {
     "cystitis": "cistitis cistit",
     "pyelonephritis": "pielonefritis pielon",
     "convulsion": "convulsion convuls",
+}
+
+MESES_ESP = {
+    "ENE": "01",
+    "FEB": "02",
+    "MAR": "03",
+    "ABR": "04",
+    "MAY": "05",
+    "JUN": "06",
+    "JUL": "07",
+    "AGO": "08",
+    "SEP": "09",
+    "SEPT": "09",
+    "OCT": "10",
+    "NOV": "11",
+    "DIC": "12",
 }
 
 
@@ -380,6 +408,9 @@ def puntuar_diagnostico(row, terminos, grupos=None):
 def limpiar_formulario():
     for key, value in FORM_DEFAULTS.items():
         st.session_state[key] = value
+    # Los file_uploader no se pueden resetear asignándoles valores directos.
+    st.session_state.pop("pdf_paraclinicos_uploader", None)
+    st.session_state.pop("pdf_imagenes_uploader", None)
 
 
 def solicitar_limpieza_formulario():
@@ -392,39 +423,718 @@ def guardar_historia(datos):
         f.write(json.dumps(datos, ensure_ascii=False) + "\n")
 
 
+@st.cache_resource
+def cargar_ocr():
+    return RapidOCR()
+
+
+def extraer_texto_ocr_de_imagenes(page):
+    try:
+        ocr = cargar_ocr()
+    except Exception:
+        return ""
+
+    bloques = []
+    try:
+        imagenes = list(page.images)
+    except Exception:
+        imagenes = []
+
+    for image_file in imagenes:
+        try:
+            resultado, _ = ocr(image_file.data)
+        except Exception:
+            continue
+
+        if not resultado:
+            continue
+
+        lineas = sorted(
+            resultado,
+            key=lambda item: (
+                min(p[1] for p in item[0]),
+                min(p[0] for p in item[0]),
+            )
+        )
+        textos = [str(item[1]).strip() for item in lineas if str(item[1]).strip()]
+        if textos:
+            bloques.append("\n".join(textos))
+
+    return "\n\n".join(bloques).strip()
+
+
+def extraer_texto_pdf(pdf_file):
+    if not pdf_file:
+        return ""
+
+    try:
+        pdf_bytes = pdf_file.getvalue()
+        reader = PdfReader(BytesIO(pdf_bytes))
+        paginas = []
+        tiene_imagenes = False
+        for page in reader.pages:
+            try:
+                if len(page.images) > 0:
+                    tiene_imagenes = True
+            except Exception:
+                pass
+            texto = page.extract_text() or ""
+            if texto.strip():
+                paginas.append(texto)
+        if paginas:
+            return "\n".join(paginas)
+        if tiene_imagenes:
+            paginas_ocr = []
+            for page in reader.pages:
+                texto_ocr = extraer_texto_ocr_de_imagenes(page)
+                if texto_ocr:
+                    paginas_ocr.append(texto_ocr)
+            if paginas_ocr:
+                return "\n\n".join(paginas_ocr)
+            return "__PDF_ESCANEADO_SIN_TEXTO__"
+        return ""
+    except Exception:
+        return ""
+
+
+def extraer_fecha_principal(texto):
+    texto = normalizar_texto_para_reporte(texto)
+    match_ymd = re.search(r"\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b", texto)
+    if match_ymd:
+        return f"{match_ymd.group(3).zfill(2)}/{match_ymd.group(2).zfill(2)}/{match_ymd.group(1)}"
+
+    idx_ingreso = re.search(r"FECHA DE INGRESO", texto, flags=re.IGNORECASE)
+    if idx_ingreso:
+        subtexto = texto[idx_ingreso.start(): idx_ingreso.start() + 220]
+        match_ymd_local = re.search(r"\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b", subtexto)
+        if match_ymd_local:
+            return f"{match_ymd_local.group(3).zfill(2)}/{match_ymd_local.group(2).zfill(2)}/{match_ymd_local.group(1)}"
+        match_mes_local = re.search(
+            r"\b(\d{1,2})[-/ ]([A-ZÁÉÍÓÚa-záéíóú]{3,5})\.?[-/ ](\d{4})\b",
+            subtexto,
+            flags=re.IGNORECASE
+        )
+        if match_mes_local:
+            dia = match_mes_local.group(1).zfill(2)
+            mes_txt = normalizar_texto(match_mes_local.group(2)).upper()
+            anio = match_mes_local.group(3)
+            mes = MESES_ESP.get(mes_txt[:4]) or MESES_ESP.get(mes_txt[:3])
+            if mes:
+                return f"{dia}/{mes}/{anio}"
+
+    match_mes = re.search(
+        r"\b(\d{1,2})[-/ ]([A-ZÁÉÍÓÚa-záéíóú]{3,5})\.?[-/ ](\d{4})\b",
+        texto,
+        flags=re.IGNORECASE
+    )
+    if match_mes:
+        dia = match_mes.group(1).zfill(2)
+        mes_txt = normalizar_texto(match_mes.group(2)).upper()
+        anio = match_mes.group(3)
+        mes = MESES_ESP.get(mes_txt[:4]) or MESES_ESP.get(mes_txt[:3])
+        if mes:
+            return f"{dia}/{mes}/{anio}"
+
+    patrones_preferidos = [
+        r"RESULTADO[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"REALIZACI[ÓO]N[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"FECHA DE INGRESO[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"FECHA VALIDACION[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"FECHA RECEPCI[ÓO]N[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+        r"FECHA RECEPCION[:\s]+(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})",
+    ]
+    for patron in patrones_preferidos:
+        match = re.search(patron, texto, flags=re.IGNORECASE)
+        if match:
+            return match.group(1).replace("-", "/")
+
+    match = re.search(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b", texto)
+    if match:
+        return match.group(1).replace("-", "/")
+
+    return ""
+
+
+def limpiar_linea_paraclinico(linea):
+    linea = normalizar_texto_para_reporte(linea)
+    linea = re.sub(r"\s+", " ", linea).strip(" -\t")
+    return linea
+
+
+def normalizar_texto_para_reporte(texto):
+    texto = str(texto or "")
+    texto = unicodedata.normalize("NFKC", texto)
+    texto = texto.replace("\r", "\n")
+    texto = texto.replace("\xa0", " ")
+    texto = texto.replace("ﬁ", "fi").replace("ﬂ", "fl")
+    texto = re.sub(r"[ \t]+", " ", texto)
+    texto = re.sub(r"\n{3,}", "\n\n", texto)
+    return texto.strip()
+
+
+def compactar_espaciado_letras(texto):
+    lineas_arregladas = []
+    for linea in str(texto).splitlines():
+        tokens = linea.split()
+        if tokens:
+            letras_sueltas = sum(1 for token in tokens if len(token) == 1 and token.isalpha())
+            if letras_sueltas >= 5 and letras_sueltas / max(len(tokens), 1) > 0.5:
+                reconstruida = ""
+                buffer_letras = []
+                for token in tokens:
+                    if len(token) == 1 and token.isalpha():
+                        buffer_letras.append(token)
+                    else:
+                        if buffer_letras:
+                            reconstruida += "".join(buffer_letras) + " "
+                            buffer_letras = []
+                        reconstruida += token + " "
+                if buffer_letras:
+                    reconstruida += "".join(buffer_letras)
+                linea = reconstruida.strip()
+        lineas_arregladas.append(linea)
+    return "\n".join(lineas_arregladas)
+
+
+def organizar_texto_por_fechas(texto):
+    texto = compactar_espaciado_letras(normalizar_texto_para_reporte(texto))
+    if not texto:
+        return ""
+
+    texto = texto.upper()
+    lineas = [limpiar_linea_paraclinico(linea) for linea in texto.splitlines()]
+    lineas = [linea for linea in lineas if linea]
+
+    patron_fecha = re.compile(r"\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b")
+    bloques = []
+    fecha_actual = None
+    contenido_actual = []
+
+    for linea in lineas:
+        coincidencias = list(patron_fecha.finditer(linea))
+        if coincidencias:
+            for idx, match in enumerate(coincidencias):
+                fecha = match.group(1).replace("-", "/")
+                resto_inicio = match.end()
+                resto_fin = coincidencias[idx + 1].start() if idx + 1 < len(coincidencias) else len(linea)
+                resto = limpiar_linea_paraclinico(linea[resto_inicio:resto_fin])
+
+                if fecha_actual is not None:
+                    bloques.append((fecha_actual, contenido_actual))
+
+                fecha_actual = fecha
+                contenido_actual = [resto] if resto else []
+        else:
+            if fecha_actual is None:
+                fecha_actual = "SIN FECHA"
+                contenido_actual = []
+            contenido_actual.append(linea)
+
+    if fecha_actual is not None:
+        bloques.append((fecha_actual, contenido_actual))
+
+    bloques_agrupados = []
+    mapa_fechas = {}
+    for fecha, contenidos in bloques:
+        if fecha not in mapa_fechas:
+            mapa_fechas[fecha] = []
+            bloques_agrupados.append((fecha, mapa_fechas[fecha]))
+        for item in contenidos:
+            item_limpio = limpiar_linea_paraclinico(item)
+            if item_limpio:
+                mapa_fechas[fecha].append(item_limpio)
+
+    salida = []
+    for fecha, contenidos in bloques_agrupados:
+        if fecha != "SIN FECHA":
+            salida.append(fecha)
+        for item in contenidos:
+            salida.append(item)
+        salida.append("")
+
+    return "\n".join(salida).strip()
+
+
+def formatear_resumen_imagen(texto):
+    texto = compactar_espaciado_letras(normalizar_texto_para_reporte(texto))
+    if not texto:
+        return ""
+
+    fecha = extraer_fecha_principal(texto)
+    lineas = [limpiar_linea_paraclinico(l).upper() for l in texto.splitlines() if limpiar_linea_paraclinico(l)]
+
+    inicio = None
+    for i, linea in enumerate(lineas):
+        if any(
+            marcador in linea
+            for marcador in [
+                "RADIOGRAFIA", "RADIOGRAFÍA", "TAC", "TOMOGRAFIA", "TOMOGRAFÍA",
+                "ECOGRAFIA", "ECOGRAFÍA", "ULTRASON", "RESONANCIA", "RMN", "RM "
+            ]
+        ):
+            inicio = i
+            break
+
+    if inicio is None:
+        contenido = organizar_texto_por_fechas(texto)
+        return contenido.upper()
+
+    fin = len(lineas)
+    for j in range(inicio + 1, len(lineas)):
+        if any(
+            stop in lineas[j]
+            for stop in ["ATENTAMENTE", "GENERADO:", "PAGINA", "PÁGINA", "BACTERIOLOGA", "INTERPRETACION"]
+        ):
+            fin = j
+            break
+
+    bloque = lineas[inicio:fin]
+    bloque = [b for b in bloque if b not in {"RESULTADO", "DATOS CLINICOS", "DATOS CLÍNICOS"}]
+    contenido = " ".join(bloque)
+    contenido = re.sub(r"\s+", " ", contenido).strip()
+    contenido = re.sub(r"\s+[A-Z]$", "", contenido).strip()
+
+    if fecha:
+        return f"{fecha}\n{contenido}".strip()
+    return contenido
+
+
+def extraer_valor_numerico(linea, etiqueta):
+    patron = re.escape(etiqueta) + r"\s+([<>]?\d+(?:[.,]\d+)?)"
+    match = re.search(patron, linea)
+    return match.group(1) if match else None
+
+
+def linea_es_ruido_laboratorio(linea):
+    ruido = [
+        "PACIENTE", "DOCUMENTO ID", "FECHA DE NACIMIENTO", "DIRECCION", "DIRECCIÓN",
+        "TELEFONO", "TELÉFONO", "SEXO", "FECHA DE INGRESO", "FECHA DE IMPRESION",
+        "FECHA DE IMPRESIÓN", "SERVICIO", "EMPRESA", "MEDICO", "MÉDICO", "SEDE",
+        "NO. INTERNO", "PETICION NO", "PETICIÓN NO", "PAGINA", "PÁGINA",
+        "VALORES DE REFERENCIA", "UNIDADES", "FIRMA RESPONSABLE", "SEDE DE PROCESAMIENTO",
+        "RAZON SOCIAL", "RAZÓN SOCIAL", "METODO:", "MÉTODO:", "BIBLIOGRAFIA:", "BIBLIOGRAFÍA:",
+        "TITULO SIGNIFICATIVO", "TÍTULO SIGNIFICATIVO", "LOS TITULOS DE", "LOS TÍTULOS DE",
+        "SE SUGIERE SEGUIMIENTO", "A PARTIR DEL", "MARCA REACTIVO", "SUSTRATO:",
+        "LABORATORIO CLINICO", "LABORATORIO CLÍNICO", "PRELIMINAR", "A. M.", "P. M.",
+        "CLINICA DE MARLY", "CLÍNICA DE MARLY", "COLSANITAS", "CAVELIER", "JOHANNA CORREDOR",
+        "BOGOTA", "BOGOTÁ", "CHIA", "CHÍA", "COLOMBIA", "CUNDINAMARCA",
+        "CARRERA ", "CALLE ", "AV.", "AV ", "VEREDA", "TEL.", "DIRECTOS:",
+        "BACTERIOLOGA", "BACTERIÓLOGA", "HOMBRES:", "MUJERES:", "INMUNOENSAYO",
+        "QUIMIOLUMINISCENCIA", "VALOR DE REFERENCIA", "VALORES DE REFERENCIA"
+    ]
+    return any(r in linea for r in ruido)
+
+
+def linea_parece_nombre_examen(linea):
+    linea = linea.strip()
+    if not linea or len(linea) < 4 or len(linea) > 120:
+        return False
+    if linea_es_ruido_laboratorio(linea):
+        return False
+    if any(
+        token in linea
+        for token in [
+            "RESULTADO", "VALOR DE REFERENCIA", "VALORES DE REFERENCIA", "METODO",
+            "MÉTODO", "VALIDADO POR", "TECNICA", "TÉCNICA", "INTERVALO BIOLOGICO",
+            "INTERVALO BIOLÓGICO", "UNIDADES", "PAGINA", "PÁGINA"
+        ]
+    ):
+        return False
+    if re.fullmatch(r"(PG/ML|NG/ML|MUI/ML|UUI/ML|U/ML|UI/ML|UI/L|%|UI)", linea):
+        return False
+    if re.fullmatch(r"[0-9./: %-]+", linea):
+        return False
+    if linea in {"COAGULACION", "COAGULACIÓN", "INMUNOLOGIA IV", "INMUNOLOGÍA IV", "INMUNOLOGIA E INFECCIOSAS ( SUERO)", "QUIMICA SANGUINEA (SUERO-QUIMICA SECA)"}:
+        return False
+    letras = sum(ch.isalpha() for ch in linea)
+    return letras >= 4
+
+
+def formatear_estudio_generico(linea):
+    linea = re.sub(r"\s+", " ", linea).strip(" .")
+    linea = linea.replace("%ACTIVIDAD", "% ACTIVIDAD")
+    patron = re.match(
+        r"^([A-ZÁÉÍÓÚÜÑ0-9 #/%()\-]+?)\s+((?:NEGATIVO|POSITIVO|NO REACTIVO|REACTIVO|[<>]?\d+(?:[.,]\d+)?(?:\s*%[A-ZÁÉÍÓÚÜÑ]*)?))\s*(.*)$",
+        linea
+    )
+    if not patron:
+        return ""
+
+    nombre = patron.group(1).strip(" :")
+    resultado = patron.group(2).strip()
+    cola = patron.group(3).strip()
+    cola = re.sub(r"^(%ACTIVIDAD|%|ACTIVIDAD)\s*", "", cola).strip()
+
+    if cola:
+        match_vn = re.match(r"([<>]?\d+(?:[.,]\d+)?)\s+([<>]?\d+(?:[.,]\d+)?)", cola)
+        if match_vn:
+            vn = f"VN {match_vn.group(1)} {match_vn.group(2)}"
+            return f"{nombre} {resultado} {vn}".strip()
+    return f"{nombre} {resultado}".strip()
+
+
+def extraer_estudios_ocr(lineas):
+    estudios = []
+    exam_actual = None
+    i = 0
+
+    while i < len(lineas):
+        linea = lineas[i]
+        if not linea:
+            i += 1
+            continue
+
+        if linea_parece_nombre_examen(linea):
+            candidato = linea
+            if i + 1 < len(lineas):
+                siguiente = lineas[i + 1]
+                if re.fullmatch(r"(PG/ML|NG/ML|MUI/ML|UUI/ML|U/ML|UI/ML|UI/L|%|UI)", siguiente):
+                    i += 1
+                    siguiente = lineas[i + 1] if i + 1 < len(lineas) else ""
+                if (
+                    linea_parece_nombre_examen(siguiente)
+                    and normalizar_texto(siguiente) != normalizar_texto(candidato)
+                    and len(siguiente) > len(candidato)
+                ):
+                    candidato = siguiente
+                    i += 1
+            exam_actual = candidato
+            i += 1
+            continue
+
+        if exam_actual:
+            linea_upper = linea.upper()
+            valor = ""
+            if "RESULTADO:" in linea_upper:
+                valor = linea_upper.split("RESULTADO:", 1)[1].strip()
+            elif re.fullmatch(r"(NEGATIVO|POSITIVO|VER ANEXO|NO REACTIVO|REACTIVO)(\s+[0-9.,]+)?", linea_upper):
+                valor = linea_upper
+            elif re.fullmatch(r"[<>]?\d+(?:[.,]\d+)?", linea_upper):
+                valor = linea_upper
+
+            if valor:
+                estudio = f"{exam_actual} {valor}".strip()
+                estudio_upper = estudio.upper()
+                if any(
+                    ruido in estudio_upper
+                    for ruido in [
+                        "BACTERIOLOG", "ANTICONCEPTIVOS", "SEMANAS DE GESTACION",
+                        "SEMANAS DE GESTACIÓN", "MANTILLA", "CASTANEDA", "PRIETO",
+                        "ALVAREZ", "30349355"
+                    ]
+                ):
+                    exam_actual = None
+                    i += 1
+                    continue
+                if estudio not in estudios:
+                    estudios.append(estudio)
+                exam_actual = None
+                i += 1
+                continue
+
+        i += 1
+
+    return estudios
+
+
+def formatear_resumen_paraclinico(texto):
+    texto = compactar_espaciado_letras(normalizar_texto_para_reporte(texto))
+    if not texto:
+        return ""
+
+    fecha = extraer_fecha_principal(texto)
+    upper = texto.upper()
+    lineas = [limpiar_linea_paraclinico(l).upper() for l in upper.splitlines() if limpiar_linea_paraclinico(l)]
+
+    salida = []
+    if fecha:
+        salida.append(fecha)
+
+    pruebas_rapidas = []
+    for linea in lineas:
+        if "ANTIGENO" in linea or "ANTÍGENO" in linea:
+            if "NEGAT" in linea:
+                pruebas_rapidas.append(re.sub(r"\s+", " ", linea).replace("NEGATIVO", "NEGATIVO"))
+            elif "POSIT" in linea:
+                pruebas_rapidas.append(re.sub(r"\s+", " ", linea))
+    salida.extend(dict.fromkeys(pruebas_rapidas))
+
+    hemograma_map = [
+        ("RECUENTO DE LEUCOCITOS", "LEUCOS"),
+        ("% NEUTROFILOS", "NEU"),
+        ("% NEUTRÓFILOS", "NEU"),
+        ("% LINFOCITOS", "LINF"),
+        ("HEMOGLOBINA", "HB"),
+        ("HEMATOCRITO", "HTO"),
+        ("RECUENTO DE PLAQUETAS", "PLAQ"),
+        ("VOLUMEN CORPUSCULAR MEDIO", "VCM"),
+        ("# NEUTROFILOS", "NEUTRO"),
+        ("# NEUTRÓFILOS", "NEUTRO"),
+        ("# LINFOCITOS", "L"),
+    ]
+    hemograma_items = []
+    for origen, destino in hemograma_map:
+        for linea in lineas:
+            if linea.startswith(origen):
+                valor = extraer_valor_numerico(linea, origen)
+                if valor:
+                    sufijo = "%" if origen.startswith("% ") else ""
+                    hemograma_items.append(f"{destino} {valor}{sufijo}")
+                break
+    if hemograma_items:
+        salida.append("HEMOGRAMA: " + ", ".join(hemograma_items))
+
+    quimica_map = [
+        ("VSG", "VSG"),
+        ("PROTEINA C REACTIVA", "PCR"),
+        ("PCR", "PCR"),
+        ("ALBUMINA", "ALBÚMINA"),
+        ("ALBÚMINA", "ALBÚMINA"),
+        ("ALT", "ALT"),
+        ("AST", "AST"),
+        ("TGP", "TGP"),
+        ("TGO", "TGO"),
+        ("CREATININA", "CREATININA"),
+        ("BUN", "BUN"),
+        ("AMILASA", "AMILASA"),
+        ("BILIRRUBINA TOTAL", "BT"),
+        ("BILIRRUBINA DIRECTA", "BD"),
+        ("BILIRRUBINA INDIRECTA", "BI"),
+        ("CK", "CK"),
+    ]
+
+    grupos_quimica = []
+    vistos = set()
+    for origen, destino in quimica_map:
+        for linea in lineas:
+            if linea.startswith(origen) and (origen, destino) not in vistos:
+                valor = extraer_valor_numerico(linea, origen)
+                if valor:
+                    grupos_quimica.append(f"{destino} {valor}")
+                    vistos.add((origen, destino))
+                break
+    if grupos_quimica:
+        salida.append(", ".join(grupos_quimica))
+
+    uro_lineas = []
+    capturando_uro = False
+    for linea in lineas:
+        if "UROANALISIS" in linea or "UROANÁLISIS" in linea:
+            capturando_uro = True
+        if capturando_uro:
+            if any(stop in linea for stop in ["BACTERIOLOGA", "BACTERIÓLOGA", "PAGINA", "PÁGINA", "FECHA VALIDACION"]):
+                break
+            uro_lineas.append(linea)
+    if uro_lineas:
+        uro_texto = re.sub(r"\s+", " ", " ".join(uro_lineas)).strip()
+        salida.append(uro_texto)
+
+    if len(salida) <= 1:
+        genericos = []
+        en_area_examenes = False
+        for linea in lineas:
+            if ("EXAMEN" in linea or "EXÁMEN" in linea) and "RESULTADO" in linea:
+                en_area_examenes = True
+                continue
+            if not en_area_examenes:
+                continue
+            if linea_es_ruido_laboratorio(linea):
+                continue
+            if linea in {"COAGULACION", "COAGULACIÓN", "INMUNOLOGIA IV", "INMUNOLOGÍA IV"}:
+                continue
+            if "FECHA VALIDACION" in linea or "FECHA VALIDACIÓN" in linea:
+                continue
+            if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{2,4}", linea):
+                continue
+            estudio = formatear_estudio_generico(linea)
+            if estudio:
+                genericos.append(estudio)
+
+        genericos = list(dict.fromkeys(genericos))
+        if genericos:
+            salida.extend(genericos)
+
+    if len(salida) <= 1:
+        estudios_ocr = extraer_estudios_ocr(lineas)
+        if estudios_ocr:
+            salida.extend(estudios_ocr)
+
+    if len(salida) > 1:
+        fecha_principal = salida[0]
+        resto = [s for s in salida[1:] if s and not re.fullmatch(r"\d{1,2}/\d{1,2}/\d{2,4}", s)]
+        return "\n".join([fecha_principal] + resto).strip()
+
+    if len(salida) <= 1:
+        return organizar_texto_por_fechas(texto).upper()
+
+
+def organizar_pdf_segun_tipo(texto, tipo):
+    if texto == "__PDF_ESCANEADO_SIN_TEXTO__":
+        if tipo == "imagenes":
+            return "PDF ESCANEADO SIN TEXTO EXTRAÍBLE. PARA ORGANIZAR AUTOMÁTICAMENTE ESTE REPORTE IMAGENOLÓGICO SE NECESITA OCR."
+        return "PDF ESCANEADO SIN TEXTO EXTRAÍBLE. PARA ORGANIZAR AUTOMÁTICAMENTE ESTOS LABORATORIOS SE NECESITA OCR."
+    if tipo == "imagenes":
+        return formatear_resumen_imagen(texto)
+    return formatear_resumen_paraclinico(texto)
+
+
+def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
+    if not pdf_files:
+        return
+
+    firma = "||".join(f"{pdf_file.name}|{pdf_file.size}" for pdf_file in pdf_files)
+    if st.session_state.get(key_sig) == firma:
+        return
+
+    bloques = []
+    for pdf_file in pdf_files:
+        texto_pdf = extraer_texto_pdf(pdf_file)
+        texto_organizado = organizar_pdf_segun_tipo(texto_pdf, tipo)
+        if texto_organizado:
+            bloques.append(texto_organizado)
+
+    texto_organizado = "\n\n".join(bloques).strip()
+
+    if not texto_organizado:
+        return
+
+    texto_actual = st.session_state.get(key_texto, "")
+    texto_auto_previo = st.session_state.get(key_auto, "")
+    if not texto_actual or texto_actual == texto_auto_previo:
+        st.session_state[key_texto] = texto_organizado
+
+    st.session_state[key_auto] = texto_organizado
+    st.session_state[key_sig] = firma
+
+
 def texto_a_html(texto):
     if not texto:
         return ""
     return "<br>".join(escape(str(texto)).splitlines())
 
 
+def contenido_seccion_html(texto, color):
+    if not texto:
+        return f'<p style="margin:0 0 10px 0; color:{color};">&nbsp;</p>'
+
+    lineas = str(texto).splitlines()
+    partes = []
+    for linea in lineas:
+        linea_html = escape(linea) if linea.strip() else "&nbsp;"
+        partes.append(
+            f'<p style="margin:0 0 8px 0; line-height:1.5; color:{color};">{linea_html}</p>'
+        )
+    return "".join(partes)
+
+
 def render_informe_html(titulo, secciones, texto_copiar):
-    bloques = []
+    bloques_display = []
+    bloques_copy = []
     for encabezado, contenido in secciones:
-        bloques.append(
+        bloques_display.append(
             f"""
-            <div style="margin-top:18px;">
-                <div style="font-weight:700; margin-bottom:8px;">{escape(encabezado)}</div>
-                <div style="line-height:1.55;">{texto_a_html(contenido)}</div>
-            </div>
+            <section style="margin-top:18px;">
+                <div style="font-weight:700; margin-bottom:8px; color:#ffffff;">{escape(encabezado)}</div>
+                <div>{contenido_seccion_html(contenido, "#f5f5f5")}</div>
+            </section>
             """
         )
+        bloques_copy.append(
+            f"""
+            <section style="margin-top:16px;">
+                <div style="font-weight:700; margin:0 0 8px 0; color:#111111;">{escape(encabezado)}</div>
+                <div>{contenido_seccion_html(contenido, "#111111")}</div>
+            </section>
+            """
+        )
+
+    contenido_html = f"""
+    <div style="font-family:Arial, sans-serif; color:#111111;">
+        <h1 style="font-size:20px; font-weight:800; text-align:center; margin:0 0 18px 0;">{escape(titulo)}</h1>
+        {''.join(bloques_copy)}
+    </div>
+    """
 
     html = f"""
     <div style="border:1px solid rgba(250,250,250,.12); border-radius:14px; padding:18px 20px; background:#171923; color:#f5f5f5; font-family:Arial, sans-serif;">
         <div style="display:flex; justify-content:flex-end; margin-bottom:8px;">
             <button
-                onclick='navigator.clipboard.writeText({json.dumps(texto_copiar)})'
+                onclick='(async () => {{
+                    const htmlContent = {json.dumps(contenido_html)};
+                    const textContent = {json.dumps(texto_copiar)};
+                    try {{
+                        const item = new ClipboardItem({{
+                            "text/html": new Blob([htmlContent], {{ type: "text/html" }}),
+                            "text/plain": new Blob([textContent], {{ type: "text/plain" }})
+                        }});
+                        await navigator.clipboard.write([item]);
+                        this.textContent = "Informe copiado";
+                        setTimeout(() => this.textContent = "Copiar informe", 1500);
+                    }} catch (err) {{
+                        await navigator.clipboard.writeText(textContent);
+                        this.textContent = "Copiado sin formato";
+                        setTimeout(() => this.textContent = "Copiar informe", 1500);
+                    }}
+                }})()'
                 style="background:#2b6cb0; color:white; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; font-size:14px;"
             >
                 Copiar informe
             </button>
         </div>
         <div style="font-size:24px; font-weight:800; text-align:center; margin-bottom:18px;">{escape(titulo)}</div>
-        {''.join(bloques)}
+        {''.join(bloques_display)}
     </div>
     """
     components.html(html, height=1200, scrolling=True)
+
+
+def generar_docx_informe(titulo, secciones):
+    doc = Document()
+    section = doc.sections[0]
+    section.top_margin = Inches(0.8)
+    section.bottom_margin = Inches(0.8)
+    section.left_margin = Inches(0.9)
+    section.right_margin = Inches(0.9)
+
+    estilo_normal = doc.styles["Normal"]
+    estilo_normal.font.name = "Arial"
+    estilo_normal.font.size = Pt(11)
+
+    titulo_p = doc.add_paragraph()
+    titulo_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    titulo_run = titulo_p.add_run(titulo)
+    titulo_run.bold = True
+    titulo_run.font.size = Pt(14)
+    titulo_p.paragraph_format.space_after = Pt(8)
+    titulo_p.paragraph_format.line_spacing = 1
+
+    for index, (encabezado, contenido) in enumerate(secciones):
+        p_head = doc.add_paragraph()
+        run_head = p_head.add_run(encabezado)
+        run_head.bold = True
+        run_head.font.name = "Arial"
+        run_head.font.size = Pt(11)
+        p_head.paragraph_format.space_before = Pt(8 if index > 0 else 0)
+        p_head.paragraph_format.space_after = Pt(0)
+        p_head.paragraph_format.line_spacing = 1
+
+        p_body = doc.add_paragraph()
+        p_body.paragraph_format.space_before = Pt(0)
+        p_body.paragraph_format.space_after = Pt(0)
+        p_body.paragraph_format.line_spacing = 1
+
+        lineas = str(contenido).splitlines() if contenido else [""]
+        for line_index, linea in enumerate(lineas):
+            run = p_body.add_run(linea)
+            run.font.name = "Arial"
+            run.font.size = Pt(11)
+            if line_index < len(lineas) - 1:
+                run.add_break()
+
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def cargar_historias_guardadas():
@@ -588,6 +1298,56 @@ def render():
     examen = st.text_area("Examen físico", key="examen", height=300)
 
     # =========================
+    # PARACLÍNICOS / IMÁGENES
+    # =========================
+    st.subheader("Paraclínicos")
+    col_pdf_1, col_pdf_2 = st.columns(2)
+
+    with col_pdf_1:
+        pdf_paraclinicos = st.file_uploader(
+            "Subir PDF de laboratorios",
+            type=["pdf"],
+            key="pdf_paraclinicos_uploader",
+            accept_multiple_files=True,
+            help="Carga un PDF de laboratorio. La app extrae el texto, lo pone en MAYÚSCULA y lo organiza por fechas."
+        )
+        actualizar_texto_extraido(
+            "paraclinicos_texto",
+            "paraclinicos_auto",
+            "paraclinicos_pdf_sig",
+            pdf_paraclinicos,
+            "paraclinicos"
+        )
+
+    with col_pdf_2:
+        pdf_imagenes = st.file_uploader(
+            "Subir PDF de imágenes",
+            type=["pdf"],
+            key="pdf_imagenes_uploader",
+            accept_multiple_files=True,
+            help="Carga un PDF de reporte imagenológico. La app extrae el texto, lo pone en MAYÚSCULA y lo organiza por fechas."
+        )
+        actualizar_texto_extraido(
+            "imagenes_texto",
+            "imagenes_auto",
+            "imagenes_pdf_sig",
+            pdf_imagenes,
+            "imagenes"
+        )
+
+    paraclinicos_texto = st.text_area(
+        "Laboratorios",
+        key="paraclinicos_texto",
+        height=220
+    )
+
+    imagenes_texto = st.text_area(
+        "Imágenes",
+        key="imagenes_texto",
+        height=220
+    )
+
+    # =========================
     # ANÁLISIS
     # =========================
     if fecha_nacimiento:
@@ -698,6 +1458,8 @@ def render():
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         diagnostico_final = diagnostico_seleccionado or ""
+        paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY REPORTES"
+        imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY REPORTES"
 
         historia = f"""
 {titulo_historia.upper()}
@@ -741,6 +1503,12 @@ PC/E Z: {z_pc}
 EXAMEN FÍSICO:
 {examen}
 
+LABORATORIOS:
+{paraclinicos_final}
+
+IMÁGENES:
+{imagenes_final}
+
 ANÁLISIS:
 {analisis}
 
@@ -783,6 +1551,8 @@ PLAN:
             ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C"),
             ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm\nP/E Z: {z_pe}\nT/E Z: {z_te}\nP/T Z: {z_pt}\nIMC/E Z: {z_imc}\nPC/E Z: {z_pc}"),
             ("EXAMEN FÍSICO", examen),
+            ("LABORATORIOS", paraclinicos_final),
+            ("IMÁGENES", imagenes_final),
             ("ANÁLISIS", analisis),
             ("CLASIFICACIÓN DIAGNÓSTICA", clasificacion_diagnostica),
             ("DIAGNÓSTICOS", diagnostico_final),
@@ -790,6 +1560,14 @@ PLAN:
             ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
             ("PLAN", plan),
         ]
+        docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
+        st.download_button(
+            "Descargar informe en Word",
+            data=docx_bytes,
+            file_name=f"{(nombre or 'historia').strip().replace(' ', '_')}_historia_clinica.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            use_container_width=True,
+        )
         render_informe_html(titulo_historia.upper(), secciones_informe, historia.upper())
 
     st.divider()
