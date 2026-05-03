@@ -2033,6 +2033,62 @@ PLAN:
 
     with st.expander("Base de datos de dosis de medicación", expanded=False):
         dosis_medicacion = cargar_dosis_medicacion()
+
+        st.markdown("**Agregar medicamento nuevo**")
+        col_nuevo_1, col_nuevo_2 = st.columns(2)
+        with col_nuevo_1:
+            nuevo_medicamento = st.text_input(
+                "Nombre del medicamento",
+                key="nuevo_medicamento_nombre"
+            )
+            nuevo_mg_kg = st.number_input(
+                "Nuevo mg/kg/dosis",
+                min_value=0.0,
+                step=0.1,
+                key="nuevo_medicamento_mgkg"
+            )
+            nuevo_intervalo = st.number_input(
+                "Nuevo intervalo (horas)",
+                min_value=1,
+                step=1,
+                key="nuevo_medicamento_intervalo"
+            )
+        with col_nuevo_2:
+            nuevo_max_mg = st.number_input(
+                "Nueva dosis máxima (mg)",
+                min_value=0.0,
+                step=1.0,
+                key="nuevo_medicamento_maxmg"
+            )
+            nuevo_via = st.text_input(
+                "Nueva vía",
+                key="nuevo_medicamento_via"
+            )
+            nueva_indicacion = st.text_input(
+                "Nueva indicación",
+                key="nuevo_medicamento_indicacion"
+            )
+
+        if st.button("Agregar medicamento a la base de datos", key="agregar_medicamento_bd", use_container_width=True):
+            nombre_normalizado = normalizar_texto(nuevo_medicamento).upper().replace(" ", "_")
+            if not nuevo_medicamento.strip():
+                st.error("Escribe un nombre para el medicamento.")
+            elif nombre_normalizado in dosis_medicacion:
+                st.warning("Ese medicamento ya existe en la base de datos.")
+            else:
+                dosis_medicacion[nombre_normalizado] = {
+                    "mg_kg_dosis": float(nuevo_mg_kg),
+                    "intervalo_horas": int(nuevo_intervalo),
+                    "max_mg": float(nuevo_max_mg),
+                    "via": nuevo_via.strip().upper(),
+                    "indicacion": nueva_indicacion.strip().upper(),
+                }
+                guardar_dosis_medicacion(dosis_medicacion)
+                st.success(f"Medicamento agregado: {nombre_normalizado}")
+                st.rerun()
+
+        st.divider()
+        st.markdown("**Editar medicamento existente**")
         medicamento_editor = st.selectbox(
             "Medicamento",
             list(dosis_medicacion.keys()),
@@ -2089,6 +2145,9 @@ PLAN:
             st.success("Dosis guardada correctamente.")
 
         if col_med_2.button("Restablecer dosis por defecto", key="restablecer_dosis_medicacion", use_container_width=True):
-            dosis_medicacion[medicamento_editor] = json.loads(json.dumps(DOSIS_MEDICACION_DEFAULTS[medicamento_editor]))
-            guardar_dosis_medicacion(dosis_medicacion)
-            st.rerun()
+            if medicamento_editor in DOSIS_MEDICACION_DEFAULTS:
+                dosis_medicacion[medicamento_editor] = json.loads(json.dumps(DOSIS_MEDICACION_DEFAULTS[medicamento_editor]))
+                guardar_dosis_medicacion(dosis_medicacion)
+                st.rerun()
+            else:
+                st.info("Este medicamento no tiene un valor por defecto predefinido.")
