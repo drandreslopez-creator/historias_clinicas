@@ -6,7 +6,7 @@ from servicios import neonatologia_adaptacion
 
 PASSWORD_APP = "8041003"
 
-st.set_page_config(page_title="Historias Clínicas", layout="wide")
+st.set_page_config(page_title="Historias Clínicas", page_icon="🩺", layout="wide")
 
 if "app_autenticada" not in st.session_state:
     st.session_state["app_autenticada"] = False
