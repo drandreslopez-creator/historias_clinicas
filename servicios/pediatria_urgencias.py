@@ -2095,7 +2095,38 @@ def renderizar_plan_editable(texto_plan, peso):
             continue
         lineas_normalizadas.append(linea)
 
-    texto = "\n".join(lineas_normalizadas)
+    lineas_sin_duplicados = []
+    firmas_vistas = set()
+    for linea in lineas_normalizadas:
+        firma = None
+        linea_norm = normalizar_texto(linea)
+        for token in [
+            "acetaminofen",
+            "dipirona",
+            "ondansetron",
+            "lactato de ringer",
+            "mantenimiento por superficie corporal",
+            "parkland",
+            "galveston",
+            "dexametasona",
+            "ceftriaxona",
+            "amoxicilina",
+            "ibuprofeno",
+            "salbutamol",
+            "adrenalina",
+        ]:
+            if token in linea_norm:
+                firma = token
+                break
+
+        if firma:
+            if firma in firmas_vistas:
+                continue
+            firmas_vistas.add(firma)
+
+        lineas_sin_duplicados.append(linea)
+
+    texto = "\n".join(lineas_sin_duplicados)
 
     try:
         return texto.format_map(SafeFormatDict(contexto))
