@@ -490,17 +490,42 @@ def cargar_planes_patologia():
                 datos = json.load(f)
             if isinstance(datos, dict):
                 for clave, valor in datos.items():
-                    if clave in planes and isinstance(valor, str):
+                    if clave == "__labels__":
+                        continue
+                    if isinstance(valor, str):
                         planes[clave] = valor
         except Exception:
             pass
     return planes
 
 
-def guardar_planes_patologia(planes):
+def cargar_labels_planes_patologia():
+    labels = PLANES_PATOLOGIA_LABELS.copy()
+    planes = cargar_planes_patologia()
+    for clave in planes.keys():
+        labels.setdefault(clave, clave.replace("_", " "))
+
+    if PLANES_PATOLOGIA_PATH.exists():
+        try:
+            with PLANES_PATOLOGIA_PATH.open("r", encoding="utf-8") as f:
+                datos = json.load(f)
+            labels_guardados = datos.get("__labels__", {}) if isinstance(datos, dict) else {}
+            if isinstance(labels_guardados, dict):
+                for clave, valor in labels_guardados.items():
+                    if isinstance(valor, str) and valor.strip():
+                        labels[clave] = valor
+        except Exception:
+            pass
+    return labels
+
+
+def guardar_planes_patologia(planes, labels=None):
     PLANES_PATOLOGIA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = dict(planes)
+    if labels:
+        payload["__labels__"] = labels
     with PLANES_PATOLOGIA_PATH.open("w", encoding="utf-8") as f:
-        json.dump(planes, f, ensure_ascii=False, indent=2)
+        json.dump(payload, f, ensure_ascii=False, indent=2)
 
 
 def cargar_dosis_medicacion():
@@ -511,7 +536,9 @@ def cargar_dosis_medicacion():
                 datos = json.load(f)
             if isinstance(datos, dict):
                 for medicamento, configuracion in datos.items():
-                    if medicamento in dosis and isinstance(configuracion, dict):
+                    if isinstance(configuracion, dict):
+                        if medicamento not in dosis:
+                            dosis[medicamento] = {}
                         dosis[medicamento].update(configuracion)
         except Exception:
             pass
@@ -2005,10 +2032,47 @@ PLAN:
 
     with st.expander("Planes de manejo por patología", expanded=False):
         planes_patologia = cargar_planes_patologia()
+        labels_planes_patologia = cargar_labels_planes_patologia()
+
+        st.markdown("**Agregar patología nueva**")
+        nueva_clave_patologia = st.text_input(
+            "Nombre corto o código interno de la patología",
+            key="nueva_clave_patologia"
+        )
+        nuevo_label_patologia = st.text_input(
+            "Nombre visible de la patología",
+            key="nuevo_label_patologia"
+        )
+        nuevo_plan_patologia = st.text_area(
+            "Plan para la nueva patología",
+            key="nuevo_plan_patologia",
+            height=180
+        )
+
+        if st.button("Agregar patología a la base de planes", key="agregar_patologia_planes", use_container_width=True):
+            clave_limpia = normalizar_texto(nueva_clave_patologia).upper().replace(" ", "_")
+            label_limpio = nuevo_label_patologia.strip().upper()
+            if not clave_limpia:
+                st.error("Escribe un nombre corto o código para la patología.")
+            elif not label_limpio:
+                st.error("Escribe el nombre visible de la patología.")
+            elif not nuevo_plan_patologia.strip():
+                st.error("Escribe el plan de manejo para la nueva patología.")
+            elif clave_limpia in planes_patologia:
+                st.warning("Esa patología ya existe en la base de planes.")
+            else:
+                planes_patologia[clave_limpia] = nuevo_plan_patologia
+                labels_planes_patologia[clave_limpia] = label_limpio
+                guardar_planes_patologia(planes_patologia, labels_planes_patologia)
+                st.success(f"Patología agregada: {label_limpio}")
+                st.rerun()
+
+        st.divider()
+        st.markdown("**Editar patología existente**")
         clave_patologia_editor = st.selectbox(
             "Patología",
-            list(PLANES_PATOLOGIA_LABELS.keys()),
-            format_func=lambda clave: PLANES_PATOLOGIA_LABELS.get(clave, clave),
+            list(labels_planes_patologia.keys()),
+            format_func=lambda clave: labels_planes_patologia.get(clave, clave),
             key="plan_patologia_selector"
         )
 
@@ -2022,12 +2086,12 @@ PLAN:
         col_plan_1, col_plan_2 = st.columns(2)
         if col_plan_1.button("Guardar plan de esta patología", key="guardar_plan_patologia", use_container_width=True):
             planes_patologia[clave_patologia_editor] = texto_plan_patologia
-            guardar_planes_patologia(planes_patologia)
+            guardar_planes_patologia(planes_patologia, labels_planes_patologia)
             st.success("Plan guardado correctamente.")
 
         if col_plan_2.button("Restablecer plan por defecto", key="restablecer_plan_patologia", use_container_width=True):
             planes_patologia[clave_patologia_editor] = PLANES_PATOLOGIA_DEFAULTS.get(clave_patologia_editor, "")
-            guardar_planes_patologia(planes_patologia)
+            guardar_planes_patologia(planes_patologia, labels_planes_patologia)
             st.session_state.pop(f"plan_patologia_editor_{clave_patologia_editor}", None)
             st.rerun()
 
