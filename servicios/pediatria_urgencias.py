@@ -113,8 +113,10 @@ FORM_DEFAULTS = {
     "analisis_base": "",
     "busqueda_cie10": "",
     "dx_cie10": None,
+    "dx_cie10_secundarios": [],
     "obs_dx": "",
     "plan": PLAN_DEFAULT,
+    "plan_base": PLAN_DEFAULT,
     "paraclinicos_texto": "",
     "paraclinicos_auto": "",
     "paraclinicos_pdf_sig": "",
@@ -1090,6 +1092,137 @@ def render_informe_html(titulo, secciones, texto_copiar):
     components.html(html, height=1200, scrolling=True)
 
 
+def formatear_numero_clinico(valor, decimales=1):
+    try:
+        numero = round(float(valor), decimales)
+    except Exception:
+        return ""
+
+    texto = f"{numero:.{decimales}f}"
+    if "." in texto:
+        texto = texto.rstrip("0").rstrip(".")
+    return texto
+
+
+def extraer_codigo_cie10(diagnostico):
+    if not diagnostico:
+        return ""
+    match = re.match(r"\s*([A-Z]\d{2}(?:\.\d+)?)", str(diagnostico).strip(), flags=re.IGNORECASE)
+    return match.group(1).upper() if match else ""
+
+
+def calcular_dosis_mg(peso, mg_kg, max_mg=None):
+    if not peso or peso <= 0:
+        return None
+    dosis = peso * mg_kg
+    if max_mg is not None:
+        dosis = min(dosis, max_mg)
+    return round(dosis, 2)
+
+
+def calcular_volumen_ml(dosis_mg, concentracion_mg_en_5ml):
+    if not dosis_mg or not concentracion_mg_en_5ml:
+        return None
+    mg_por_ml = concentracion_mg_en_5ml / 5
+    if mg_por_ml <= 0:
+        return None
+    return round(dosis_mg / mg_por_ml, 2)
+
+
+def generar_plan_sugerido(diagnostico, peso, edad_meses):
+    codigo = extraer_codigo_cie10(diagnostico)
+    if not codigo:
+        return PLAN_DEFAULT
+
+    lineas = []
+    if peso and peso > 0:
+        acet_mg = calcular_dosis_mg(peso, 15, max_mg=650)
+        acet_ml = calcular_volumen_ml(acet_mg, 150) if acet_mg else None
+        dipi_mg = calcular_dosis_mg(peso, 15, max_mg=1000)
+        ibup_mg = calcular_dosis_mg(peso, 10, max_mg=400) if peso else None
+        ibup_ml = calcular_volumen_ml(ibup_mg, 100) if ibup_mg else None
+    else:
+        acet_mg = acet_ml = dipi_mg = ibup_mg = ibup_ml = None
+
+    def agregar_analgesia():
+        if acet_mg and acet_ml is not None:
+            lineas.append(
+                f"- ACETAMINOFEN SUSP 150 MG/5 ML: DAR {formatear_numero_clinico(acet_ml, 1)} ML VO CADA 6 HORAS SI FIEBRE O DOLOR "
+                f"(DOSIS APROXIMADA {formatear_numero_clinico(acet_mg, 0)} MG)."
+            )
+        if dipi_mg:
+            lineas.append(
+                f"- DIPIRONA: {formatear_numero_clinico(dipi_mg, 0)} MG IV CADA 8 HORAS SI FIEBRE O DOLOR NO CEDE."
+            )
+        if edad_meses is not None and edad_meses >= 6 and ibup_mg and ibup_ml is not None:
+            lineas.append(
+                f"- IBUPROFENO SUSP 100 MG/5 ML: DAR {formatear_numero_clinico(ibup_ml, 1)} ML VO CADA 8 HORAS SI DOLOR O FIEBRE "
+                f"(DOSIS APROXIMADA {formatear_numero_clinico(ibup_mg, 0)} MG)."
+            )
+
+    if codigo.startswith("J21"):
+        lineas.extend([
+            "- HOSPITALIZACION POR PEDIATRIA SEGUN CONDICION CLINICA.",
+            "- LAVADOS NASALES FRECUENTES Y ASPIRACION DE SECRECIONES SEGUN NECESIDAD.",
+            "- OXIGENO SUPLEMENTARIO SI SATURACION < 92% O SIGNOS DE DIFICULTAD RESPIRATORIA.",
+            "- MONITORIZACION DE SIGNOS VITALES Y TRABAJO RESPIRATORIO.",
+            "- CONTROL DE INGESTA Y ELIMINACION.",
+        ])
+        agregar_analgesia()
+    elif codigo.startswith("J18"):
+        lineas.extend([
+            "- HOSPITALIZACION POR PEDIATRIA.",
+            "- OXIGENO SUPLEMENTARIO SEGUN REQUERIMIENTO Y META DE SATURACION > 92%.",
+            "- CEFTRIAXONA 50 MG/KG/DIA IV CADA 24 HORAS.",
+            "- CONTROL DE SIGNOS VITALES Y DIFICULTAD RESPIRATORIA.",
+            "- TOMAR PARACLINICOS DE CONTROL SEGUN EVOLUCION.",
+        ])
+        agregar_analgesia()
+    elif codigo.startswith("J05") or codigo.startswith("J04"):
+        dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10) if peso else None
+        adrenalina_ml = min(round(peso * 0.5, 2), 5) if peso else None
+        lineas.extend([
+            "- OBSERVACION CLINICA Y VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION.",
+        ])
+        if dexa_mg:
+            lineas.append(f"- DEXAMETASONA {formatear_numero_clinico(dexa_mg, 1)} MG VO/IM/IV DOSIS UNICA.")
+        if adrenalina_ml is not None:
+            lineas.append(
+                f"- ADRENALINA 1 MG/ML NEBULIZADA: {formatear_numero_clinico(adrenalina_ml, 1)} ML + SSN HASTA 5 ML SI ESTRIDOR EN REPOSO."
+            )
+        agregar_analgesia()
+    elif codigo.startswith("H66"):
+        amoxi_dia = calcular_dosis_mg(peso, 90, max_mg=4000) if peso else None
+        dosis_cada_12 = round(amoxi_dia / 2, 2) if amoxi_dia else None
+        lineas.append("- MANEJO ANALGESICO Y VIGILANCIA CLINICA.")
+        if dosis_cada_12:
+            lineas.append(
+                f"- AMOXICILINA 90 MG/KG/DIA VO DIVIDIDA CADA 12 HORAS: {formatear_numero_clinico(dosis_cada_12, 0)} MG POR DOSIS."
+            )
+        agregar_analgesia()
+    elif codigo.startswith("J00") or codigo.startswith("J06") or codigo.startswith("J03"):
+        lineas.extend([
+            "- MANEJO SINTOMATICO Y VIGILANCIA DE SIGNOS DE ALARMA.",
+            "- LAVADOS NASALES Y ADECUADA HIDRATACION ORAL.",
+        ])
+        agregar_analgesia()
+    elif codigo.startswith("A09"):
+        ondasetron_mg = calcular_dosis_mg(peso, 0.15, max_mg=8) if peso else None
+        lineas.extend([
+            "- HIDRATACION ORAL CON SRO SEGUN TOLERANCIA Y ESTADO CLINICO.",
+            "- VIGILAR SIGNOS DE DESHIDRATACION Y GASTO URINARIO.",
+        ])
+        if ondasetron_mg:
+            lineas.append(f"- ONDANSETRON {formatear_numero_clinico(ondasetron_mg, 1)} MG VO/IV SI VOMITO.")
+        agregar_analgesia()
+    else:
+        lineas.extend(PLAN_DEFAULT.splitlines())
+        if codigo and codigo not in {"J00", "J03", "J04", "J05", "J06", "J18", "J21", "H66", "A09"}:
+            lineas.append(f"- AJUSTAR CONDUCTA ESPECIFICA SEGUN DIAGNOSTICO {codigo}.")
+
+    return "\n".join(lineas)
+
+
 def generar_docx_informe(titulo, secciones):
     doc = Document()
     section = doc.sections[0]
@@ -1420,17 +1553,27 @@ def render():
         if busqueda_cie10:
             st.caption("No se encontraron diagnósticos CIE-10 con esa búsqueda.")
         diagnostico_seleccionado = ""
+        diagnosticos_secundarios = []
     else:
         cie10_filtrado = cie10_filtrado.copy()
         cie10_filtrado["description_es"] = cie10_filtrado["description"].map(traducir_cie10_descripcion)
         cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
         with st.expander(f"Resultados de diagnóstico ({len(cie10_filtrado)})", expanded=False):
             diagnostico_seleccionado = st.selectbox(
-                "Diagnóstico CIE-10",
+                "Diagnóstico principal CIE-10",
                 cie10_filtrado["label_es"].tolist(),
                 index=None,
-                placeholder="Seleccione un diagnóstico",
+                placeholder="Seleccione diagnóstico principal",
                 key="dx_cie10"
+            )
+            opciones_secundarias = [
+                opcion for opcion in cie10_filtrado["label_es"].tolist()
+                if opcion != diagnostico_seleccionado
+            ]
+            diagnosticos_secundarios = st.multiselect(
+                "Diagnósticos secundarios CIE-10",
+                opciones_secundarias,
+                key="dx_cie10_secundarios"
             )
 
     observacion_diagnostico = st.text_area(
@@ -1438,6 +1581,26 @@ def render():
         key="obs_dx",
         height=100
     )
+
+    edad_meses_actual = edad_en_meses(fecha_nacimiento) if fecha_nacimiento else None
+    diagnostico_plan = diagnostico_seleccionado or ""
+    plan_sugerido = generar_plan_sugerido(diagnostico_plan, peso, edad_meses_actual)
+
+    st.subheader("Ayuda terapéutica automática")
+    st.text_area(
+        "Sugerencia según diagnóstico y peso",
+        value=plan_sugerido,
+        height=220,
+        disabled=True
+    )
+
+    if "plan" not in st.session_state:
+        st.session_state["plan"] = plan_sugerido
+        st.session_state["plan_base"] = plan_sugerido
+    elif st.session_state.get("plan_base") != plan_sugerido:
+        if st.session_state.get("plan") == st.session_state.get("plan_base"):
+            st.session_state["plan"] = plan_sugerido
+        st.session_state["plan_base"] = plan_sugerido
 
     plan = st.text_area(
         "Plan",
@@ -1459,7 +1622,16 @@ def render():
     if generar_historia:
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
-        diagnostico_final = diagnostico_seleccionado or ""
+        diagnostico_principal = diagnostico_seleccionado or ""
+        diagnosticos_secundarios_final = diagnosticos_secundarios if diagnosticos_secundarios else []
+        diagnostico_final = diagnostico_principal
+        if diagnosticos_secundarios_final:
+            diagnostico_final = "\n".join(
+                [f"PRINCIPAL: {diagnostico_principal}"] +
+                [f"SECUNDARIO: {dx}" for dx in diagnosticos_secundarios_final]
+            ) if diagnostico_principal else "\n".join(
+                [f"SECUNDARIO: {dx}" for dx in diagnosticos_secundarios_final]
+            )
         paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY REPORTES"
         imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY REPORTES"
 
