@@ -40,6 +40,7 @@ from herramientas.diagnostico_nutricional import (
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 HISTORIAS_PATH = BASE_DIR / "data" / "historias_pediatria_urgencias.jsonl"
+PLANES_PATOLOGIA_PATH = BASE_DIR / "data" / "planes_manejo_pediatria_urgencias.json"
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
 ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO XX GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO Y ECOGRAFÍAS ANTENATALES: NACE VÍA VAGINAL/ CESAREA A LAS XX SEM A TÉRMINO. EGRESO CONJUNTO, PESO XXXX GR - TALLA XX CM.
@@ -85,6 +86,36 @@ PLAN_DEFAULT = """- HOSPITALIZACION PEDIATRICA
 - CONTROL DE SIGNOS VITALES, AVISAR CAMBIOS."""
 
 REVISION_DEFAULT = "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
+
+PLANES_PATOLOGIA_LABELS = {
+    "J21": "BRONQUIOLITIS (J21)",
+    "J18": "NEUMONÍA (J18)",
+    "J05_J04": "LARINGITIS / CRUP (J05 / J04)",
+    "H66": "OTITIS MEDIA AGUDA (H66)",
+    "J00_J06_J03": "IRA ALTA / NASOFARINGITIS / AMIGDALITIS (J00 / J06 / J03)",
+    "A09": "GASTROENTERITIS (A09)",
+}
+
+PLANES_PATOLOGIA_DEFAULTS = {
+    "J21": """- LAVADOS NASALES FRECUENTES Y ASPIRACION DE SECRECIONES SEGUN NECESIDAD.
+- OXIGENO SUPLEMENTARIO SI SATURACION < 92% O SIGNOS DE DIFICULTAD RESPIRATORIA.
+- MONITORIZACION DE SIGNOS VITALES Y TRABAJO RESPIRATORIO.
+- CONTROL DE INGESTA Y ELIMINACION.""",
+    "J18": """- OXIGENO SUPLEMENTARIO SEGUN REQUERIMIENTO Y META DE SATURACION > 92%.
+- CEFTRIAXONA 50 MG/KG/DIA IV CADA 24 HORAS.
+- CONTROL DE SIGNOS VITALES Y DIFICULTAD RESPIRATORIA.
+- TOMAR PARACLINICOS DE CONTROL SEGUN EVOLUCION.""",
+    "J05_J04": """- OBSERVACION CLINICA Y VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION.
+- DEXAMETASONA 0.6 MG/KG VO/IM/IV DOSIS UNICA.
+- ADRENALINA NEBULIZADA SI ESTRIDOR EN REPOSO. DILUIR SEGUN PROTOCOLO INSTITUCIONAL.""",
+    "H66": """- MANEJO ANALGESICO Y VIGILANCIA CLINICA.
+- AMOXICILINA 90 MG/KG/DIA VO DIVIDIDA CADA 12 HORAS.""",
+    "J00_J06_J03": """- MANEJO SINTOMATICO Y VIGILANCIA DE SIGNOS DE ALARMA.
+- LAVADOS NASALES Y ADECUADA HIDRATACION ORAL.""",
+    "A09": """- HIDRATACION ORAL CON SRO SEGUN TOLERANCIA Y ESTADO CLINICO.
+- VIGILAR SIGNOS DE DESHIDRATACION Y GASTO URINARIO.
+- ONDANSETRON SI VOMITO SEGUN PESO Y CRITERIO CLINICO.""",
+}
 
 FORM_DEFAULTS = {
     "nombre_1": "",
@@ -423,6 +454,45 @@ def guardar_historia(datos):
     HISTORIAS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with HISTORIAS_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(datos, ensure_ascii=False) + "\n")
+
+
+def cargar_planes_patologia():
+    planes = PLANES_PATOLOGIA_DEFAULTS.copy()
+    if PLANES_PATOLOGIA_PATH.exists():
+        try:
+            with PLANES_PATOLOGIA_PATH.open("r", encoding="utf-8") as f:
+                datos = json.load(f)
+            if isinstance(datos, dict):
+                for clave, valor in datos.items():
+                    if clave in planes and isinstance(valor, str):
+                        planes[clave] = valor
+        except Exception:
+            pass
+    return planes
+
+
+def guardar_planes_patologia(planes):
+    PLANES_PATOLOGIA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with PLANES_PATOLOGIA_PATH.open("w", encoding="utf-8") as f:
+        json.dump(planes, f, ensure_ascii=False, indent=2)
+
+
+def obtener_clave_plan_patologia(codigo):
+    if not codigo:
+        return ""
+    if codigo.startswith("J21"):
+        return "J21"
+    if codigo.startswith("J18"):
+        return "J18"
+    if codigo.startswith("J05") or codigo.startswith("J04"):
+        return "J05_J04"
+    if codigo.startswith("H66"):
+        return "H66"
+    if codigo.startswith("J00") or codigo.startswith("J06") or codigo.startswith("J03"):
+        return "J00_J06_J03"
+    if codigo.startswith("A09"):
+        return "A09"
+    return ""
 
 
 @st.cache_resource
@@ -1298,65 +1368,18 @@ def generar_plan_sugerido(diagnostico, peso, edad_meses):
     if not codigo:
         return PLAN_DEFAULT
 
+    planes_patologia = cargar_planes_patologia()
+    clave_plan = obtener_clave_plan_patologia(codigo)
+    plan_patologia_editable = planes_patologia.get(clave_plan, "").strip() if clave_plan else ""
+
     lineas = generar_plan_base_ordenado(peso, edad_meses)
     lineas.append("")
     lineas.append("- MANEJO ESPECIFICO SEGUN DIAGNOSTICO:")
 
-    if peso and peso > 0:
-        acet_mg = calcular_dosis_mg(peso, 15, max_mg=650)
-    else:
-        acet_mg = None
-
-    if codigo.startswith("J21"):
-        lineas.extend([
-            "- LAVADOS NASALES FRECUENTES Y ASPIRACION DE SECRECIONES SEGUN NECESIDAD.",
-            "- OXIGENO SUPLEMENTARIO SI SATURACION < 92% O SIGNOS DE DIFICULTAD RESPIRATORIA.",
-            "- MONITORIZACION DE SIGNOS VITALES Y TRABAJO RESPIRATORIO.",
-            "- CONTROL DE INGESTA Y ELIMINACION.",
-        ])
-    elif codigo.startswith("J18"):
-        lineas.extend([
-            "- OXIGENO SUPLEMENTARIO SEGUN REQUERIMIENTO Y META DE SATURACION > 92%.",
-            "- CEFTRIAXONA 50 MG/KG/DIA IV CADA 24 HORAS.",
-            "- CONTROL DE SIGNOS VITALES Y DIFICULTAD RESPIRATORIA.",
-            "- TOMAR PARACLINICOS DE CONTROL SEGUN EVOLUCION.",
-        ])
-    elif codigo.startswith("J05") or codigo.startswith("J04"):
-        dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10) if peso else None
-        adrenalina_mg = min(round(peso * 0.5, 2), 5) if peso else None
-        lineas.extend([
-            "- OBSERVACION CLINICA Y VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION.",
-        ])
-        if dexa_mg:
-            lineas.append(f"- DEXAMETASONA {formatear_numero_clinico(dexa_mg, 1)} MG VO/IM/IV DOSIS UNICA.")
-        if adrenalina_mg is not None:
-            lineas.append(
-                f"- ADRENALINA NEBULIZADA: {formatear_numero_clinico(adrenalina_mg, 1)} MG SI ESTRIDOR EN REPOSO. DILUIR SEGUN PROTOCOLO INSTITUCIONAL."
-            )
-    elif codigo.startswith("H66"):
-        amoxi_dia = calcular_dosis_mg(peso, 90, max_mg=4000) if peso else None
-        dosis_cada_12 = round(amoxi_dia / 2, 2) if amoxi_dia else None
-        lineas.append("- MANEJO ANALGESICO Y VIGILANCIA CLINICA.")
-        if dosis_cada_12:
-            lineas.append(
-                f"- AMOXICILINA 90 MG/KG/DIA VO DIVIDIDA CADA 12 HORAS: {formatear_numero_clinico(dosis_cada_12, 0)} MG POR DOSIS."
-            )
-    elif codigo.startswith("J00") or codigo.startswith("J06") or codigo.startswith("J03"):
-        lineas.extend([
-            "- MANEJO SINTOMATICO Y VIGILANCIA DE SIGNOS DE ALARMA.",
-            "- LAVADOS NASALES Y ADECUADA HIDRATACION ORAL.",
-        ])
-    elif codigo.startswith("A09"):
-        ondasetron_mg = calcular_dosis_mg(peso, 0.15, max_mg=8) if peso else None
-        lineas.extend([
-            "- HIDRATACION ORAL CON SRO SEGUN TOLERANCIA Y ESTADO CLINICO.",
-            "- VIGILAR SIGNOS DE DESHIDRATACION Y GASTO URINARIO.",
-        ])
-        if ondasetron_mg:
-            lineas.append(f"- ONDANSETRON {formatear_numero_clinico(ondasetron_mg, 1)} MG VO/IV SI VOMITO.")
-    else:
-        if codigo and codigo not in {"J00", "J03", "J04", "J05", "J06", "J18", "J21", "H66", "A09"}:
-            lineas.append(f"- AJUSTAR CONDUCTA ESPECIFICA SEGUN DIAGNOSTICO {codigo}.")
+    if plan_patologia_editable:
+        lineas.extend([linea for linea in plan_patologia_editable.splitlines()])
+    elif codigo and codigo not in {"J00", "J03", "J04", "J05", "J06", "J18", "J21", "H66", "A09"}:
+        lineas.append(f"- AJUSTAR CONDUCTA ESPECIFICA SEGUN DIAGNOSTICO {codigo}.")
 
     return "\n".join(lineas)
 
@@ -1899,3 +1922,31 @@ PLAN:
                 )
         else:
             st.info("Aún no hay historias guardadas.")
+
+    with st.expander("Planes de manejo por patología", expanded=False):
+        planes_patologia = cargar_planes_patologia()
+        clave_patologia_editor = st.selectbox(
+            "Patología",
+            list(PLANES_PATOLOGIA_LABELS.keys()),
+            format_func=lambda clave: PLANES_PATOLOGIA_LABELS.get(clave, clave),
+            key="plan_patologia_selector"
+        )
+
+        texto_plan_patologia = st.text_area(
+            "Plan editable para esta patología",
+            value=planes_patologia.get(clave_patologia_editor, ""),
+            height=220,
+            key=f"plan_patologia_editor_{clave_patologia_editor}"
+        )
+
+        col_plan_1, col_plan_2 = st.columns(2)
+        if col_plan_1.button("Guardar plan de esta patología", key="guardar_plan_patologia", use_container_width=True):
+            planes_patologia[clave_patologia_editor] = texto_plan_patologia
+            guardar_planes_patologia(planes_patologia)
+            st.success("Plan guardado correctamente.")
+
+        if col_plan_2.button("Restablecer plan por defecto", key="restablecer_plan_patologia", use_container_width=True):
+            planes_patologia[clave_patologia_editor] = PLANES_PATOLOGIA_DEFAULTS.get(clave_patologia_editor, "")
+            guardar_planes_patologia(planes_patologia)
+            st.session_state.pop(f"plan_patologia_editor_{clave_patologia_editor}", None)
+            st.rerun()
