@@ -96,11 +96,25 @@ DOSIS_MEDICACION_DEFAULTS = {
         "via": "VO",
         "indicacion": "SI FIEBRE O DOLOR",
     },
+    "PARACETAMOL_IV": {
+        "mg_kg_dosis": 15.0,
+        "intervalo_horas": 6,
+        "max_mg": 1000.0,
+        "via": "IV",
+        "indicacion": "SI FIEBRE O DOLOR",
+    },
     "DIPIRONA": {
         "mg_kg_dosis": 20.0,
         "intervalo_horas": 8,
         "max_mg": 1000.0,
         "via": "IV",
+        "indicacion": "SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN",
+    },
+    "DIPIRONA_VO": {
+        "mg_kg_dosis": 20.0,
+        "intervalo_horas": 8,
+        "max_mg": 1000.0,
+        "via": "VO",
         "indicacion": "SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN",
     },
     "ONDANSETRON": {
@@ -109,6 +123,576 @@ DOSIS_MEDICACION_DEFAULTS = {
         "max_mg": 8.0,
         "via": "VO/IV",
         "indicacion": "SI VOMITO",
+    },
+    "IBUPROFENO": {
+        "mg_kg_dosis": 10.0,
+        "intervalo_horas": 8,
+        "max_mg": 400.0,
+        "via": "VO",
+        "indicacion": "SI DOLOR O FIEBRE",
+    },
+    "MORFINA": {
+        "mg_kg_dosis": 0.1,
+        "intervalo_horas": 4,
+        "max_mg": 10.0,
+        "via": "IV",
+        "indicacion": "DOLOR SEVERO",
+    },
+    "TRAMADOL_VO_IV": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 8,
+        "max_mg": 100.0,
+        "via": "VO/IV",
+        "indicacion": "DOLOR MODERADO A SEVERO",
+    },
+    "DEXAMETASONA_IV": {
+        "mg_kg_dosis": 0.6,
+        "intervalo_horas": 0,
+        "max_mg": 10.0,
+        "via": "IV",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS UNICA",
+    },
+    "DEXAMETASONA_VO": {
+        "mg_kg_dosis": 0.6,
+        "intervalo_horas": 0,
+        "max_mg": 10.0,
+        "via": "VO",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS UNICA",
+    },
+    "CEFTRIAXONA": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 24,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "CEFAZOLINA": {
+        "mg_kg_dosis": 25.0,
+        "intervalo_horas": 8,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "CEFUROXIMA_IV": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 8,
+        "max_mg": 1500.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "CEFUROXIMA_VO": {
+        "mg_kg_dosis": 15.0,
+        "intervalo_horas": 12,
+        "max_mg": 500.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "AMOXICILINA": {
+        "mg_kg_dosis": 45.0,
+        "intervalo_horas": 12,
+        "max_mg": 2000.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "AMOXICILINA_ACIDO_CLAVULANICO": {
+        "mg_kg_dosis": 45.0,
+        "intervalo_horas": 12,
+        "max_mg": 2000.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "AMOXICILINA_CLAVULANATO": {
+        "mg_kg_dosis": 45.0,
+        "intervalo_horas": 12,
+        "max_mg": 2000.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "SULTAMICILINA": {
+        "mg_kg_dosis": 25.0,
+        "intervalo_horas": 12,
+        "max_mg": 750.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "CEFALEXINA": {
+        "mg_kg_dosis": 25.0,
+        "intervalo_horas": 8,
+        "max_mg": 1000.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "CEFADROXILO": {
+        "mg_kg_dosis": 15.0,
+        "intervalo_horas": 12,
+        "max_mg": 1000.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "AZITROMICINA": {
+        "mg_kg_dosis": 10.0,
+        "intervalo_horas": 24,
+        "max_mg": 500.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "CLARITROMICINA": {
+        "mg_kg_dosis": 7.5,
+        "intervalo_horas": 12,
+        "max_mg": 500.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "TRIMETOPRIM_SULFAMETOXAZOL": {
+        "mg_kg_dosis": 5.0,
+        "intervalo_horas": 12,
+        "max_mg": 160.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "AMPICILINA": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 6,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "AMPICILINA_SULBACTAM": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 6,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "OXACILINA": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 6,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "CEFOTAXIMA": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 6,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "CEFEPIME": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 8,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "PIPERACILINA_TAZOBACTAM": {
+        "mg_kg_dosis": 100.0,
+        "intervalo_horas": 8,
+        "max_mg": 4000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "MEROPENEM": {
+        "mg_kg_dosis": 20.0,
+        "intervalo_horas": 8,
+        "max_mg": 1000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "VANCOMICINA": {
+        "mg_kg_dosis": 15.0,
+        "intervalo_horas": 6,
+        "max_mg": 1000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "CLINDAMICINA_IV": {
+        "mg_kg_dosis": 10.0,
+        "intervalo_horas": 8,
+        "max_mg": 900.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "CLINDAMICINA_VO": {
+        "mg_kg_dosis": 10.0,
+        "intervalo_horas": 8,
+        "max_mg": 600.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "AMIKACINA": {
+        "mg_kg_dosis": 15.0,
+        "intervalo_horas": 24,
+        "max_mg": 1500.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "ACICLOVIR": {
+        "mg_kg_dosis": 10.0,
+        "intervalo_horas": 8,
+        "max_mg": 800.0,
+        "via": "IV/VO",
+        "indicacion": "",
+    },
+    "OSELTAMIVIR": {
+        "mg_kg_dosis": 3.0,
+        "intervalo_horas": 12,
+        "max_mg": 75.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "NISTATINA": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 6,
+        "max_mg": 0.0,
+        "via": "VO/TOPICA",
+        "indicacion": "",
+    },
+    "FLUCONAZOL": {
+        "mg_kg_dosis": 6.0,
+        "intervalo_horas": 24,
+        "max_mg": 400.0,
+        "via": "VO/IV",
+        "indicacion": "",
+    },
+    "ANFOTERICINA_B": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 24,
+        "max_mg": 50.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "SALBUTAMOL_NEBULIZADO": {
+        "mg_kg_dosis": 0.15,
+        "intervalo_horas": 6,
+        "max_mg": 5.0,
+        "via": "NEBULIZADO",
+        "indicacion": "SI ESTA INDICADO",
+    },
+    "SALBUTAMOL_VO": {
+        "mg_kg_dosis": 0.1,
+        "intervalo_horas": 8,
+        "max_mg": 4.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "SOLUCION_SALINA_HIPERTONICA_NEBULIZADA": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 8,
+        "max_mg": 0.0,
+        "via": "NEBULIZADA",
+        "indicacion": "",
+    },
+    "IPRATROPIO": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 6,
+        "max_mg": 0.0,
+        "via": "INHALADO",
+        "indicacion": "",
+    },
+    "BUDESONIDA": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 12,
+        "max_mg": 0.0,
+        "via": "INHALADO",
+        "indicacion": "",
+    },
+    "BUDESONIDA_INHALADOR": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 12,
+        "max_mg": 0.0,
+        "via": "INHALADOR",
+        "indicacion": "",
+    },
+    "BUDESONIDA_MICRONEBULIZACION": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 12,
+        "max_mg": 0.0,
+        "via": "MICRONEBULIZACION",
+        "indicacion": "",
+    },
+    "FLUTICASONA": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 12,
+        "max_mg": 0.0,
+        "via": "INHALADO",
+        "indicacion": "",
+    },
+    "BERODUAL_NEBULIZADO": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 8,
+        "max_mg": 0.0,
+        "via": "NEBULIZADO",
+        "indicacion": "",
+    },
+    "MONTELUKAST": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 24,
+        "max_mg": 10.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "ADRENALINA_NEBULIZADA": {
+        "mg_kg_dosis": 0.5,
+        "intervalo_horas": 0,
+        "max_mg": 5.0,
+        "via": "NEBULIZADA",
+        "indicacion": "SI ESTRIDOR EN REPOSO. DILUIR SEGUN PROTOCOLO INSTITUCIONAL",
+        "frecuencia_texto": "DOSIS SEGUN CICLO INDICADO",
+    },
+    "PREDNISOLONA": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 24,
+        "max_mg": 60.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "PREDNISONA": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 24,
+        "max_mg": 60.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "METILPREDNISOLONA": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 12,
+        "max_mg": 60.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "DIAZEPAM": {
+        "mg_kg_dosis": 0.2,
+        "intervalo_horas": 0,
+        "max_mg": 10.0,
+        "via": "RECTAL/IV",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS SEGUN EVENTO",
+    },
+    "MIDAZOLAM": {
+        "mg_kg_dosis": 0.2,
+        "intervalo_horas": 0,
+        "max_mg": 10.0,
+        "via": "IV/INTRANASAL",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS SEGUN EVENTO",
+    },
+    "FENITOINA": {
+        "mg_kg_dosis": 20.0,
+        "intervalo_horas": 0,
+        "max_mg": 1000.0,
+        "via": "IV/VO",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS DE CARGA",
+    },
+    "FENOBARBITAL": {
+        "mg_kg_dosis": 20.0,
+        "intervalo_horas": 0,
+        "max_mg": 1000.0,
+        "via": "IV/VO",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS DE CARGA",
+    },
+    "LEVETIRACETAM": {
+        "mg_kg_dosis": 20.0,
+        "intervalo_horas": 12,
+        "max_mg": 1500.0,
+        "via": "IV/VO",
+        "indicacion": "",
+    },
+    "SOLUCION_SALINA_09": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 0,
+        "max_mg": 0.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "DEXTROSA_5_10": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 0,
+        "max_mg": 0.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "SRO": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 0,
+        "max_mg": 0.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "OMEPRAZOL": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 24,
+        "max_mg": 40.0,
+        "via": "VO/IV",
+        "indicacion": "",
+    },
+    "ESOMEPRAZOL": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 24,
+        "max_mg": 40.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "RANITIDINA": {
+        "mg_kg_dosis": 2.0,
+        "intervalo_horas": 8,
+        "max_mg": 50.0,
+        "via": "VO/IV",
+        "indicacion": "",
+    },
+    "METOCLOPRAMIDA": {
+        "mg_kg_dosis": 0.1,
+        "intervalo_horas": 8,
+        "max_mg": 10.0,
+        "via": "VO/IV",
+        "indicacion": "",
+    },
+    "LORATADINA": {
+        "mg_kg_dosis": 0.2,
+        "intervalo_horas": 24,
+        "max_mg": 10.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "DESLORATADINA": {
+        "mg_kg_dosis": 0.1,
+        "intervalo_horas": 24,
+        "max_mg": 5.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "CETIRIZINA": {
+        "mg_kg_dosis": 0.25,
+        "intervalo_horas": 24,
+        "max_mg": 10.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "HIDROXICINA": {
+        "mg_kg_dosis": 0.6,
+        "intervalo_horas": 8,
+        "max_mg": 25.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "ADRENALINA_IM_IV": {
+        "mg_kg_dosis": 0.01,
+        "intervalo_horas": 0,
+        "max_mg": 0.5,
+        "via": "IM/IV",
+        "indicacion": "ANAFILAXIA",
+        "frecuencia_texto": "DOSIS SEGUN EVENTO",
+    },
+    "ATROPINA": {
+        "mg_kg_dosis": 0.02,
+        "intervalo_horas": 0,
+        "max_mg": 0.5,
+        "via": "IV",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS SEGUN EVENTO",
+    },
+    "FUROSEMIDA": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 12,
+        "max_mg": 40.0,
+        "via": "IV/VO",
+        "indicacion": "",
+    },
+    "SULFATO_DE_MAGNESIO": {
+        "mg_kg_dosis": 50.0,
+        "intervalo_horas": 0,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+        "frecuencia_texto": "DOSIS UNICA",
+    },
+    "INSULINA": {
+        "mg_kg_dosis": 0.1,
+        "intervalo_horas": 1,
+        "max_mg": 0.0,
+        "via": "IV/SC",
+        "indicacion": "",
+    },
+    "HEPARINA": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 0,
+        "max_mg": 0.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "ALBENDAZOL": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 24,
+        "max_mg": 400.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "IVERMECTINA": {
+        "mg_kg_dosis": 0.2,
+        "intervalo_horas": 24,
+        "max_mg": 12.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "METRONIDAZOL_IV": {
+        "mg_kg_dosis": 10.0,
+        "intervalo_horas": 8,
+        "max_mg": 500.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "METRONIDAZOL_VO": {
+        "mg_kg_dosis": 10.0,
+        "intervalo_horas": 8,
+        "max_mg": 500.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "ESOMEPRAZOL": {
+        "mg_kg_dosis": 1.0,
+        "intervalo_horas": 24,
+        "max_mg": 40.0,
+        "via": "VO",
+        "indicacion": "",
+    },
+    "CEFAZOLINA": {
+        "mg_kg_dosis": 25.0,
+        "intervalo_horas": 8,
+        "max_mg": 2000.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "AMIKACINA": {
+        "mg_kg_dosis": 15.0,
+        "intervalo_horas": 24,
+        "max_mg": 1500.0,
+        "via": "IV",
+        "indicacion": "",
+    },
+    "MUPIROCINA": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 8,
+        "max_mg": 0.0,
+        "via": "TOPICA",
+        "indicacion": "",
+    },
+    "ACIDO_FUSIDICO": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 8,
+        "max_mg": 0.0,
+        "via": "TOPICA",
+        "indicacion": "",
+    },
+    "PERMETRINA": {
+        "mg_kg_dosis": 0.0,
+        "intervalo_horas": 24,
+        "max_mg": 0.0,
+        "via": "TOPICA",
+        "indicacion": "",
     },
 }
 
@@ -127,7 +711,7 @@ PLANES_PATOLOGIA_DEFAULTS = {
 - MONITORIZACION DE SIGNOS VITALES Y TRABAJO RESPIRATORIO.
 - CONTROL DE INGESTA Y ELIMINACION.""",
     "J18": """- OXIGENO SUPLEMENTARIO SEGUN REQUERIMIENTO Y META DE SATURACION > 92%.
-- CEFTRIAXONA 50 MG/KG/DIA IV CADA 24 HORAS.
+{LINEA_CEFTRIAXONA}
 - CONTROL DE SIGNOS VITALES Y DIFICULTAD RESPIRATORIA.
 - TOMAR PARACLINICOS DE CONTROL SEGUN EVOLUCION.""",
     "J05_J04": """- OBSERVACIÓN PEDIATRICA
@@ -142,7 +726,7 @@ PLANES_PATOLOGIA_DEFAULTS = {
 - CONTROL DE SIGNOS VITALES, AVISAR CAMBIOS
 - REVALORACIÓN""",
     "H66": """- MANEJO ANALGESICO Y VIGILANCIA CLINICA.
-- AMOXICILINA 90 MG/KG/DIA VO DIVIDIDA CADA 12 HORAS.""",
+{LINEA_AMOXICILINA}""",
     "J00_J06_J03": """- MANEJO SINTOMATICO Y VIGILANCIA DE SIGNOS DE ALARMA.
 - LAVADOS NASALES Y ADECUADA HIDRATACION ORAL.""",
     "A09": """- HIDRATACION ORAL CON SRO SEGUN TOLERANCIA Y ESTADO CLINICO.
@@ -600,6 +1184,7 @@ def construir_linea_medicamento(nombre, configuracion, peso):
     via = str(configuracion.get("via", "")).strip().upper()
     indicacion = str(configuracion.get("indicacion", "")).strip().upper()
     intervalo = int(configuracion.get("intervalo_horas", 0) or 0)
+    frecuencia_texto = str(configuracion.get("frecuencia_texto", "")).strip().upper()
     mg_kg = float(configuracion.get("mg_kg_dosis", 0) or 0)
     max_mg = configuracion.get("max_mg")
     dosis_mg = calcular_dosis_mg(peso, mg_kg, max_mg=max_mg) if peso and mg_kg else None
@@ -609,7 +1194,9 @@ def construir_linea_medicamento(nombre, configuracion, peso):
         linea = f"- {nombre_visible}: {formatear_numero_clinico(dosis_mg, 1 if mg_kg < 1 else 0)} MG"
         if via:
             linea += f" {via}"
-        if intervalo > 0:
+        if frecuencia_texto:
+            linea += f" {frecuencia_texto}"
+        elif intervalo > 0:
             linea += f" CADA {intervalo} HORAS"
         if indicacion:
             linea += f" ({indicacion})"
@@ -1380,6 +1967,46 @@ def construir_contexto_plan_medicacion(peso):
         "LINEA_LACTATO_RINGER": linea_lactato_ringer,
     }
 
+    sc = None
+    sc_ml_h = None
+    if "talla" in st.session_state:
+        try:
+            talla_actual = float(st.session_state.get("talla", 0) or 0)
+        except Exception:
+            talla_actual = 0
+        sc, sc_ml_h = calcular_liquido_superficie_corporal(peso, talla_actual)
+    if sc is not None and sc_ml_h is not None:
+        contexto["LINEA_LIQUIDOS_SC"] = (
+            f"- MANTENIMIENTO POR SUPERFICIE CORPORAL: {formatear_numero_clinico(sc_ml_h, 1)} CC/HORA "
+            f"(SC {formatear_numero_clinico(sc, 2)} M2)"
+        )
+    else:
+        contexto["LINEA_LIQUIDOS_SC"] = "- MANTENIMIENTO POR SUPERFICIE CORPORAL SEGUN PESO Y TALLA"
+
+    try:
+        scq_pct = float(st.session_state.get("scq_pct", 0) or 0)
+    except Exception:
+        scq_pct = 0
+    parkland_total, parkland_8h, parkland_16h = calcular_parkland(peso, scq_pct)
+    if parkland_total is not None:
+        contexto["LINEA_PARKLAND"] = (
+            f"- PARKLAND: {formatear_numero_clinico(parkland_total, 1)} ML/24H "
+            f"({formatear_numero_clinico(parkland_8h, 1)} ML EN 8H Y {formatear_numero_clinico(parkland_16h, 1)} ML EN 16H)"
+        )
+    else:
+        contexto["LINEA_PARKLAND"] = "- PARKLAND SEGUN PESO Y % SCQ"
+
+    galveston_total, galveston_ml_h = (None, None)
+    if "talla" in st.session_state:
+        galveston_total, galveston_ml_h = calcular_galveston(peso, talla_actual, scq_pct)
+    if galveston_total is not None and galveston_ml_h is not None:
+        contexto["LINEA_GALVESTON"] = (
+            f"- GALVESTON: {formatear_numero_clinico(galveston_total, 1)} ML/24H = "
+            f"{formatear_numero_clinico(galveston_ml_h, 1)} CC/HORA"
+        )
+    else:
+        contexto["LINEA_GALVESTON"] = "- GALVESTON SEGUN PESO, TALLA Y % SCQ"
+
     for nombre_medicamento, configuracion in dosis_cfg.items():
         contexto[f"LINEA_{nombre_medicamento.upper()}"] = construir_linea_medicamento(
             nombre_medicamento,
@@ -1415,11 +2042,60 @@ def renderizar_plan_editable(texto_plan, peso):
         "- ONDANSETRON SI VOMITO SEGUN PESO Y CRITERIO CLINICO.": contexto["LINEA_ONDANSETRON"],
         "- LACTATO DE RINGER IV SEGUN REQUERIMIENTO CLINICO": contexto["LINEA_LACTATO_RINGER"],
         "- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA": contexto["LINEA_DEXAMETASONA_LARINGITIS"],
+        "- MANTENIMIENTO POR SUPERFICIE CORPORAL SEGUN PESO Y TALLA": contexto["LINEA_LIQUIDOS_SC"],
+        "- PARKLAND SEGUN PESO Y % SCQ": contexto["LINEA_PARKLAND"],
+        "- GALVESTON SEGUN PESO, TALLA Y % SCQ": contexto["LINEA_GALVESTON"],
     }
 
     texto = texto_plan
     for original, reemplazo in reemplazos_directos.items():
         texto = texto.replace(original, reemplazo)
+
+    lineas_normalizadas = []
+    nombres_medicamentos = [nombre.replace("_", " ").lower() for nombre in cargar_dosis_medicacion().keys()]
+    for linea in texto.splitlines():
+        linea_norm = normalizar_texto(linea)
+        reemplazado = False
+        for nombre_original, nombre_visible in zip(cargar_dosis_medicacion().keys(), nombres_medicamentos):
+            if (
+                linea_norm == f"- {nombre_visible}"
+                or linea_norm.startswith(f"- {nombre_visible}:")
+                or linea_norm.startswith(f"- {nombre_visible} segun peso")
+                or linea_norm.startswith(f"- {nombre_visible} ")
+                or (linea_norm.startswith("- ") and nombre_visible in linea_norm)
+            ):
+                lineas_normalizadas.append(contexto.get(f"LINEA_{nombre_original}", linea))
+                reemplazado = True
+                break
+        if reemplazado:
+            continue
+        if linea_norm.startswith("- acetaminofen:") or linea_norm.startswith("- acetaminofen vo segun peso"):
+            lineas_normalizadas.append(contexto["LINEA_ACETAMINOFEN"])
+            continue
+        if linea_norm.startswith("- dipirona:") or linea_norm.startswith("- dipirona iv segun peso"):
+            lineas_normalizadas.append(contexto["LINEA_DIPIRONA"])
+            continue
+        if linea_norm.startswith("- ondansetron:") or "ondansetron si vomito segun peso" in linea_norm:
+            lineas_normalizadas.append(contexto["LINEA_ONDANSETRON"])
+            continue
+        if linea_norm.startswith("- lactato de ringer a") or linea_norm.startswith("- lactato de ringer iv segun requerimiento clinico"):
+            lineas_normalizadas.append(contexto["LINEA_LACTATO_RINGER"])
+            continue
+        if linea_norm.startswith("- mantenimiento por superficie corporal:") or linea_norm.startswith("- mantenimiento por superficie corporal segun peso y talla"):
+            lineas_normalizadas.append(contexto["LINEA_LIQUIDOS_SC"])
+            continue
+        if linea_norm.startswith("- parkland:") or linea_norm.startswith("- parkland segun peso y % scq"):
+            lineas_normalizadas.append(contexto["LINEA_PARKLAND"])
+            continue
+        if linea_norm.startswith("- galveston:") or linea_norm.startswith("- galveston segun peso, talla y % scq"):
+            lineas_normalizadas.append(contexto["LINEA_GALVESTON"])
+            continue
+        if linea_norm.startswith("- dexametasona ") and "iv dosis unica" in linea_norm:
+            lineas_normalizadas.append(contexto["LINEA_DEXAMETASONA_LARINGITIS"])
+            continue
+        lineas_normalizadas.append(linea)
+
+    texto = "\n".join(lineas_normalizadas)
 
     try:
         return texto.format_map(SafeFormatDict(contexto))
@@ -2136,7 +2812,12 @@ PLAN:
         )
 
         dosis_medicacion_actual = cargar_dosis_medicacion()
-        marcadores_disponibles = ["{LINEA_LACTATO_RINGER}"] + [
+        marcadores_disponibles = [
+            "{LINEA_LACTATO_RINGER}",
+            "{LINEA_LIQUIDOS_SC}",
+            "{LINEA_PARKLAND}",
+            "{LINEA_GALVESTON}",
+        ] + [
             f"{{LINEA_{nombre}}}" for nombre in dosis_medicacion_actual.keys()
         ] + ["{LINEA_DEXAMETASONA_LARINGITIS}"]
         st.caption("Marcadores automáticos disponibles: " + ", ".join(marcadores_disponibles))
