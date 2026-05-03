@@ -22,6 +22,7 @@ from core.clasificacion import grupo_etario
 from core.texto import sexo_texto
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
 from herramientas.antropometria import calcular_imc
+from herramientas.superficie_corporal import calcular_sc
 from herramientas.oms_full import (
     zscore_peso_edad,
     zscore_talla_edad,
@@ -77,7 +78,7 @@ PLAN_DEFAULT = """- HOSPITALIZACION PEDIATRICA
 - DIETA NORMAL ACORDE A LA EDAD
 - CATETER SELLADO
 - LACTATO DE RINGER A 45 CC/HORA IV
-- ACETAMINOFEN SUSP 150 MG/5 ML: DAR 3 ML VO CADA 6 HORAS (SI FIEBRE O DOLOR)
+- ACETAMINOFEN: 150 MG VO CADA 6 HORAS (SI FIEBRE O DOLOR)
 - DIPIRONA: 500 MG CADA 8 HORAS IV (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)
 - SS PARACLINICOS DE EXTENSIÓN
 - CONTROL DE LÍQUIDOS ADMINISTRADOS - ELIMINADOS
@@ -108,12 +109,12 @@ FORM_DEFAULTS = {
     "peso": 0.0,
     "talla": 0.0,
     "pc": 0.0,
+    "scq_pct": 0.0,
     "examen": EXAMEN_DEFAULT,
     "analisis": "",
     "analisis_base": "",
     "busqueda_cie10": "",
     "dx_cie10": None,
-    "dx_cie10_secundarios": [],
     "obs_dx": "",
     "plan": PLAN_DEFAULT,
     "plan_base": PLAN_DEFAULT,
@@ -1129,68 +1130,209 @@ def calcular_volumen_ml(dosis_mg, concentracion_mg_en_5ml):
     return round(dosis_mg / mg_por_ml, 2)
 
 
+def calcular_liquido_mantenimiento_holliday(peso):
+    if not peso or peso <= 0:
+        return None
+    if peso <= 10:
+        ml_hora = (peso * 100) / 24
+    elif peso <= 20:
+        ml_hora = ((1000 + (peso - 10) * 50) / 24)
+    else:
+        ml_hora = ((1500 + (peso - 20) * 20) / 24)
+    return round(ml_hora, 1)
+
+
+def calcular_liquido_superficie_corporal(peso, talla):
+    if not peso or not talla or peso <= 0 or talla <= 0:
+        return None, None
+    sc = calcular_sc(peso, talla)
+    ml_dia = round(sc * 1500, 1)
+    ml_hora = round(ml_dia / 24, 1)
+    return round(sc, 2), ml_hora
+
+
+def calcular_parkland(peso, scq_pct):
+    if not peso or peso <= 0 or not scq_pct or scq_pct <= 0:
+        return None, None, None
+    total_24h = round(4 * peso * scq_pct, 1)
+    primeras_8h = round(total_24h / 2, 1)
+    siguientes_16h = round(total_24h / 2, 1)
+    return total_24h, primeras_8h, siguientes_16h
+
+
+def calcular_galveston(peso, talla, scq_pct):
+    if not peso or peso <= 0 or not talla or talla <= 0 or not scq_pct or scq_pct <= 0:
+        return None, None
+    sc = calcular_sc(peso, talla)
+    scq_m2 = sc * (scq_pct / 100)
+    total_24h = round((5000 * scq_m2) + (2000 * sc), 1)
+    ml_hora = round(total_24h / 24, 1)
+    return total_24h, ml_hora
+
+
+def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
+    lineas = [
+        "- HOSPITALIZACION PEDIATRICA",
+        "- DIETA NORMAL ACORDE A LA EDAD",
+        "- CATETER SELLADO",
+    ]
+
+    liquidos_ml_hora = calcular_liquido_mantenimiento_holliday(peso)
+    if liquidos_ml_hora:
+        lineas.append(f"- LACTATO DE RINGER A {formatear_numero_clinico(liquidos_ml_hora, 1)} CC/HORA IV")
+    else:
+        lineas.append("- LACTATO DE RINGER IV SEGUN REQUERIMIENTO CLINICO")
+
+    if incluir_analgesia and peso and peso > 0:
+        acet_mg = calcular_dosis_mg(peso, 15, max_mg=650)
+        dipi_mg = calcular_dosis_mg(peso, 15, max_mg=1000)
+        ibup_mg = calcular_dosis_mg(peso, 10, max_mg=400)
+
+        if acet_mg:
+            lineas.append(
+                f"- ACETAMINOFEN: {formatear_numero_clinico(acet_mg, 0)} MG VO CADA 6 HORAS "
+                f"(SI FIEBRE O DOLOR)"
+            )
+        else:
+            lineas.append("- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)")
+
+        if dipi_mg:
+            lineas.append(
+                f"- DIPIRONA: {formatear_numero_clinico(dipi_mg, 0)} MG CADA 8 HORAS IV "
+                f"(SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)"
+            )
+        else:
+            lineas.append("- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)")
+
+        if edad_meses is not None and edad_meses >= 6 and ibup_mg:
+            lineas.append(
+                f"- IBUPROFENO: {formatear_numero_clinico(ibup_mg, 0)} MG VO CADA 8 HORAS "
+                f"(SI DOLOR O FIEBRE)"
+            )
+    else:
+        lineas.append("- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)")
+        lineas.append("- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)")
+
+    lineas.extend([
+        "- SS PARACLINICOS DE EXTENSIÓN",
+        "- CONTROL DE LÍQUIDOS ADMINISTRADOS - ELIMINADOS",
+        "- CONTROL DE SIGNOS VITALES, AVISAR CAMBIOS.",
+    ])
+    return lineas
+
+
+def generar_resumen_dosis(diagnostico, peso, talla, edad_meses, scq_pct=0):
+    lineas = []
+    if not peso or peso <= 0:
+        return "INGRESE PESO PARA CALCULAR DOSIS AUTOMÁTICAS."
+
+    acet_mg = calcular_dosis_mg(peso, 15, max_mg=650)
+    dipi_mg = calcular_dosis_mg(peso, 15, max_mg=1000)
+    ibup_mg = calcular_dosis_mg(peso, 10, max_mg=400)
+    holliday_ml_h = calcular_liquido_mantenimiento_holliday(peso)
+    sc, sc_ml_h = calcular_liquido_superficie_corporal(peso, talla)
+    parkland_total, parkland_8h, parkland_16h = calcular_parkland(peso, scq_pct)
+    galveston_total, galveston_ml_h = calcular_galveston(peso, talla, scq_pct)
+
+    if holliday_ml_h:
+        lineas.append(f"- LÍQUIDOS DE MANTENIMIENTO HOLLIDAY: {formatear_numero_clinico(holliday_ml_h, 1)} CC/HORA")
+    if sc is not None and sc_ml_h is not None:
+        lineas.append(
+            f"- SUPERFICIE CORPORAL: {formatear_numero_clinico(sc, 2)} M2 | MANTENIMIENTO POR SC (1500 ML/M2/DÍA): {formatear_numero_clinico(sc_ml_h, 1)} CC/HORA"
+        )
+    if parkland_total is not None:
+        lineas.append(
+            f"- PARKLAND ({formatear_numero_clinico(scq_pct,1)}% SCQ): {formatear_numero_clinico(parkland_total, 1)} ML/24H | "
+            f"{formatear_numero_clinico(parkland_8h, 1)} ML EN 8H Y {formatear_numero_clinico(parkland_16h, 1)} ML EN 16H"
+        )
+    if galveston_total is not None and galveston_ml_h is not None:
+        lineas.append(
+            f"- GALVESTON ({formatear_numero_clinico(scq_pct,1)}% SCQ): {formatear_numero_clinico(galveston_total, 1)} ML/24H = "
+            f"{formatear_numero_clinico(galveston_ml_h, 1)} CC/HORA"
+        )
+    if acet_mg:
+        lineas.append(f"- ACETAMINOFEN 15 MG/KG/DOSIS: {formatear_numero_clinico(acet_mg, 0)} MG")
+    if dipi_mg:
+        lineas.append(f"- DIPIRONA 15 MG/KG/DOSIS: {formatear_numero_clinico(dipi_mg, 0)} MG IV")
+    if edad_meses is not None and edad_meses >= 6 and ibup_mg:
+        lineas.append(f"- IBUPROFENO 10 MG/KG/DOSIS: {formatear_numero_clinico(ibup_mg, 0)} MG")
+
+    codigo = extraer_codigo_cie10(diagnostico)
+    if codigo.startswith("J18"):
+        ceftriaxona_dia = calcular_dosis_mg(peso, 50, max_mg=2000)
+        if ceftriaxona_dia:
+            lineas.append(f"- CEFTRIAXONA 50 MG/KG/DÍA: {formatear_numero_clinico(ceftriaxona_dia, 0)} MG IV CADA 24 HORAS")
+    elif codigo.startswith("H66"):
+        amoxi_dia = calcular_dosis_mg(peso, 90, max_mg=4000)
+        amoxi_dosis = round(amoxi_dia / 2, 2) if amoxi_dia else None
+        if amoxi_dosis:
+            lineas.append(f"- AMOXICILINA 90 MG/KG/DÍA: {formatear_numero_clinico(amoxi_dosis, 0)} MG CADA 12 HORAS")
+    elif codigo.startswith("J03"):
+        amoxi_dia = calcular_dosis_mg(peso, 50, max_mg=3000)
+        amoxi_dosis = round(amoxi_dia / 2, 2) if amoxi_dia else None
+        if amoxi_dosis:
+            lineas.append(f"- AMOXICILINA 50 MG/KG/DÍA: {formatear_numero_clinico(amoxi_dosis, 0)} MG CADA 12 HORAS")
+    elif codigo.startswith("J05") or codigo.startswith("J04"):
+        dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10)
+        adrenalina_mg = min(round(peso * 0.5, 2), 5) if peso else None
+        if dexa_mg:
+            lineas.append(f"- DEXAMETASONA 0.6 MG/KG DOSIS ÚNICA: {formatear_numero_clinico(dexa_mg, 1)} MG")
+        if adrenalina_mg is not None:
+            lineas.append(f"- ADRENALINA NEBULIZADA 0.5 MG/KG (MÁX 5 MG): {formatear_numero_clinico(adrenalina_mg, 1)} MG")
+    elif codigo.startswith("A09"):
+        ondasetron_mg = calcular_dosis_mg(peso, 0.15, max_mg=8)
+        if ondasetron_mg:
+            lineas.append(f"- ONDANSETRON 0.15 MG/KG/DOSIS: {formatear_numero_clinico(ondasetron_mg, 1)} MG")
+    elif codigo.startswith("J21"):
+        salbutamol_mg = calcular_dosis_mg(peso, 0.15, max_mg=5)
+        if salbutamol_mg:
+            lineas.append(f"- SALBUTAMOL 0.15 MG/KG/NEBULIZACIÓN: {formatear_numero_clinico(salbutamol_mg, 1)} MG SI ESTÁ INDICADO.")
+
+    if not lineas:
+        return "SIN CÁLCULOS DISPONIBLES PARA EL DIAGNÓSTICO ACTUAL."
+    return "\n".join(lineas)
+
+
 def generar_plan_sugerido(diagnostico, peso, edad_meses):
     codigo = extraer_codigo_cie10(diagnostico)
     if not codigo:
         return PLAN_DEFAULT
 
-    lineas = []
+    lineas = generar_plan_base_ordenado(peso, edad_meses)
+    lineas.append("")
+    lineas.append("- MANEJO ESPECIFICO SEGUN DIAGNOSTICO:")
+
     if peso and peso > 0:
         acet_mg = calcular_dosis_mg(peso, 15, max_mg=650)
-        acet_ml = calcular_volumen_ml(acet_mg, 150) if acet_mg else None
-        dipi_mg = calcular_dosis_mg(peso, 15, max_mg=1000)
-        ibup_mg = calcular_dosis_mg(peso, 10, max_mg=400) if peso else None
-        ibup_ml = calcular_volumen_ml(ibup_mg, 100) if ibup_mg else None
     else:
-        acet_mg = acet_ml = dipi_mg = ibup_mg = ibup_ml = None
-
-    def agregar_analgesia():
-        if acet_mg and acet_ml is not None:
-            lineas.append(
-                f"- ACETAMINOFEN SUSP 150 MG/5 ML: DAR {formatear_numero_clinico(acet_ml, 1)} ML VO CADA 6 HORAS SI FIEBRE O DOLOR "
-                f"(DOSIS APROXIMADA {formatear_numero_clinico(acet_mg, 0)} MG)."
-            )
-        if dipi_mg:
-            lineas.append(
-                f"- DIPIRONA: {formatear_numero_clinico(dipi_mg, 0)} MG IV CADA 8 HORAS SI FIEBRE O DOLOR NO CEDE."
-            )
-        if edad_meses is not None and edad_meses >= 6 and ibup_mg and ibup_ml is not None:
-            lineas.append(
-                f"- IBUPROFENO SUSP 100 MG/5 ML: DAR {formatear_numero_clinico(ibup_ml, 1)} ML VO CADA 8 HORAS SI DOLOR O FIEBRE "
-                f"(DOSIS APROXIMADA {formatear_numero_clinico(ibup_mg, 0)} MG)."
-            )
+        acet_mg = None
 
     if codigo.startswith("J21"):
         lineas.extend([
-            "- HOSPITALIZACION POR PEDIATRIA SEGUN CONDICION CLINICA.",
             "- LAVADOS NASALES FRECUENTES Y ASPIRACION DE SECRECIONES SEGUN NECESIDAD.",
             "- OXIGENO SUPLEMENTARIO SI SATURACION < 92% O SIGNOS DE DIFICULTAD RESPIRATORIA.",
             "- MONITORIZACION DE SIGNOS VITALES Y TRABAJO RESPIRATORIO.",
             "- CONTROL DE INGESTA Y ELIMINACION.",
         ])
-        agregar_analgesia()
     elif codigo.startswith("J18"):
         lineas.extend([
-            "- HOSPITALIZACION POR PEDIATRIA.",
             "- OXIGENO SUPLEMENTARIO SEGUN REQUERIMIENTO Y META DE SATURACION > 92%.",
             "- CEFTRIAXONA 50 MG/KG/DIA IV CADA 24 HORAS.",
             "- CONTROL DE SIGNOS VITALES Y DIFICULTAD RESPIRATORIA.",
             "- TOMAR PARACLINICOS DE CONTROL SEGUN EVOLUCION.",
         ])
-        agregar_analgesia()
     elif codigo.startswith("J05") or codigo.startswith("J04"):
         dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10) if peso else None
-        adrenalina_ml = min(round(peso * 0.5, 2), 5) if peso else None
+        adrenalina_mg = min(round(peso * 0.5, 2), 5) if peso else None
         lineas.extend([
             "- OBSERVACION CLINICA Y VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION.",
         ])
         if dexa_mg:
             lineas.append(f"- DEXAMETASONA {formatear_numero_clinico(dexa_mg, 1)} MG VO/IM/IV DOSIS UNICA.")
-        if adrenalina_ml is not None:
+        if adrenalina_mg is not None:
             lineas.append(
-                f"- ADRENALINA 1 MG/ML NEBULIZADA: {formatear_numero_clinico(adrenalina_ml, 1)} ML + SSN HASTA 5 ML SI ESTRIDOR EN REPOSO."
+                f"- ADRENALINA NEBULIZADA: {formatear_numero_clinico(adrenalina_mg, 1)} MG SI ESTRIDOR EN REPOSO. DILUIR SEGUN PROTOCOLO INSTITUCIONAL."
             )
-        agregar_analgesia()
     elif codigo.startswith("H66"):
         amoxi_dia = calcular_dosis_mg(peso, 90, max_mg=4000) if peso else None
         dosis_cada_12 = round(amoxi_dia / 2, 2) if amoxi_dia else None
@@ -1199,13 +1341,11 @@ def generar_plan_sugerido(diagnostico, peso, edad_meses):
             lineas.append(
                 f"- AMOXICILINA 90 MG/KG/DIA VO DIVIDIDA CADA 12 HORAS: {formatear_numero_clinico(dosis_cada_12, 0)} MG POR DOSIS."
             )
-        agregar_analgesia()
     elif codigo.startswith("J00") or codigo.startswith("J06") or codigo.startswith("J03"):
         lineas.extend([
             "- MANEJO SINTOMATICO Y VIGILANCIA DE SIGNOS DE ALARMA.",
             "- LAVADOS NASALES Y ADECUADA HIDRATACION ORAL.",
         ])
-        agregar_analgesia()
     elif codigo.startswith("A09"):
         ondasetron_mg = calcular_dosis_mg(peso, 0.15, max_mg=8) if peso else None
         lineas.extend([
@@ -1214,9 +1354,7 @@ def generar_plan_sugerido(diagnostico, peso, edad_meses):
         ])
         if ondasetron_mg:
             lineas.append(f"- ONDANSETRON {formatear_numero_clinico(ondasetron_mg, 1)} MG VO/IV SI VOMITO.")
-        agregar_analgesia()
     else:
-        lineas.extend(PLAN_DEFAULT.splitlines())
         if codigo and codigo not in {"J00", "J03", "J04", "J05", "J06", "J18", "J21", "H66", "A09"}:
             lineas.append(f"- AJUSTAR CONDUCTA ESPECIFICA SEGUN DIAGNOSTICO {codigo}.")
 
@@ -1398,6 +1536,7 @@ def render():
     peso = st.number_input("Peso (kg)", min_value=0.0, key="peso")
     talla = st.number_input("Talla (cm)", min_value=0.0, key="talla")
     pc = st.number_input("Perímetro cefálico (cm)", min_value=0.0, key="pc")
+    scq_pct = st.number_input("Superficie corporal quemada (%)", min_value=0.0, max_value=100.0, key="scq_pct")
 
     if fecha_nacimiento and peso > 0 and talla > 0:
 
@@ -1553,27 +1692,17 @@ def render():
         if busqueda_cie10:
             st.caption("No se encontraron diagnósticos CIE-10 con esa búsqueda.")
         diagnostico_seleccionado = ""
-        diagnosticos_secundarios = []
     else:
         cie10_filtrado = cie10_filtrado.copy()
         cie10_filtrado["description_es"] = cie10_filtrado["description"].map(traducir_cie10_descripcion)
         cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
         with st.expander(f"Resultados de diagnóstico ({len(cie10_filtrado)})", expanded=False):
             diagnostico_seleccionado = st.selectbox(
-                "Diagnóstico principal CIE-10",
+                "Diagnóstico CIE-10",
                 cie10_filtrado["label_es"].tolist(),
                 index=None,
-                placeholder="Seleccione diagnóstico principal",
+                placeholder="Seleccione un diagnóstico",
                 key="dx_cie10"
-            )
-            opciones_secundarias = [
-                opcion for opcion in cie10_filtrado["label_es"].tolist()
-                if opcion != diagnostico_seleccionado
-            ]
-            diagnosticos_secundarios = st.multiselect(
-                "Diagnósticos secundarios CIE-10",
-                opciones_secundarias,
-                key="dx_cie10_secundarios"
             )
 
     observacion_diagnostico = st.text_area(
@@ -1585,6 +1714,15 @@ def render():
     edad_meses_actual = edad_en_meses(fecha_nacimiento) if fecha_nacimiento else None
     diagnostico_plan = diagnostico_seleccionado or ""
     plan_sugerido = generar_plan_sugerido(diagnostico_plan, peso, edad_meses_actual)
+    resumen_dosis = generar_resumen_dosis(diagnostico_plan, peso, talla, edad_meses_actual, scq_pct)
+
+    st.subheader("Cálculos automáticos")
+    st.text_area(
+        "Dosis y líquidos según peso/talla",
+        value=resumen_dosis,
+        height=220,
+        disabled=True
+    )
 
     st.subheader("Ayuda terapéutica automática")
     st.text_area(
@@ -1622,16 +1760,7 @@ def render():
     if generar_historia:
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
-        diagnostico_principal = diagnostico_seleccionado or ""
-        diagnosticos_secundarios_final = diagnosticos_secundarios if diagnosticos_secundarios else []
-        diagnostico_final = diagnostico_principal
-        if diagnosticos_secundarios_final:
-            diagnostico_final = "\n".join(
-                [f"PRINCIPAL: {diagnostico_principal}"] +
-                [f"SECUNDARIO: {dx}" for dx in diagnosticos_secundarios_final]
-            ) if diagnostico_principal else "\n".join(
-                [f"SECUNDARIO: {dx}" for dx in diagnosticos_secundarios_final]
-            )
+        diagnostico_final = diagnostico_seleccionado or ""
         paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY REPORTES"
         imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY REPORTES"
 
