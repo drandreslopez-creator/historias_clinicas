@@ -41,6 +41,7 @@ from herramientas.diagnostico_nutricional import (
 BASE_DIR = Path(__file__).resolve().parent.parent
 HISTORIAS_PATH = BASE_DIR / "data" / "historias_pediatria_urgencias.jsonl"
 PLANES_PATOLOGIA_PATH = BASE_DIR / "data" / "planes_manejo_pediatria_urgencias.json"
+DOSIS_MEDICACION_PATH = BASE_DIR / "data" / "dosis_medicacion_pediatria_urgencias.json"
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
 ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO XX GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO Y ECOGRAFÍAS ANTENATALES: NACE VÍA VAGINAL/ CESAREA A LAS XX SEM A TÉRMINO. EGRESO CONJUNTO, PESO XXXX GR - TALLA XX CM.
@@ -87,6 +88,23 @@ PLAN_DEFAULT = """- HOSPITALIZACION PEDIATRICA
 
 REVISION_DEFAULT = "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
 
+DOSIS_MEDICACION_DEFAULTS = {
+    "ACETAMINOFEN": {
+        "mg_kg_dosis": 15.0,
+        "intervalo_horas": 6,
+        "max_mg": 650.0,
+        "via": "VO",
+        "indicacion": "SI FIEBRE O DOLOR",
+    },
+    "DIPIRONA": {
+        "mg_kg_dosis": 20.0,
+        "intervalo_horas": 8,
+        "max_mg": 1000.0,
+        "via": "IV",
+        "indicacion": "SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN",
+    },
+}
+
 PLANES_PATOLOGIA_LABELS = {
     "J21": "BRONQUIOLITIS (J21)",
     "J18": "NEUMONÍA (J18)",
@@ -108,9 +126,9 @@ PLANES_PATOLOGIA_DEFAULTS = {
     "J05_J04": """- OBSERVACIÓN PEDIATRICA
 - DIETA NORMAL ACORDE A LA EDAD (FRACCIONADA Y CON PRECAUCIÓN)
 - CATETER SELLADO
-- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)
-- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)
-- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA
+{LINEA_ACETAMINOFEN}
+{LINEA_DIPIRONA}
+{LINEA_DEXAMETASONA_LARINGITIS}
 - ADRENALINA NEBULIZADA CICLO X 3
 - SS PARACLINICOS DE EXTENSIÓN
 - VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION
@@ -485,6 +503,27 @@ def guardar_planes_patologia(planes):
         json.dump(planes, f, ensure_ascii=False, indent=2)
 
 
+def cargar_dosis_medicacion():
+    dosis = json.loads(json.dumps(DOSIS_MEDICACION_DEFAULTS))
+    if DOSIS_MEDICACION_PATH.exists():
+        try:
+            with DOSIS_MEDICACION_PATH.open("r", encoding="utf-8") as f:
+                datos = json.load(f)
+            if isinstance(datos, dict):
+                for medicamento, configuracion in datos.items():
+                    if medicamento in dosis and isinstance(configuracion, dict):
+                        dosis[medicamento].update(configuracion)
+        except Exception:
+            pass
+    return dosis
+
+
+def guardar_dosis_medicacion(dosis):
+    DOSIS_MEDICACION_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with DOSIS_MEDICACION_PATH.open("w", encoding="utf-8") as f:
+        json.dump(dosis, f, ensure_ascii=False, indent=2)
+
+
 def obtener_clave_plan_patologia(codigo):
     if not codigo:
         return ""
@@ -506,6 +545,11 @@ def obtener_clave_plan_patologia(codigo):
 def es_diagnostico_laringitis(diagnostico):
     texto = normalizar_texto(diagnostico)
     return "laringitis" in texto or "laring" in texto
+
+
+class SafeFormatDict(dict):
+    def __missing__(self, key):
+        return "{" + key + "}"
 
 
 @st.cache_resource
@@ -1253,7 +1297,52 @@ def calcular_galveston(peso, talla, scq_pct):
     return total_24h, ml_hora
 
 
+def construir_contexto_plan_medicacion(peso):
+    dosis_cfg = cargar_dosis_medicacion()
+
+    acet_cfg = dosis_cfg["ACETAMINOFEN"]
+    acet_mg = calcular_dosis_mg(peso, acet_cfg["mg_kg_dosis"], max_mg=acet_cfg.get("max_mg")) if peso else None
+    if acet_mg:
+        linea_acetaminofen = (
+            f"- ACETAMINOFEN: {formatear_numero_clinico(acet_mg, 0)} MG {acet_cfg.get('via', 'VO')} "
+            f"CADA {int(acet_cfg.get('intervalo_horas', 6))} HORAS ({acet_cfg.get('indicacion', '')})"
+        )
+    else:
+        linea_acetaminofen = "- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)"
+
+    dip_cfg = dosis_cfg["DIPIRONA"]
+    dip_mg = calcular_dosis_mg(peso, dip_cfg["mg_kg_dosis"], max_mg=dip_cfg.get("max_mg")) if peso else None
+    if dip_mg:
+        linea_dipirona = (
+            f"- DIPIRONA: {formatear_numero_clinico(dip_mg, 0)} MG {dip_cfg.get('via', 'IV')} "
+            f"CADA {int(dip_cfg.get('intervalo_horas', 8))} HORAS ({dip_cfg.get('indicacion', '')})"
+        )
+    else:
+        linea_dipirona = "- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)"
+
+    dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10) if peso else None
+    if dexa_mg:
+        linea_dexametasona_laringitis = f"- DEXAMETASONA {formatear_numero_clinico(dexa_mg, 1)} MG IV DOSIS UNICA"
+    else:
+        linea_dexametasona_laringitis = "- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA"
+
+    return {
+        "LINEA_ACETAMINOFEN": linea_acetaminofen,
+        "LINEA_DIPIRONA": linea_dipirona,
+        "LINEA_DEXAMETASONA_LARINGITIS": linea_dexametasona_laringitis,
+    }
+
+
+def renderizar_plan_editable(texto_plan, peso):
+    contexto = construir_contexto_plan_medicacion(peso)
+    try:
+        return texto_plan.format_map(SafeFormatDict(contexto))
+    except Exception:
+        return texto_plan
+
+
 def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
+    contexto_medicacion = construir_contexto_plan_medicacion(peso)
     lineas = [
         "- HOSPITALIZACION PEDIATRICA",
         "- DIETA NORMAL ACORDE A LA EDAD",
@@ -1267,25 +1356,11 @@ def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
         lineas.append("- LACTATO DE RINGER IV SEGUN REQUERIMIENTO CLINICO")
 
     if incluir_analgesia and peso and peso > 0:
-        acet_mg = calcular_dosis_mg(peso, 15, max_mg=650)
-        dipi_mg = calcular_dosis_mg(peso, 15, max_mg=1000)
+        dipi_cfg = cargar_dosis_medicacion()["DIPIRONA"]
         ibup_mg = calcular_dosis_mg(peso, 10, max_mg=400)
 
-        if acet_mg:
-            lineas.append(
-                f"- ACETAMINOFEN: {formatear_numero_clinico(acet_mg, 0)} MG VO CADA 6 HORAS "
-                f"(SI FIEBRE O DOLOR)"
-            )
-        else:
-            lineas.append("- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)")
-
-        if dipi_mg:
-            lineas.append(
-                f"- DIPIRONA: {formatear_numero_clinico(dipi_mg, 0)} MG CADA 8 HORAS IV "
-                f"(SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)"
-            )
-        else:
-            lineas.append("- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)")
+        lineas.append(contexto_medicacion["LINEA_ACETAMINOFEN"])
+        lineas.append(contexto_medicacion["LINEA_DIPIRONA"])
 
         if edad_meses is not None and edad_meses >= 6 and ibup_mg:
             lineas.append(
@@ -1293,8 +1368,8 @@ def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
                 f"(SI DOLOR O FIEBRE)"
             )
     else:
-        lineas.append("- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)")
-        lineas.append("- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)")
+        lineas.append(contexto_medicacion["LINEA_ACETAMINOFEN"])
+        lineas.append(contexto_medicacion["LINEA_DIPIRONA"])
 
     lineas.extend([
         "- SS PARACLINICOS DE EXTENSIÓN",
@@ -1309,8 +1384,11 @@ def generar_resumen_dosis(diagnostico, peso, talla, edad_meses, scq_pct=0):
     if not peso or peso <= 0:
         return "INGRESE PESO PARA CALCULAR DOSIS AUTOMÁTICAS."
 
-    acet_mg = calcular_dosis_mg(peso, 15, max_mg=650)
-    dipi_mg = calcular_dosis_mg(peso, 15, max_mg=1000)
+    dosis_cfg = cargar_dosis_medicacion()
+    acet_cfg = dosis_cfg["ACETAMINOFEN"]
+    dip_cfg = dosis_cfg["DIPIRONA"]
+    acet_mg = calcular_dosis_mg(peso, acet_cfg["mg_kg_dosis"], max_mg=acet_cfg.get("max_mg"))
+    dipi_mg = calcular_dosis_mg(peso, dip_cfg["mg_kg_dosis"], max_mg=dip_cfg.get("max_mg"))
     ibup_mg = calcular_dosis_mg(peso, 10, max_mg=400)
     holliday_ml_h = calcular_liquido_mantenimiento_holliday(peso)
     sc, sc_ml_h = calcular_liquido_superficie_corporal(peso, talla)
@@ -1334,9 +1412,15 @@ def generar_resumen_dosis(diagnostico, peso, talla, edad_meses, scq_pct=0):
             f"{formatear_numero_clinico(galveston_ml_h, 1)} CC/HORA"
         )
     if acet_mg:
-        lineas.append(f"- ACETAMINOFEN 15 MG/KG/DOSIS: {formatear_numero_clinico(acet_mg, 0)} MG")
+        lineas.append(
+            f"- ACETAMINOFEN {formatear_numero_clinico(acet_cfg['mg_kg_dosis'], 1)} MG/KG/DOSIS: "
+            f"{formatear_numero_clinico(acet_mg, 0)} MG CADA {int(acet_cfg.get('intervalo_horas', 6))} HORAS"
+        )
     if dipi_mg:
-        lineas.append(f"- DIPIRONA 15 MG/KG/DOSIS: {formatear_numero_clinico(dipi_mg, 0)} MG IV")
+        lineas.append(
+            f"- DIPIRONA {formatear_numero_clinico(dip_cfg['mg_kg_dosis'], 1)} MG/KG/DOSIS: "
+            f"{formatear_numero_clinico(dipi_mg, 0)} MG {dip_cfg.get('via', 'IV')} CADA {int(dip_cfg.get('intervalo_horas', 8))} HORAS"
+        )
     if edad_meses is not None and edad_meses >= 6 and ibup_mg:
         lineas.append(f"- IBUPROFENO 10 MG/KG/DOSIS: {formatear_numero_clinico(ibup_mg, 0)} MG")
 
@@ -1379,34 +1463,21 @@ def generar_resumen_dosis(diagnostico, peso, talla, edad_meses, scq_pct=0):
 def generar_plan_sugerido(diagnostico, peso, edad_meses):
     codigo = extraer_codigo_cie10(diagnostico)
     if not codigo and not es_diagnostico_laringitis(diagnostico):
-        return PLAN_DEFAULT
+        return "\n".join(generar_plan_base_ordenado(peso, edad_meses))
 
     planes_patologia = cargar_planes_patologia()
     clave_plan = obtener_clave_plan_patologia(codigo)
     plan_patologia_editable = planes_patologia.get(clave_plan, "").strip() if clave_plan else ""
 
     if es_diagnostico_laringitis(diagnostico):
-        dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10) if peso else None
-        lineas = [
-            "- OBSERVACIÓN PEDIATRICA",
-            "- DIETA NORMAL ACORDE A LA EDAD (FRACCIONADA Y CON PRECAUCIÓN)",
-            "- CATETER SELLADO",
-            "- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)",
-            "- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)",
-            f"- DEXAMETASONA {formatear_numero_clinico(dexa_mg, 1)} MG IV DOSIS UNICA" if dexa_mg else "- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA",
-            "- ADRENALINA NEBULIZADA CICLO X 3",
-            "- SS PARACLINICOS DE EXTENSIÓN",
-            "- VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION",
-            "- CONTROL DE SIGNOS VITALES, AVISAR CAMBIOS",
-            "- REVALORACIÓN",
-        ]
-        return "\n".join(lineas)
-
-    lineas = generar_plan_base_ordenado(peso, edad_meses)
+        if plan_patologia_editable:
+            return renderizar_plan_editable(plan_patologia_editable, peso)
+        return renderizar_plan_editable(PLANES_PATOLOGIA_DEFAULTS["J05_J04"], peso)
 
     if plan_patologia_editable:
-        lineas.extend([linea for linea in plan_patologia_editable.splitlines()])
+        return renderizar_plan_editable(plan_patologia_editable, peso)
 
+    lineas = generar_plan_base_ordenado(peso, edad_meses)
     return "\n".join(lineas)
 
 
@@ -1763,15 +1834,6 @@ def render():
     edad_meses_actual = edad_en_meses(fecha_nacimiento) if fecha_nacimiento else None
     diagnostico_plan = diagnostico_seleccionado or ""
     plan_sugerido = generar_plan_sugerido(diagnostico_plan, peso, edad_meses_actual)
-    resumen_dosis = generar_resumen_dosis(diagnostico_plan, peso, talla, edad_meses_actual, scq_pct)
-
-    st.subheader("Cálculos automáticos")
-    st.text_area(
-        "Dosis y líquidos según peso/talla",
-        value=resumen_dosis,
-        height=220,
-        disabled=True
-    )
 
     if "plan" not in st.session_state:
         st.session_state["plan"] = plan_sugerido
@@ -1967,4 +2029,66 @@ PLAN:
             planes_patologia[clave_patologia_editor] = PLANES_PATOLOGIA_DEFAULTS.get(clave_patologia_editor, "")
             guardar_planes_patologia(planes_patologia)
             st.session_state.pop(f"plan_patologia_editor_{clave_patologia_editor}", None)
+            st.rerun()
+
+    with st.expander("Base de datos de dosis de medicación", expanded=False):
+        dosis_medicacion = cargar_dosis_medicacion()
+        medicamento_editor = st.selectbox(
+            "Medicamento",
+            list(dosis_medicacion.keys()),
+            key="medicacion_dosis_selector"
+        )
+
+        configuracion_actual = dosis_medicacion[medicamento_editor]
+        col_dosis_1, col_dosis_2 = st.columns(2)
+        with col_dosis_1:
+            mg_kg_dosis = st.number_input(
+                "mg/kg/dosis",
+                min_value=0.0,
+                value=float(configuracion_actual.get("mg_kg_dosis", 0.0)),
+                step=0.1,
+                key=f"mgkg_{medicamento_editor}"
+            )
+            intervalo_horas = st.number_input(
+                "Intervalo (horas)",
+                min_value=1,
+                value=int(configuracion_actual.get("intervalo_horas", 6)),
+                step=1,
+                key=f"intervalo_{medicamento_editor}"
+            )
+        with col_dosis_2:
+            max_mg = st.number_input(
+                "Dosis máxima (mg)",
+                min_value=0.0,
+                value=float(configuracion_actual.get("max_mg", 0.0)),
+                step=1.0,
+                key=f"maxmg_{medicamento_editor}"
+            )
+            via = st.text_input(
+                "Vía",
+                value=str(configuracion_actual.get("via", "")),
+                key=f"via_{medicamento_editor}"
+            )
+
+        indicacion = st.text_input(
+            "Indicación",
+            value=str(configuracion_actual.get("indicacion", "")),
+            key=f"indicacion_{medicamento_editor}"
+        )
+
+        col_med_1, col_med_2 = st.columns(2)
+        if col_med_1.button("Guardar dosis de este medicamento", key="guardar_dosis_medicacion", use_container_width=True):
+            dosis_medicacion[medicamento_editor] = {
+                "mg_kg_dosis": mg_kg_dosis,
+                "intervalo_horas": intervalo_horas,
+                "max_mg": max_mg,
+                "via": via.strip().upper(),
+                "indicacion": indicacion.strip().upper(),
+            }
+            guardar_dosis_medicacion(dosis_medicacion)
+            st.success("Dosis guardada correctamente.")
+
+        if col_med_2.button("Restablecer dosis por defecto", key="restablecer_dosis_medicacion", use_container_width=True):
+            dosis_medicacion[medicamento_editor] = json.loads(json.dumps(DOSIS_MEDICACION_DEFAULTS[medicamento_editor]))
+            guardar_dosis_medicacion(dosis_medicacion)
             st.rerun()
