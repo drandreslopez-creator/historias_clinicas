@@ -103,6 +103,13 @@ DOSIS_MEDICACION_DEFAULTS = {
         "via": "IV",
         "indicacion": "SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN",
     },
+    "ONDANSETRON": {
+        "mg_kg_dosis": 0.15,
+        "intervalo_horas": 8,
+        "max_mg": 8.0,
+        "via": "VO/IV",
+        "indicacion": "SI VOMITO",
+    },
 }
 
 PLANES_PATOLOGIA_LABELS = {
@@ -139,8 +146,18 @@ PLANES_PATOLOGIA_DEFAULTS = {
     "J00_J06_J03": """- MANEJO SINTOMATICO Y VIGILANCIA DE SIGNOS DE ALARMA.
 - LAVADOS NASALES Y ADECUADA HIDRATACION ORAL.""",
     "A09": """- HIDRATACION ORAL CON SRO SEGUN TOLERANCIA Y ESTADO CLINICO.
+- HOSPITALIZACION PEDIATRICA
+- DIETA NORMAL ACORDE A LA EDAD
+- CATETER SELLADO
+{LINEA_LACTATO_RINGER}
+- HIDRATACION ORAL CON SRO SEGUN TOLERANCIA Y ESTADO CLINICO
+{LINEA_ONDANSETRON}
+{LINEA_ACETAMINOFEN}
+{LINEA_DIPIRONA}
+- SS PARACLINICOS DE EXTENSIÓN
+- CONTROL DE LÍQUIDOS ADMINISTRADOS - ELIMINADOS
 - VIGILAR SIGNOS DE DESHIDRATACION Y GASTO URINARIO.
-- ONDANSETRON SI VOMITO SEGUN PESO Y CRITERIO CLINICO.""",
+- CONTROL DE SIGNOS VITALES, AVISAR CAMBIOS.""",
 }
 
 FORM_DEFAULTS = {
@@ -577,6 +594,33 @@ def es_diagnostico_laringitis(diagnostico):
 class SafeFormatDict(dict):
     def __missing__(self, key):
         return "{" + key + "}"
+
+
+def construir_linea_medicamento(nombre, configuracion, peso):
+    via = str(configuracion.get("via", "")).strip().upper()
+    indicacion = str(configuracion.get("indicacion", "")).strip().upper()
+    intervalo = int(configuracion.get("intervalo_horas", 0) or 0)
+    mg_kg = float(configuracion.get("mg_kg_dosis", 0) or 0)
+    max_mg = configuracion.get("max_mg")
+    dosis_mg = calcular_dosis_mg(peso, mg_kg, max_mg=max_mg) if peso and mg_kg else None
+
+    nombre_visible = nombre.replace("_", " ").upper()
+    if dosis_mg:
+        linea = f"- {nombre_visible}: {formatear_numero_clinico(dosis_mg, 1 if mg_kg < 1 else 0)} MG"
+        if via:
+            linea += f" {via}"
+        if intervalo > 0:
+            linea += f" CADA {intervalo} HORAS"
+        if indicacion:
+            linea += f" ({indicacion})"
+        return linea
+
+    linea = f"- {nombre_visible} SEGUN PESO"
+    if via:
+        linea += f" {via}"
+    if indicacion:
+        linea += f" ({indicacion})"
+    return linea
 
 
 @st.cache_resource
@@ -1326,26 +1370,26 @@ def calcular_galveston(peso, talla, scq_pct):
 
 def construir_contexto_plan_medicacion(peso):
     dosis_cfg = cargar_dosis_medicacion()
-
-    acet_cfg = dosis_cfg["ACETAMINOFEN"]
-    acet_mg = calcular_dosis_mg(peso, acet_cfg["mg_kg_dosis"], max_mg=acet_cfg.get("max_mg")) if peso else None
-    if acet_mg:
-        linea_acetaminofen = (
-            f"- ACETAMINOFEN: {formatear_numero_clinico(acet_mg, 0)} MG {acet_cfg.get('via', 'VO')} "
-            f"CADA {int(acet_cfg.get('intervalo_horas', 6))} HORAS ({acet_cfg.get('indicacion', '')})"
-        )
+    liquidos_ml_hora = calcular_liquido_mantenimiento_holliday(peso) if peso else None
+    if liquidos_ml_hora:
+        linea_lactato_ringer = f"- LACTATO DE RINGER A {formatear_numero_clinico(liquidos_ml_hora, 1)} CC/HORA IV"
     else:
-        linea_acetaminofen = "- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)"
+        linea_lactato_ringer = "- LACTATO DE RINGER IV SEGUN REQUERIMIENTO CLINICO"
 
-    dip_cfg = dosis_cfg["DIPIRONA"]
-    dip_mg = calcular_dosis_mg(peso, dip_cfg["mg_kg_dosis"], max_mg=dip_cfg.get("max_mg")) if peso else None
-    if dip_mg:
-        linea_dipirona = (
-            f"- DIPIRONA: {formatear_numero_clinico(dip_mg, 0)} MG {dip_cfg.get('via', 'IV')} "
-            f"CADA {int(dip_cfg.get('intervalo_horas', 8))} HORAS ({dip_cfg.get('indicacion', '')})"
+    contexto = {
+        "LINEA_LACTATO_RINGER": linea_lactato_ringer,
+    }
+
+    for nombre_medicamento, configuracion in dosis_cfg.items():
+        contexto[f"LINEA_{nombre_medicamento.upper()}"] = construir_linea_medicamento(
+            nombre_medicamento,
+            configuracion,
+            peso,
         )
-    else:
-        linea_dipirona = "- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)"
+
+    linea_acetaminofen = contexto.get("LINEA_ACETAMINOFEN", "- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)")
+    linea_dipirona = contexto.get("LINEA_DIPIRONA", "- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)")
+    linea_ondansetron = contexto.get("LINEA_ONDANSETRON", "- ONDANSETRON SI VOMITO SEGUN PESO Y CRITERIO CLINICO")
 
     dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10) if peso else None
     if dexa_mg:
@@ -1353,19 +1397,34 @@ def construir_contexto_plan_medicacion(peso):
     else:
         linea_dexametasona_laringitis = "- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA"
 
-    return {
+    contexto.update({
         "LINEA_ACETAMINOFEN": linea_acetaminofen,
         "LINEA_DIPIRONA": linea_dipirona,
+        "LINEA_ONDANSETRON": linea_ondansetron,
         "LINEA_DEXAMETASONA_LARINGITIS": linea_dexametasona_laringitis,
-    }
+    })
+    return contexto
 
 
 def renderizar_plan_editable(texto_plan, peso):
     contexto = construir_contexto_plan_medicacion(peso)
+    reemplazos_directos = {
+        "- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)": contexto["LINEA_ACETAMINOFEN"],
+        "- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)": contexto["LINEA_DIPIRONA"],
+        "- ONDANSETRON SI VOMITO SEGUN PESO Y CRITERIO CLINICO": contexto["LINEA_ONDANSETRON"],
+        "- ONDANSETRON SI VOMITO SEGUN PESO Y CRITERIO CLINICO.": contexto["LINEA_ONDANSETRON"],
+        "- LACTATO DE RINGER IV SEGUN REQUERIMIENTO CLINICO": contexto["LINEA_LACTATO_RINGER"],
+        "- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA": contexto["LINEA_DEXAMETASONA_LARINGITIS"],
+    }
+
+    texto = texto_plan
+    for original, reemplazo in reemplazos_directos.items():
+        texto = texto.replace(original, reemplazo)
+
     try:
-        return texto_plan.format_map(SafeFormatDict(contexto))
+        return texto.format_map(SafeFormatDict(contexto))
     except Exception:
-        return texto_plan
+        return texto
 
 
 def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
@@ -2075,6 +2134,12 @@ PLAN:
             format_func=lambda clave: labels_planes_patologia.get(clave, clave),
             key="plan_patologia_selector"
         )
+
+        dosis_medicacion_actual = cargar_dosis_medicacion()
+        marcadores_disponibles = ["{LINEA_LACTATO_RINGER}"] + [
+            f"{{LINEA_{nombre}}}" for nombre in dosis_medicacion_actual.keys()
+        ] + ["{LINEA_DEXAMETASONA_LARINGITIS}"]
+        st.caption("Marcadores automáticos disponibles: " + ", ".join(marcadores_disponibles))
 
         texto_plan_patologia = st.text_area(
             "Plan editable para esta patología",
