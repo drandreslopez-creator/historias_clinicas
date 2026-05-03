@@ -105,9 +105,17 @@ PLANES_PATOLOGIA_DEFAULTS = {
 - CEFTRIAXONA 50 MG/KG/DIA IV CADA 24 HORAS.
 - CONTROL DE SIGNOS VITALES Y DIFICULTAD RESPIRATORIA.
 - TOMAR PARACLINICOS DE CONTROL SEGUN EVOLUCION.""",
-    "J05_J04": """- OBSERVACION CLINICA Y VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION.
-- DEXAMETASONA 0.6 MG/KG VO/IM/IV DOSIS UNICA.
-- ADRENALINA NEBULIZADA SI ESTRIDOR EN REPOSO. DILUIR SEGUN PROTOCOLO INSTITUCIONAL.""",
+    "J05_J04": """- OBSERVACIÓN PEDIATRICA
+- DIETA NORMAL ACORDE A LA EDAD (FRACCIONADA Y CON PRECAUCIÓN)
+- CATETER SELLADO
+- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)
+- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)
+- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA
+- ADRENALINA NEBULIZADA CICLO X 3
+- SS PARACLINICOS DE EXTENSIÓN
+- VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION
+- CONTROL DE SIGNOS VITALES, AVISAR CAMBIOS
+- REVALORACIÓN""",
     "H66": """- MANEJO ANALGESICO Y VIGILANCIA CLINICA.
 - AMOXICILINA 90 MG/KG/DIA VO DIVIDIDA CADA 12 HORAS.""",
     "J00_J06_J03": """- MANEJO SINTOMATICO Y VIGILANCIA DE SIGNOS DE ALARMA.
@@ -493,6 +501,11 @@ def obtener_clave_plan_patologia(codigo):
     if codigo.startswith("A09"):
         return "A09"
     return ""
+
+
+def es_diagnostico_laringitis(diagnostico):
+    texto = normalizar_texto(diagnostico)
+    return "laringitis" in texto or "laring" in texto
 
 
 @st.cache_resource
@@ -1365,21 +1378,34 @@ def generar_resumen_dosis(diagnostico, peso, talla, edad_meses, scq_pct=0):
 
 def generar_plan_sugerido(diagnostico, peso, edad_meses):
     codigo = extraer_codigo_cie10(diagnostico)
-    if not codigo:
+    if not codigo and not es_diagnostico_laringitis(diagnostico):
         return PLAN_DEFAULT
 
     planes_patologia = cargar_planes_patologia()
     clave_plan = obtener_clave_plan_patologia(codigo)
     plan_patologia_editable = planes_patologia.get(clave_plan, "").strip() if clave_plan else ""
 
+    if es_diagnostico_laringitis(diagnostico):
+        dexa_mg = calcular_dosis_mg(peso, 0.6, max_mg=10) if peso else None
+        lineas = [
+            "- OBSERVACIÓN PEDIATRICA",
+            "- DIETA NORMAL ACORDE A LA EDAD (FRACCIONADA Y CON PRECAUCIÓN)",
+            "- CATETER SELLADO",
+            "- ACETAMINOFEN VO SEGUN PESO (SI FIEBRE O DOLOR)",
+            "- DIPIRONA IV SEGUN PESO (SI FIEBRE O DOLOR NO CEDE CON ACETAMINOFEN)",
+            f"- DEXAMETASONA {formatear_numero_clinico(dexa_mg, 1)} MG IV DOSIS UNICA" if dexa_mg else "- DEXAMETASONA 0.6 MG/KG IV DOSIS UNICA",
+            "- ADRENALINA NEBULIZADA CICLO X 3",
+            "- SS PARACLINICOS DE EXTENSIÓN",
+            "- VIGILANCIA DE ESTRIDOR, TIRAJES Y SATURACION",
+            "- CONTROL DE SIGNOS VITALES, AVISAR CAMBIOS",
+            "- REVALORACIÓN",
+        ]
+        return "\n".join(lineas)
+
     lineas = generar_plan_base_ordenado(peso, edad_meses)
-    lineas.append("")
-    lineas.append("- MANEJO ESPECIFICO SEGUN DIAGNOSTICO:")
 
     if plan_patologia_editable:
         lineas.extend([linea for linea in plan_patologia_editable.splitlines()])
-    elif codigo and codigo not in {"J00", "J03", "J04", "J05", "J06", "J18", "J21", "H66", "A09"}:
-        lineas.append(f"- AJUSTAR CONDUCTA ESPECIFICA SEGUN DIAGNOSTICO {codigo}.")
 
     return "\n".join(lineas)
 
@@ -1743,14 +1769,6 @@ def render():
     st.text_area(
         "Dosis y líquidos según peso/talla",
         value=resumen_dosis,
-        height=220,
-        disabled=True
-    )
-
-    st.subheader("Ayuda terapéutica automática")
-    st.text_area(
-        "Sugerencia según diagnóstico y peso",
-        value=plan_sugerido,
         height=220,
         disabled=True
     )
