@@ -2907,7 +2907,6 @@ PLAN:
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True,
         )
-        st.caption(f"Word guardado automáticamente en: {ruta_docx_guardado}")
         resultado_drive = subir_docx_a_google_drive(docx_bytes, nombre_docx)
         if resultado_drive.get("ok"):
             enlace_drive = resultado_drive.get("webViewLink")
