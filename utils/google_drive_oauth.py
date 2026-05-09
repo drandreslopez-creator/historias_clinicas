@@ -5,6 +5,7 @@ from urllib.request import Request, urlopen
 
 import streamlit as st
 from requests_oauthlib import OAuth2Session
+import requests
 
 
 GOOGLE_AUTH_BASE_URL = "https://accounts.google.com/o/oauth2/auth"
@@ -85,14 +86,37 @@ def _fetch_userinfo(access_token):
         return None
 
 
+def _query_param_value(value):
+    if isinstance(value, list):
+        return value[0] if value else None
+    return value
+
+
+def _intercambiar_code_por_token(code):
+    config = obtener_google_oauth_config()
+    payload = {
+        "code": code,
+        "client_id": config["client_id"],
+        "client_secret": config["client_secret"],
+        "redirect_uri": config["redirect_uri"],
+        "grant_type": "authorization_code",
+    }
+    response = requests.post(GOOGLE_TOKEN_URL, data=payload, timeout=20)
+    data = response.json()
+    if response.status_code >= 400 or "access_token" not in data:
+        mensaje = data.get("error_description") or data.get("error") or f"HTTP {response.status_code}"
+        raise ValueError(mensaje)
+    return data
+
+
 def procesar_google_oauth_callback():
     if not google_oauth_configurado():
         return None
 
     query_params = st.query_params
-    code = query_params.get("code")
-    state = query_params.get("state")
-    error = query_params.get("error")
+    code = _query_param_value(query_params.get("code"))
+    state = _query_param_value(query_params.get("state"))
+    error = _query_param_value(query_params.get("error"))
 
     if error:
         st.session_state["google_drive_oauth_error"] = error
@@ -114,16 +138,15 @@ def procesar_google_oauth_callback():
             pass
         return False
 
-    config = obtener_google_oauth_config()
-    oauth = _oauth_session(state=state)
-    current_url = f"{config['redirect_uri']}?{urlencode({'code': code, 'state': state})}"
-
-    token = oauth.fetch_token(
-        GOOGLE_TOKEN_URL,
-        authorization_response=current_url,
-        client_secret=config["client_secret"],
-        include_client_id=True,
-    )
+    try:
+        token = _intercambiar_code_por_token(code)
+    except Exception as e:
+        st.session_state["google_drive_oauth_error"] = f"No se pudo completar la autenticación con Google: {e}"
+        try:
+            st.query_params.clear()
+        except Exception:
+            pass
+        return False
 
     st.session_state["google_drive_oauth_token"] = token
     st.session_state["google_drive_oauth_userinfo"] = _fetch_userinfo(token.get("access_token"))
