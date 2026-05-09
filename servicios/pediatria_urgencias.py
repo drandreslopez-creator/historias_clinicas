@@ -2912,9 +2912,9 @@ PLAN:
         if resultado_drive.get("ok"):
             enlace_drive = resultado_drive.get("webViewLink")
             if enlace_drive:
-                st.success(f"Word guardado también en Google Drive: {enlace_drive}")
+                st.success(f"HC guardada en Drive. [VER]({enlace_drive})")
             else:
-                st.success("Word guardado también en Google Drive.")
+                st.success("HC guardada en Drive.")
         elif resultado_drive.get("configured"):
             st.warning(resultado_drive.get("message", "No se pudo guardar en Google Drive."))
         else:
