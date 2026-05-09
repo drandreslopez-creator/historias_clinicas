@@ -6,3 +6,5 @@ deep-translator
 python-docx
 pypdf
 rapidocr-onnxruntime
+google-api-python-client
+google-auth
