@@ -247,3 +247,52 @@ def subir_docx_con_oauth(docx_bytes, nombre_archivo, folder_id=None):
             "configured": True,
             "message": f"No se pudo subir el archivo a Google Drive con OAuth: {e}",
         }
+
+
+def eliminar_archivo_drive_con_oauth(file_id):
+    token = st.session_state.get("google_drive_oauth_token")
+    if not token:
+        return {
+            "ok": False,
+            "configured": google_oauth_configurado(),
+            "message": "Google Drive no está conectado con OAuth.",
+        }
+
+    try:
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+        from googleapiclient.discovery import build
+    except Exception as e:
+        return {
+            "ok": False,
+            "configured": True,
+            "message": f"No se pudieron importar las librerías OAuth de Google: {e}",
+        }
+
+    config = obtener_google_oauth_config()
+    creds = Credentials(
+        token=token.get("access_token"),
+        refresh_token=token.get("refresh_token"),
+        token_uri=GOOGLE_TOKEN_URL,
+        client_id=config["client_id"],
+        client_secret=config["client_secret"],
+        scopes=GOOGLE_DRIVE_SCOPES,
+    )
+
+    try:
+        if creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            st.session_state["google_drive_oauth_token"] = {
+                **token,
+                "access_token": creds.token,
+            }
+
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        return {"ok": True, "configured": True}
+    except Exception as e:
+        return {
+            "ok": False,
+            "configured": True,
+            "message": f"No se pudo eliminar el archivo de Google Drive con OAuth: {e}",
+        }
