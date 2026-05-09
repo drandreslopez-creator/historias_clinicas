@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.calculos import calcular_edad
-from servicios.consulta_externa_base import render_consulta_externa
 from servicios.pediatria_urgencias import (
     construir_nombre_base_docx,
     eliminar_historia_guardada,
@@ -33,9 +32,65 @@ REVISION_HOMEO_DEFAULT = "NEGADOS."
 
 BIOPATOGRAFIA_DEFAULT = """DINÁMICA FAMILIAR DE ORIGEN, VÍNCULOS AFECTIVOS, EVENTOS IMPORTANTES DE VIDA, DUELOS, CAMBIOS RELEVANTES Y RASGOS CONSTITUCIONALES SEGÚN REFIERA."""
 
-SINTOMAS_GENERALES_DEFAULT = """SUEÑO, APETITO, SED, TERMIA, SUDORACIÓN, ANTOJOS/AVERSIONES, AGRAVANTES, MEJORÍAS, LATERALIDAD Y MODALIDADES SEGÚN REFIERA."""
+SINTOMAS_GENERALES_DEFAULT = """APETITO:
+¿CÓMO ES EL APETITO? ¿AUMENTADO, DISMINUIDO, VARIABLE? ¿A QUÉ HORAS SIENTE MÁS HAMBRE?
 
-SINTOMAS_MENTALES_DEFAULT = """ESTADO DE ÁNIMO, TEMORES, IRRITABILIDAD, RELACIONES INTERPERSONALES, RASGOS AFECTIVOS, RESPUESTA AL ESTRÉS Y OTROS DATOS MENTALES RELEVANTES SEGÚN REFIERA."""
+SED:
+¿TIENE MUCHA O POCA SED? ¿PREFIERE AGUA FRÍA, AL CLIMA O CALIENTE? ¿TOMA GRANDES O PEQUEÑAS CANTIDADES?
+
+DESEOS:
+¿QUÉ ALIMENTOS O BEBIDAS DESEA CON FRECUENCIA? ¿DULCE, SALADO, ÁCIDO, HIELO, LÁCTEOS, PICANTE, ETC.?
+
+AVERSIONES:
+¿QUÉ ALIMENTOS O BEBIDAS LE GENERAN RECHAZO O INTOLERANCIA?
+
+AGRAVACIONES:
+¿QUÉ SITUACIONES, HORARIOS, ALIMENTOS, CLIMAS O ACTIVIDADES AGRAVAN SUS SÍNTOMAS?
+
+EMPEORA:
+¿EN QUÉ MOMENTOS O CONDICIONES EMPEORA? MAÑANA, TARDE, NOCHE, MOVIMIENTO, REPOSO, FRÍO, CALOR, AYUNO, ESTRÉS, CICLO MENSTRUAL, ETC.?
+
+CALOR VITAL:
+¿ES CALUROSO O FRIOLENTO? ¿DESTAPA PIES? ¿BUSCA ABRIGO O VENTILACIÓN?
+
+TRANSPIRACIÓN:
+¿SUDA MUCHO O POCO? ¿EN QUÉ PARTES? ¿OLOR, MANCHAS, SUDOR NOCTURNO?
+
+SUEÑO:
+¿DUERME BIEN O MAL? ¿INSOMNIO DE INICIO, MANTENIMIENTO O DESPERTAR PRECOZ? ¿POSTURA AL DORMIR?
+
+SUEÑOS:
+¿SUEÑOS FRECUENTES, ANGUSTIANTES, REPETITIVOS, VÍVIDOS, CON CAÍDAS, AGUA, PERSECUCIÓN, TRABAJO, MUERTOS, ETC.?
+
+SEXUALIDAD:
+¿CÓMO ESTÁ EL DESEO SEXUAL? ¿CAMBIOS, DISMINUCIÓN, EXCESO, AVERSIÓN, MOLESTIAS ASOCIADAS?
+
+ESTADO DEL TIEMPO:
+¿CÓMO LE AFECTA EL CLIMA? HUMEDAD, LLUVIA, VIENTO, SOL, NUBLADO, CALOR, FRÍO, CAMBIOS DE PRESIÓN, TORMENTAS?"""
+
+SINTOMAS_MENTALES_DEFAULT = """AFECTO Y AMOR:
+¿CÓMO EXPRESA EL AFECTO? ¿NECESITA COMPAÑÍA, CONTENCIÓN, CONTACTO O PREFIERE DISTANCIA? ¿CELOS, APEGO, DEPENDENCIA, INDIFERENCIA?
+
+VOLUNTAD Y CONDUCTA:
+¿CÓMO ES SU INICIATIVA, CONSTANCIA Y CAPACIDAD DE DECISIÓN? ¿IMPULSIVIDAD, PASIVIDAD, OPOSICIÓN, TERQUEDAD, APATÍA?
+
+ENTENDIMIENTO, INTELIGENCIA Y JUICIO:
+¿CÓMO ESTÁ LA CONCENTRACIÓN, MEMORIA, CLARIDAD MENTAL, TOMA DE DECISIONES, COMPRENSIÓN Y JUICIO?
+
+EMOCIONALES:
+¿TEMORES, ANGUSTIA, ANSIEDAD, DUELos, SENSIBILIDAD, FACILIDAD PARA LLORAR, INSEGURIDAD, SOBRESALTOS?
+
+HUMOR:
+¿TRISTEZA, IRRITABILIDAD, CAMBIOS DE HUMOR, SUSCEPTIBILIDAD, EUFORIA, DESÁNIMO, TENDENCIA AL AISLAMIENTO?
+
+GUSTOS:
+¿PREFERENCIAS MARCADAS EN ACTIVIDADES, PERSONAS, RUTINAS, AMBIENTES, MÚSICA, ORDEN, LIMPIEZA, SILENCIO, TRABAJO?
+
+CONCIENCIA MORAL:
+¿CULPA, EXIGENCIA CONSIGO MISMO, PERFECCIONISMO, SENTIDO DEL DEBER, REMORDIMIENTOS, AUTOCRÍTICA?
+
+PERSONALIDAD:
+RASGOS DOMINANTES DEL CARÁCTER, MANERA DE RELACIONARSE, RESPUESTA AL CONFLICTO, MECANISMOS DE DEFENSA Y CONSTITUCIÓN MENTAL GLOBAL."""
 
 EXAMEN_HOMEO_ADULTOS_DEFAULT = """PACIENTE EN BUEN ESTADO GENERAL, ALERTA, ORIENTADO, BUEN ESTADO DE HIDRATACIÓN.
 
@@ -127,19 +182,6 @@ def render():
         key=f"{prefix}_modalidad_consulta_selector",
     )
 
-    if modalidad == "CITA DE CONTROL":
-        render_consulta_externa(
-            prefix=prefix,
-            titulo=titulo,
-            history_filename=HISTORY_FILENAME,
-            es_pediatrica=False,
-            mostrar_neurodesarrollo=False,
-            mostrar_modalidad_consulta=False,
-            mostrar_pb=False,
-            modalidad_consulta_forzada="CITA DE CONTROL",
-        )
-        return
-
     defaults = {
         f"{prefix}_nombre": "",
         f"{prefix}_tipo_documento": None,
@@ -181,7 +223,7 @@ def render():
     _init_state(defaults)
 
     st.header(f"📌 {titulo}")
-    st.info("Modalidad de la consulta: PRIMERA VEZ")
+    st.info(f"Modalidad de la consulta: {modalidad}")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -251,9 +293,11 @@ def render():
     biopatografia = st.text_area("", key=f"{prefix}_biopatografia", height=180, label_visibility="collapsed")
 
     st.subheader("Síntomas generales")
+    st.caption("Guía sugerida: apetito, sed, deseos, aversiones, agravaciones, empeora, calor vital, transpiración, sueño, sueños, sexualidad y estado del tiempo.")
     sintomas_generales = st.text_area("", key=f"{prefix}_sintomas_generales", height=180, label_visibility="collapsed")
 
     st.subheader("Síntomas mentales")
+    st.caption("Guía sugerida: afecto y amor, voluntad y conducta, entendimiento/inteligencia/juicio, emocionales, humor, gustos, conciencia moral y personalidad.")
     sintomas_mentales = st.text_area("", key=f"{prefix}_sintomas_mentales", height=220, label_visibility="collapsed")
 
     st.subheader("Examen físico")
@@ -329,7 +373,7 @@ def render():
 {titulo.upper()}
 
 MODALIDAD DE LA CONSULTA:
-PRIMERA VEZ
+{modalidad}
 
 DATOS DE IDENTIFICACIÓN:
 NOMBRES Y APELLIDOS: {nombre}
@@ -382,7 +426,7 @@ ANÁLISIS Y TRATAMIENTO:
 """.strip()
 
         secciones = [
-            ("MODALIDAD DE LA CONSULTA", "PRIMERA VEZ"),
+            ("MODALIDAD DE LA CONSULTA", modalidad),
             (
                 "DATOS DE IDENTIFICACIÓN",
                 f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}",
