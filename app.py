@@ -86,11 +86,11 @@ with col_drive:
 area_servicio = st.selectbox(
     "Área de servicio",
     [
-        "Pediatría Urgencias",
         "Consulta Externa",
+        "Pediatría Urgencias",
         "Pediatría Hospitalización",
         "Neonatología",
-        "TELEMEDICINA",
+        "Telemedicina",
     ]
 )
 
@@ -137,7 +137,7 @@ elif area_servicio == "Neonatología":
         ],
         key="tipo_historia_clinica_neonatologia",
     )
-elif area_servicio == "TELEMEDICINA":
+elif area_servicio == "Telemedicina":
     st.selectbox(
         "Tipo de historia clínica",
         [
@@ -183,7 +183,7 @@ elif area_servicio == "Neonatología":
         plantillas_genericas.render_neonatologia_ingreso_unidad()
     elif tipo_neonatologia == "EVOLUCIÓN DEL RECIÉN NACIDOS EN UCIN":
         plantillas_genericas.render_neonatologia_evolucion_ucin()
-elif area_servicio == "TELEMEDICINA":
+elif area_servicio == "Telemedicina":
     tipo_telemedicina = st.session_state.get("tipo_historia_clinica_telemedicina")
     if tipo_telemedicina == "HISTORIA CLÍNICA DE TELEMEDICINA - PEDIATRÍA":
         plantillas_genericas.render_telemedicina_pediatria()
