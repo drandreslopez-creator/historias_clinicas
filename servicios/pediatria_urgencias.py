@@ -755,6 +755,7 @@ FORM_DEFAULTS = {
     "fecha_1": None,
     "sexo_1": None,
     "eps_1": "",
+    "telefono_1": "",
     "informante_1": "",
     "proveniente_1": "",
     "motivo_1": "",
@@ -2620,6 +2621,7 @@ def render():
         eps = st.text_input("EPS", key="eps_1")
 
     with col2:
+        telefono = st.text_input("Telefono", key="telefono_1")
         sexo = st.selectbox(
             "Sexo",
             ["Masculino", "Femenino"],
@@ -2913,6 +2915,7 @@ DOCUMENTO: {documento}
 FECHA DE NACIMIENTO: {fecha_str}
 INFORMANTE: {informante}
 EPS: {eps}
+TELEFONO: {telefono}
 PROVENIENTE: {proveniente}
 
 MOTIVO DE CONSULTA:
@@ -2971,7 +2974,7 @@ PLAN:
 
         st.success("Historia clínica generada")
         secciones_informe = [
-            ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nINFORMANTE: {informante}\nEPS: {eps}\nPROVENIENTE: {proveniente}"),
+            ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nINFORMANTE: {informante}\nEPS: {eps}\nTELEFONO: {telefono}\nPROVENIENTE: {proveniente}"),
             ("MOTIVO DE CONSULTA", motivo),
             ("ENFERMEDAD ACTUAL", enfermedad_auto),
             ("REVISIÓN POR SISTEMAS", revision),

@@ -188,6 +188,7 @@ def render_consulta_externa(
         f"{prefix}_fecha_nacimiento": None,
         f"{prefix}_sexo": None,
         f"{prefix}_eps": "",
+        f"{prefix}_telefono": "",
         f"{prefix}_informante": "",
         f"{prefix}_motivo": "",
         f"{prefix}_enfermedad_actual": "",
@@ -261,6 +262,7 @@ def render_consulta_externa(
         eps = st.text_input("EPS", key=f"{prefix}_eps")
 
     with col2:
+        telefono = st.text_input("Telefono", key=f"{prefix}_telefono")
         sexo = st.selectbox(
             "Sexo",
             ["Masculino", "Femenino"],
@@ -387,6 +389,7 @@ TIPO DE DOCUMENTO: {tipo_documento}
 DOCUMENTO: {documento}
 FECHA DE NACIMIENTO: {fecha_str}
 EPS: {eps}
+TELEFONO: {telefono}
 INFORMANTE / ACOMPAÑANTE: {informante}
 
 MOTIVO DE CONSULTA:
@@ -439,7 +442,7 @@ PLAN:
 
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
-            ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
+            ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
             ("MOTIVO DE CONSULTA", motivo),
             ("ENFERMEDAD ACTUAL", enfermedad_actual),
             ("ANTECEDENTES", antecedentes),
