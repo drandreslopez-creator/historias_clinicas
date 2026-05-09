@@ -15,6 +15,7 @@ from servicios import neonatologia_adaptacion
 from servicios import consulta_homeopatia_pediatrica
 from servicios import consulta_homeopatia_adultos
 from servicios import consulta_pediatria_puericultura
+from servicios import plantillas_genericas
 
 PASSWORD_APP = "8041003"
 
@@ -86,11 +87,10 @@ area_servicio = st.selectbox(
     "Área de servicio",
     [
         "Pediatría Urgencias",
-        "Pediatría Hospitalización",
-        "Adaptación Neonatal",
-        "Evolución Neonatal",
         "Consulta Externa",
-        "Homeopatía"
+        "Pediatría Hospitalización",
+        "Neonatología",
+        "TELEMEDICINA",
     ]
 )
 
@@ -108,38 +108,86 @@ elif area_servicio == "Consulta Externa":
         "Tipo de historia clínica",
         [
             "PEDIATRÍA Y PUERICULTURA",
-            "HOMEOPATÍA PEDIÁTRICA",
-            "HOMEOPATÍA ADULTOS",
+            "MEDICINA ALTERNATIVA - HOMEOPATÍA PEDIÁTRICA",
+            "MEDICINA ALTERNATIVA - HOMEOPATÍA ADULTOS",
+            "NEONATOLOGÍA",
         ],
         key="tipo_historia_clinica_consulta_externa",
     )
-elif area_servicio == "Homeopatía":
+elif area_servicio == "Pediatría Hospitalización":
     st.selectbox(
         "Tipo de historia clínica",
         [
-            "HOMEOPATÍA PEDIÁTRICA",
-            "HOMEOPATÍA ADULTOS",
+            "HISTORIA CLINICA DE INGRESO A URGENCIAS PEDIATRICAS",
+            "NOTA DE EVOLUCIÓN DE HOSPITALIZACIÓN PEDIÁTRICA",
+            "RESPUESTA DE INTERCONSULTA - SERVICIO DE PEDIATRÍA",
         ],
-        key="tipo_historia_clinica_homeopatia",
+        key="tipo_historia_clinica_hospitalizacion",
+    )
+elif area_servicio == "Neonatología":
+    st.selectbox(
+        "Tipo de historia clínica",
+        [
+            "HISTORIA CLÍNICA DE ADAPTACIÓN NEONATAL",
+            "EVOLUCIÓN DEL RECIÉN NACIDOS EN ALOJAMIENTO CONJUNTO",
+            "RESPUESTA DE INTERCONSULTA - SERVICIO DE PEDIATRÍA PERINATAL Y NEONATOLOGÍA",
+            "EVOLUCIÓN DEL RECIÉN NACIDOS EN SERVICIO DE URGENCIAS",
+            "HISTORIA CLINICA DE INGRESO A UNIDAD DE RECIÉN NACIDOS",
+            "EVOLUCIÓN DEL RECIÉN NACIDOS EN UCIN",
+        ],
+        key="tipo_historia_clinica_neonatologia",
+    )
+elif area_servicio == "TELEMEDICINA":
+    st.selectbox(
+        "Tipo de historia clínica",
+        [
+            "HISTORIA CLÍNICA DE TELEMEDICINA - PEDIATRÍA",
+            "HISTORIA CLÍNICA DE TELEMEDICINA - HOMEOPATÍA PEDIÁTRICA",
+            "HISTORIA CLÍNICA DE TELEMEDICINA - HOMEOPATÍA ADULTOS",
+        ],
+        key="tipo_historia_clinica_telemedicina",
     )
 
 # ENRUTADOR 🔥
 if area_servicio == "Pediatría Urgencias":
     pediatria_urgencias.render()
-
-elif area_servicio == "Adaptación Neonatal":
-    neonatologia_adaptacion.render()
 elif area_servicio == "Consulta Externa":
     tipo_consulta = st.session_state.get("tipo_historia_clinica_consulta_externa")
     if tipo_consulta == "PEDIATRÍA Y PUERICULTURA":
         consulta_pediatria_puericultura.render()
-    elif tipo_consulta == "HOMEOPATÍA PEDIÁTRICA":
+    elif tipo_consulta == "MEDICINA ALTERNATIVA - HOMEOPATÍA PEDIÁTRICA":
         consulta_homeopatia_pediatrica.render()
-    elif tipo_consulta == "HOMEOPATÍA ADULTOS":
+    elif tipo_consulta == "MEDICINA ALTERNATIVA - HOMEOPATÍA ADULTOS":
         consulta_homeopatia_adultos.render()
-elif area_servicio == "Homeopatía":
-    tipo_homeopatia = st.session_state.get("tipo_historia_clinica_homeopatia")
-    if tipo_homeopatia == "HOMEOPATÍA PEDIÁTRICA":
-        consulta_homeopatia_pediatrica.render()
-    elif tipo_homeopatia == "HOMEOPATÍA ADULTOS":
-        consulta_homeopatia_adultos.render()
+    elif tipo_consulta == "NEONATOLOGÍA":
+        plantillas_genericas.render_consulta_neonatologia()
+elif area_servicio == "Pediatría Hospitalización":
+    tipo_hospitalizacion = st.session_state.get("tipo_historia_clinica_hospitalizacion")
+    if tipo_hospitalizacion == "HISTORIA CLINICA DE INGRESO A URGENCIAS PEDIATRICAS":
+        plantillas_genericas.render_hospitalizacion_ingreso()
+    elif tipo_hospitalizacion == "NOTA DE EVOLUCIÓN DE HOSPITALIZACIÓN PEDIÁTRICA":
+        plantillas_genericas.render_hospitalizacion_evolucion()
+    elif tipo_hospitalizacion == "RESPUESTA DE INTERCONSULTA - SERVICIO DE PEDIATRÍA":
+        plantillas_genericas.render_hospitalizacion_interconsulta()
+elif area_servicio == "Neonatología":
+    tipo_neonatologia = st.session_state.get("tipo_historia_clinica_neonatologia")
+    if tipo_neonatologia == "HISTORIA CLÍNICA DE ADAPTACIÓN NEONATAL":
+        neonatologia_adaptacion.render()
+    elif tipo_neonatologia == "EVOLUCIÓN DEL RECIÉN NACIDOS EN ALOJAMIENTO CONJUNTO":
+        plantillas_genericas.render_neonatologia_evolucion_alojamiento()
+    elif tipo_neonatologia == "RESPUESTA DE INTERCONSULTA - SERVICIO DE PEDIATRÍA PERINATAL Y NEONATOLOGÍA":
+        plantillas_genericas.render_neonatologia_interconsulta()
+    elif tipo_neonatologia == "EVOLUCIÓN DEL RECIÉN NACIDOS EN SERVICIO DE URGENCIAS":
+        plantillas_genericas.render_neonatologia_evolucion_urgencias()
+    elif tipo_neonatologia == "HISTORIA CLINICA DE INGRESO A UNIDAD DE RECIÉN NACIDOS":
+        plantillas_genericas.render_neonatologia_ingreso_unidad()
+    elif tipo_neonatologia == "EVOLUCIÓN DEL RECIÉN NACIDOS EN UCIN":
+        plantillas_genericas.render_neonatologia_evolucion_ucin()
+elif area_servicio == "TELEMEDICINA":
+    tipo_telemedicina = st.session_state.get("tipo_historia_clinica_telemedicina")
+    if tipo_telemedicina == "HISTORIA CLÍNICA DE TELEMEDICINA - PEDIATRÍA":
+        plantillas_genericas.render_telemedicina_pediatria()
+    elif tipo_telemedicina == "HISTORIA CLÍNICA DE TELEMEDICINA - HOMEOPATÍA PEDIÁTRICA":
+        plantillas_genericas.render_telemedicina_homeopatia_pediatrica()
+    elif tipo_telemedicina == "HISTORIA CLÍNICA DE TELEMEDICINA - HOMEOPATÍA ADULTOS":
+        plantillas_genericas.render_telemedicina_homeopatia_adultos()
