@@ -9,6 +9,7 @@ from core.calculos import calcular_edad
 from core.clasificacion import grupo_etario
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
 from servicios.pediatria_urgencias import (
+    eliminar_historia_guardada,
     generar_docx_informe,
     guardar_docx_exportado,
     subir_docx_a_google_drive,
@@ -314,19 +315,6 @@ PLAN:
 {plan}
 """
 
-        fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
-        _save_history(
-            history_path,
-            {
-                "id": identificador,
-                "fecha_guardado": fecha_guardado,
-                "nombre": nombre,
-                "documento": documento,
-                "historia": historia.upper(),
-            },
-        )
-
         secciones = [
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
             ("MOTIVO DE CONSULTA", motivo),
@@ -375,6 +363,22 @@ PLAN:
             st.warning(resultado_drive.get("message", "No se pudo guardar en Google Drive."))
         else:
             st.info("Google Drive no está configurado aún. El Word sí quedó guardado localmente y disponible para descarga.")
+
+        fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
+        _save_history(
+            history_path,
+            {
+                "id": identificador,
+                "fecha_guardado": fecha_guardado,
+                "nombre": nombre,
+                "documento": documento,
+                "historia": historia.upper(),
+                "docx_local_path": str(ruta_docx_guardado),
+                "drive_file_id": resultado_drive.get("file_id"),
+                "drive_webview_link": resultado_drive.get("webViewLink"),
+            },
+        )
         render_informe_html(titulo.upper(), secciones, historia.upper())
 
     st.divider()
@@ -395,5 +399,23 @@ PLAN:
                     height=500,
                     key=f"{prefix}_historia_guardada_texto",
                 )
+                if st.button("Eliminar esta historia", key=f"{prefix}_eliminar_historia", use_container_width=True):
+                    resultado_eliminacion = eliminar_historia_guardada(history_path, historia_consulta_id)
+                    if resultado_eliminacion.get("ok"):
+                        mensajes = ["Historia eliminada del historial."]
+                        if historia_sel.get("docx_local_path"):
+                            if resultado_eliminacion.get("local_ok"):
+                                mensajes.append("Word local eliminado.")
+                            elif resultado_eliminacion.get("local_error"):
+                                mensajes.append(f"No se pudo eliminar el Word local: {resultado_eliminacion['local_error']}")
+                        if historia_sel.get("drive_file_id"):
+                            if resultado_eliminacion.get("drive_ok"):
+                                mensajes.append("Archivo de Google Drive eliminado.")
+                            elif resultado_eliminacion.get("drive_error"):
+                                mensajes.append(f"No se pudo eliminar el archivo de Drive: {resultado_eliminacion['drive_error']}")
+                        st.success(" ".join(mensajes))
+                        st.rerun()
+                    else:
+                        st.warning(resultado_eliminacion.get("message", "No se pudo eliminar la historia."))
         else:
             st.info("Aún no hay historias guardadas.")

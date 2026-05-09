@@ -38,6 +38,7 @@ from herramientas.diagnostico_nutricional import (
     diagnostico_mayor_5
 )
 from utils.google_drive_oauth import subir_docx_con_oauth
+from utils.google_drive_oauth import eliminar_archivo_drive_con_oauth
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -1084,6 +1085,76 @@ def guardar_historia(datos):
     HISTORIAS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with HISTORIAS_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(datos, ensure_ascii=False) + "\n")
+
+
+def reescribir_historias(path, historias):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for historia in historias:
+            f.write(json.dumps(historia, ensure_ascii=False) + "\n")
+
+
+def eliminar_archivo_local(ruta_archivo):
+    if not ruta_archivo:
+        return True, None
+    try:
+        ruta = Path(ruta_archivo)
+        if ruta.exists():
+            ruta.unlink()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def eliminar_archivo_drive(file_id):
+    if not file_id:
+        return True, None
+
+    resultado_oauth = eliminar_archivo_drive_con_oauth(file_id)
+    if resultado_oauth.get("ok"):
+        return True, None
+    if resultado_oauth.get("configured"):
+        return False, resultado_oauth.get("message")
+    return False, "No hay conexión activa con Google Drive para eliminar el archivo."
+
+
+def eliminar_historia_guardada(path, historia_id):
+    historias = []
+    historia_objetivo = None
+
+    if path.exists():
+        with path.open("r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    historia = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if historia.get("id") == historia_id and historia_objetivo is None:
+                    historia_objetivo = historia
+                    continue
+                historias.append(historia)
+
+    if not historia_objetivo:
+        return {
+            "ok": False,
+            "message": "No se encontró la historia seleccionada.",
+        }
+
+    reescribir_historias(path, historias)
+
+    local_ok, local_error = eliminar_archivo_local(historia_objetivo.get("docx_local_path"))
+    drive_ok, drive_error = eliminar_archivo_drive(historia_objetivo.get("drive_file_id"))
+
+    return {
+        "ok": True,
+        "local_ok": local_ok,
+        "drive_ok": drive_ok,
+        "local_error": local_error,
+        "drive_error": drive_error,
+    }
 
 
 def cargar_planes_patologia():
@@ -2861,18 +2932,6 @@ PLAN:
 {plan}
 """
 
-        fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
-
-        guardar_historia({
-            "id": identificador,
-            "fecha_guardado": fecha_guardado,
-            "nombre": nombre,
-            "tipo_documento": tipo_documento,
-            "documento": documento,
-            "historia": historia.upper()
-        })
-
         st.success("Historia clínica generada")
         secciones_informe = [
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nINFORMANTE: {informante}\nEPS: {eps}\nPROVENIENTE: {proveniente}"),
@@ -2918,6 +2977,20 @@ PLAN:
             st.warning(resultado_drive.get("message", "No se pudo guardar en Google Drive."))
         else:
             st.info("Google Drive no está configurado aún. El Word sí quedó guardado localmente y disponible para descarga.")
+
+        fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
+        identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
+        guardar_historia({
+            "id": identificador,
+            "fecha_guardado": fecha_guardado,
+            "nombre": nombre,
+            "tipo_documento": tipo_documento,
+            "documento": documento,
+            "historia": historia.upper(),
+            "docx_local_path": str(ruta_docx_guardado),
+            "drive_file_id": resultado_drive.get("file_id"),
+            "drive_webview_link": resultado_drive.get("webViewLink"),
+        })
         render_informe_html(titulo_historia.upper(), secciones_informe, historia.upper())
 
     st.divider()
@@ -2944,6 +3017,24 @@ PLAN:
                     height=500,
                     key="historia_guardada_texto"
                 )
+                if st.button("Eliminar esta historia", key="eliminar_historia_guardada", use_container_width=True):
+                    resultado_eliminacion = eliminar_historia_guardada(HISTORIAS_PATH, historia_consulta_id)
+                    if resultado_eliminacion.get("ok"):
+                        mensajes = ["Historia eliminada del historial."]
+                        if historia_seleccionada.get("docx_local_path"):
+                            if resultado_eliminacion.get("local_ok"):
+                                mensajes.append("Word local eliminado.")
+                            elif resultado_eliminacion.get("local_error"):
+                                mensajes.append(f"No se pudo eliminar el Word local: {resultado_eliminacion['local_error']}")
+                        if historia_seleccionada.get("drive_file_id"):
+                            if resultado_eliminacion.get("drive_ok"):
+                                mensajes.append("Archivo de Google Drive eliminado.")
+                            elif resultado_eliminacion.get("drive_error"):
+                                mensajes.append(f"No se pudo eliminar el archivo de Drive: {resultado_eliminacion['drive_error']}")
+                        st.success(" ".join(mensajes))
+                        st.rerun()
+                    else:
+                        st.warning(resultado_eliminacion.get("message", "No se pudo eliminar la historia."))
         else:
             st.info("Aún no hay historias guardadas.")
 
