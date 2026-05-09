@@ -166,7 +166,6 @@ def render():
         f"{prefix}_talla": "",
         f"{prefix}_imc_manual": "",
         f"{prefix}_examen": EXAMEN_HOMEO_ADULTOS_DEFAULT,
-        f"{prefix}_signos_positivos": "",
         f"{prefix}_diagnosticos": "",
         f"{prefix}_paraclinicos": PARACLINICOS_DEFAULT,
         f"{prefix}_analisis_homeopatico": ANALISIS_HOMEOPATICO_DEFAULT,
@@ -273,11 +272,13 @@ def render():
     with col_sv6:
         temp = st.text_input("Temperatura (°C)", key=f"{prefix}_temp")
 
-    col_ant1, col_ant2 = st.columns(2)
+    col_ant1, col_ant2, col_ant3 = st.columns(3)
     with col_ant1:
         peso = st.text_input("Peso (kg)", key=f"{prefix}_peso")
     with col_ant2:
         talla = st.text_input("Talla (cm)", key=f"{prefix}_talla")
+    with col_ant3:
+        imc_manual = st.text_input("IMC (kg/m²)", key=f"{prefix}_imc_manual")
 
     _ = (
         _float_or_none(fc),
@@ -289,10 +290,7 @@ def render():
         _float_or_none(talla),
     )
 
-    imc_manual = st.text_input("IMC", key=f"{prefix}_imc_manual")
-
     examen = st.text_area("Examen físico", key=f"{prefix}_examen", height=220)
-    signos_positivos = st.text_area("Signos positivos", key=f"{prefix}_signos_positivos", height=120)
 
     st.subheader("Diagnósticos médicos")
     diagnosticos = st.text_area("Diagnósticos médicos", key=f"{prefix}_diagnosticos", height=120)
@@ -323,7 +321,7 @@ def render():
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         antropometria = f"PESO {peso} KG TALLA {talla} CM"
         if imc_manual:
-            antropometria += f" IMC {imc_manual}"
+            antropometria += f" IMC {imc_manual} KG/M²"
 
         historia = f"""
 {titulo.upper()}
@@ -365,10 +363,6 @@ EXAMEN FÍSICO:
 TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm GLUCOMETRÍA {glucometria} mg/dl T {temp} °C
 {antropometria}
 {examen}
-
-SIGNOS POSITIVOS:
-{signos_positivos}
-
 DIAGNÓSTICOS MÉDICOS:
 {diagnosticos}
 
@@ -402,7 +396,6 @@ ANÁLISIS Y TRATAMIENTO:
                 "EXAMEN FÍSICO",
                 f"TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm GLUCOMETRÍA {glucometria} mg/dl T {temp} °C\n{antropometria}\n{examen}",
             ),
-            ("SIGNOS POSITIVOS", signos_positivos),
             ("DIAGNÓSTICOS MÉDICOS", diagnosticos),
             ("EXÁMENES PARACLÍNICOS", paraclinicos),
             ("ANÁLISIS HOMEOPÁTICO", analisis_homeopatico),

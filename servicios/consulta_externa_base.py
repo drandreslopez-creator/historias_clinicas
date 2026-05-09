@@ -214,6 +214,7 @@ def render_consulta_externa(
         f"{prefix}_peso": "",
         f"{prefix}_talla": "",
         f"{prefix}_pc": "",
+        f"{prefix}_imc_adulto": "",
         f"{prefix}_neuro": "",
         f"{prefix}_examen": EXAMEN_DEFAULT,
         f"{prefix}_analisis": "",
@@ -344,17 +345,26 @@ def render_consulta_externa(
     with col_sv_6:
         temp = st.text_input("Temperatura (°C)", key=f"{prefix}_temp")
 
-    col_sv_7, col_sv_8 = st.columns(2)
-    with col_sv_7:
-        peso = st.text_input("Peso (kg)", key=f"{prefix}_peso")
-    with col_sv_8:
-        talla = st.text_input("Talla (cm)", key=f"{prefix}_talla")
+    if es_pediatrica:
+        col_sv_7, col_sv_8 = st.columns(2)
+        with col_sv_7:
+            peso = st.text_input("Peso (kg)", key=f"{prefix}_peso")
+        with col_sv_8:
+            talla = st.text_input("Talla (cm)", key=f"{prefix}_talla")
+    else:
+        col_sv_7, col_sv_8, col_sv_9 = st.columns(3)
+        with col_sv_7:
+            peso = st.text_input("Peso (kg)", key=f"{prefix}_peso")
+        with col_sv_8:
+            talla = st.text_input("Talla (cm)", key=f"{prefix}_talla")
+        with col_sv_9:
+            imc_adulto = st.text_input("IMC (kg/m²)", key=f"{prefix}_imc_adulto")
 
     if es_pediatrica:
-        col_sv_9, col_sv_10 = st.columns(2)
-        with col_sv_9:
-            pc = st.text_input("Perímetro cefálico (cm)", key=f"{prefix}_pc")
+        col_sv_10, col_sv_11 = st.columns(2)
         with col_sv_10:
+            pc = st.text_input("Perímetro cefálico (cm)", key=f"{prefix}_pc")
+        with col_sv_11:
             if mostrar_pb:
                 pb = st.text_input("PB (cm)", key=f"{prefix}_pb")
             else:
@@ -362,6 +372,7 @@ def render_consulta_externa(
     else:
         pc = ""
         pb = ""
+        imc_adulto = st.session_state.get(f"{prefix}_imc_adulto", "")
 
     fc_num = _float_or_none(fc)
     fr_num = _float_or_none(fr)
@@ -468,6 +479,8 @@ PESO: {peso} kg TALLA: {talla} cm"""
 
         if es_pediatrica:
             historia += f" PC: {pc} cm"
+        elif imc_adulto:
+            historia += f" IMC: {imc_adulto} kg/m²"
 
         historia += f"""
 
@@ -500,7 +513,7 @@ PLAN:
             [
                 ("REVISIÓN POR SISTEMAS", revision),
                 ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C" + (f" PB: {pb} cm" if mostrar_pb else "")),
-                ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm" + (f" PC: {pc} cm" if es_pediatrica else "")),
+                ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm" + (f" PC: {pc} cm" if es_pediatrica else (f" IMC: {imc_adulto} kg/m²" if imc_adulto else ""))),
                 ("EXAMEN FÍSICO", examen),
                 ("ANÁLISIS", analisis),
                 ("DIAGNÓSTICOS", diagnosticos),
