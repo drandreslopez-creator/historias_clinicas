@@ -8,4 +8,5 @@ def render():
         history_filename="historias_pediatria_puericultura.jsonl",
         es_pediatrica=True,
         mostrar_neurodesarrollo=True,
+        mostrar_modalidad_consulta=True,
     )

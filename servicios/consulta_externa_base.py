@@ -100,6 +100,7 @@ def render_consulta_externa(
     mostrar_neurodesarrollo=False,
     antecedentes_default=None,
     plan_default=None,
+    mostrar_modalidad_consulta=True,
 ):
     antecedentes_default = antecedentes_default or (ANTECEDENTES_DEFAULT if es_pediatrica else ANTECEDENTES_ADULTO_DEFAULT)
     plan_default = plan_default or PLAN_DEFAULT
@@ -134,6 +135,7 @@ def render_consulta_externa(
         f"{prefix}_plan": plan_default,
         f"{prefix}_plan_base": plan_default,
         f"{prefix}_historia_consulta_id": None,
+        f"{prefix}_modalidad_consulta": "PRIMERA VEZ",
     }
 
     if st.session_state.pop(f"{prefix}_clear_requested", False):
@@ -143,6 +145,14 @@ def render_consulta_externa(
     _init_state(defaults)
 
     st.header(f"📌 {titulo}")
+
+    modalidad_consulta = None
+    if mostrar_modalidad_consulta:
+        modalidad_consulta = st.selectbox(
+            "Modalidad de la consulta",
+            ["PRIMERA VEZ", "CITA DE CONTROL"],
+            key=f"{prefix}_modalidad_consulta",
+        )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -260,6 +270,9 @@ def render_consulta_externa(
         historia = f"""
 {titulo.upper()}
 
+MODALIDAD DE LA CONSULTA:
+{modalidad_consulta or ""}
+
 DATOS DE IDENTIFICACIÓN:
 NOMBRES Y APELLIDOS: {nombre}
 TIPO DE DOCUMENTO: {tipo_documento}
@@ -317,6 +330,7 @@ PLAN:
 """
 
         secciones = [
+            ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
             ("MOTIVO DE CONSULTA", motivo),
             ("ENFERMEDAD ACTUAL", enfermedad_actual),
