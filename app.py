@@ -3,6 +3,9 @@ import streamlit as st
 # IMPORTAR SERVICIOS
 from servicios import pediatria_urgencias
 from servicios import neonatologia_adaptacion
+from servicios import consulta_homeopatia_pediatrica
+from servicios import consulta_homeopatia_adultos
+from servicios import consulta_pediatria_puericultura
 
 PASSWORD_APP = "8041003"
 
@@ -50,6 +53,25 @@ if area_servicio == "Pediatría Urgencias":
         ],
         key="tipo_historia_clinica_ped_urg",
     )
+elif area_servicio == "Consulta Externa":
+    st.selectbox(
+        "Tipo de historia clínica",
+        [
+            "PEDIATRÍA Y PUERICULTURA",
+            "HOMEOPATÍA PEDIÁTRICA",
+            "HOMEOPATÍA ADULTOS",
+        ],
+        key="tipo_historia_clinica_consulta_externa",
+    )
+elif area_servicio == "Homeopatía":
+    st.selectbox(
+        "Tipo de historia clínica",
+        [
+            "HOMEOPATÍA PEDIÁTRICA",
+            "HOMEOPATÍA ADULTOS",
+        ],
+        key="tipo_historia_clinica_homeopatia",
+    )
 
 # ENRUTADOR 🔥
 if area_servicio == "Pediatría Urgencias":
@@ -57,3 +79,17 @@ if area_servicio == "Pediatría Urgencias":
 
 elif area_servicio == "Adaptación Neonatal":
     neonatologia_adaptacion.render()
+elif area_servicio == "Consulta Externa":
+    tipo_consulta = st.session_state.get("tipo_historia_clinica_consulta_externa")
+    if tipo_consulta == "PEDIATRÍA Y PUERICULTURA":
+        consulta_pediatria_puericultura.render()
+    elif tipo_consulta == "HOMEOPATÍA PEDIÁTRICA":
+        consulta_homeopatia_pediatrica.render()
+    elif tipo_consulta == "HOMEOPATÍA ADULTOS":
+        consulta_homeopatia_adultos.render()
+elif area_servicio == "Homeopatía":
+    tipo_homeopatia = st.session_state.get("tipo_historia_clinica_homeopatia")
+    if tipo_homeopatia == "HOMEOPATÍA PEDIÁTRICA":
+        consulta_homeopatia_pediatrica.render()
+    elif tipo_homeopatia == "HOMEOPATÍA ADULTOS":
+        consulta_homeopatia_adultos.render()
