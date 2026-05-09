@@ -9,12 +9,23 @@ from core.calculos import calcular_edad
 from core.clasificacion import grupo_etario
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
 from servicios.pediatria_urgencias import (
+    ANTECEDENTES_DEFAULT as ANTECEDENTES_URGENCIAS_DEFAULT,
+    EXAMEN_DEFAULT as EXAMEN_URGENCIAS_DEFAULT,
+    PLAN_DEFAULT as PLAN_URGENCIAS_DEFAULT,
+    REVISION_DEFAULT as REVISION_URGENCIAS_DEFAULT,
+    aplanar_grupos_busqueda,
+    cargar_cie10,
+    coincide_grupos,
     construir_nombre_base_docx,
+    construir_grupos_busqueda,
     eliminar_historia_guardada,
+    expandir_terminos_busqueda,
     generar_docx_informe,
     guardar_docx_exportado,
+    puntuar_diagnostico,
     subir_docx_a_google_drive,
     render_informe_html,
+    traducir_cie10_descripcion,
 )
 
 
@@ -49,6 +60,62 @@ PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
 - EDUCACIÓN A PACIENTE Y/O CUIDADOR
 - SIGNOS DE ALARMA
 - CONTROL SEGUN EVOLUCIÓN"""
+
+
+def _construir_diagnostico_cie10(prefix):
+    cie10 = cargar_cie10()
+    busqueda_cie10 = st.text_input(
+        "Buscar CIE-10 por código o descripción",
+        key=f"{prefix}_consulta_cie10_busqueda",
+    ).strip()
+
+    if busqueda_cie10:
+        grupos_busqueda = construir_grupos_busqueda(busqueda_cie10)
+        if grupos_busqueda:
+            terminos = aplanar_grupos_busqueda(grupos_busqueda)
+        else:
+            terminos = list(expandir_terminos_busqueda(busqueda_cie10))
+
+        cie10_filtrado = cie10.copy()
+        if grupos_busqueda:
+            cie10_filtrado_estricto = cie10_filtrado[
+                cie10_filtrado.apply(lambda row: coincide_grupos(row, grupos_busqueda), axis=1)
+            ]
+            if not cie10_filtrado_estricto.empty:
+                cie10_filtrado = cie10_filtrado_estricto
+        if cie10_filtrado.empty:
+            cie10_filtrado = cie10.iloc[0:0].copy()
+        else:
+            cie10_filtrado["score_busqueda"] = cie10_filtrado.apply(
+                lambda row: puntuar_diagnostico(row, terminos, grupos_busqueda),
+                axis=1,
+            )
+            cie10_filtrado = cie10_filtrado[cie10_filtrado["score_busqueda"] > 0]
+            cie10_filtrado = cie10_filtrado.sort_values(
+                by=["score_busqueda", "code_normalized"],
+                ascending=[False, True],
+            ).head(20)
+    else:
+        cie10_filtrado = cie10.iloc[0:0]
+
+    if cie10_filtrado.empty:
+        if busqueda_cie10:
+            st.caption("No se encontraron diagnósticos CIE-10 con esa búsqueda.")
+        return ""
+
+    cie10_filtrado = cie10_filtrado.copy()
+    cie10_filtrado["description_es"] = cie10_filtrado["description"].map(traducir_cie10_descripcion)
+    cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
+
+    with st.expander(f"Resultados de diagnóstico ({len(cie10_filtrado)})", expanded=False):
+        diagnostico = st.selectbox(
+            "Diagnóstico CIE-10",
+            cie10_filtrado["label_es"].tolist(),
+            index=None,
+            placeholder="Seleccione un diagnóstico",
+            key=f"{prefix}_consulta_cie10_dx",
+        )
+    return diagnostico or ""
 
 
 def _historia_path(nombre_archivo):
@@ -101,9 +168,16 @@ def render_consulta_externa(
     antecedentes_default=None,
     plan_default=None,
     mostrar_modalidad_consulta=True,
+    mostrar_pb=None,
+    modo_pediatrico_urgencias_primera_vez=False,
 ):
-    antecedentes_default = antecedentes_default or (ANTECEDENTES_DEFAULT if es_pediatrica else ANTECEDENTES_ADULTO_DEFAULT)
+    if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
+        antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
+    else:
+        antecedentes_default = antecedentes_default or (ANTECEDENTES_DEFAULT if es_pediatrica else ANTECEDENTES_ADULTO_DEFAULT)
     plan_default = plan_default or PLAN_DEFAULT
+    if mostrar_pb is None:
+        mostrar_pb = es_pediatrica
     history_path = _historia_path(history_filename)
 
     defaults = {
@@ -123,6 +197,7 @@ def render_consulta_externa(
         f"{prefix}_ta": "",
         f"{prefix}_sat": 0.0,
         f"{prefix}_temp": 0.0,
+        f"{prefix}_pb": 0.0,
         f"{prefix}_peso": 0.0,
         f"{prefix}_talla": 0.0,
         f"{prefix}_pc": 0.0,
@@ -153,6 +228,14 @@ def render_consulta_externa(
             ["PRIMERA VEZ", "CITA DE CONTROL"],
             key=f"{prefix}_modalidad_consulta",
         )
+    else:
+        modalidad_consulta = "PRIMERA VEZ"
+
+    usar_modo_urgencias = bool(
+        modo_pediatrico_urgencias_primera_vez
+        and es_pediatrica
+        and modalidad_consulta == "PRIMERA VEZ"
+    )
 
     col1, col2 = st.columns(2)
     with col1:
@@ -213,6 +296,8 @@ def render_consulta_externa(
         neuro = st.text_area("Neurodesarrollo", key=f"{prefix}_neuro", height=160)
 
     st.subheader("Revisión por sistemas")
+    if usar_modo_urgencias and st.session_state.get(f"{prefix}_revision") == "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS.":
+        st.session_state[f"{prefix}_revision"] = REVISION_URGENCIAS_DEFAULT
     revision = st.text_area("Revisión", key=f"{prefix}_revision")
 
     st.subheader("Signos vitales")
@@ -224,6 +309,10 @@ def render_consulta_externa(
     with col_sv_2:
         sat = st.number_input("SpO2 (%)", min_value=0.0, key=f"{prefix}_sat")
         temp = st.number_input("Temperatura (°C)", min_value=0.0, key=f"{prefix}_temp")
+        if mostrar_pb:
+            pb = st.number_input("PB (cm)", min_value=0.0, key=f"{prefix}_pb")
+        else:
+            pb = 0.0
 
     peso = st.number_input("Peso (kg)", min_value=0.0, key=f"{prefix}_peso")
     talla = st.number_input("Talla (cm)", min_value=0.0, key=f"{prefix}_talla")
@@ -233,16 +322,27 @@ def render_consulta_externa(
         pc = 0.0
 
     st.subheader("Examen físico")
-    examen = st.text_area("Examen físico", key=f"{prefix}_examen", height=260)
+    if usar_modo_urgencias and st.session_state.get(f"{prefix}_examen") == EXAMEN_DEFAULT:
+        st.session_state[f"{prefix}_examen"] = EXAMEN_URGENCIAS_DEFAULT
+    examen = st.text_area("Examen físico", key=f"{prefix}_examen", height=300 if usar_modo_urgencias else 260)
 
     sexo_txt = (sexo or "").upper()
     grupo_txt = f" {grupo.upper()}" if grupo else ""
     edad_resumen = f"{años} AÑOS" if años > 0 else (f"{meses} MESES" if fecha_nacimiento else "")
-    analisis_default = (
-        f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}. "
-        f"AL MOMENTO DE LA VALORACIÓN SE ENCUENTRA EN CONDICIONES GENERALES ESTABLES. "
-        f"SE CORRELACIONA CLÍNICA Y PARACLÍNICAMENTE PARA DEFINIR CONDUCTA."
-    ).strip()
+    if usar_modo_urgencias:
+        analisis_default = (
+            f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}. "
+            f"AL INGRESO PACIENTE QUE LUCE EN ACEPTABLES CONDICIONES GENERALES, BUEN ESTADO DE HIDRATACIÓN, "
+            f"HEMODINÁMICAMENTE ESTABLE, BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO, "
+            f"SIN SIGNOS DE ALARMA ABDOMINAL, SIN DISTERMIAS, NO ASPECTO TÓXICO, SIN EDEMAS, SIN DÉFICIT NEUROLÓGICO, "
+            f"PIEL BIEN PERFUNDIDA SIN LESIONES. SE INDICA MANEJO... SE BRINDA INFORMACIÓN A FAMILIARES, SE ACLARAN DUDAS."
+        ).strip()
+    else:
+        analisis_default = (
+            f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}. "
+            f"AL MOMENTO DE LA VALORACIÓN SE ENCUENTRA EN CONDICIONES GENERALES ESTABLES. "
+            f"SE CORRELACIONA CLÍNICA Y PARACLÍNICAMENTE PARA DEFINIR CONDUCTA."
+        ).strip()
 
     st.subheader("Análisis")
     if st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
@@ -253,10 +353,15 @@ def render_consulta_externa(
     analisis = st.text_area("Análisis clínico", key=f"{prefix}_analisis", height=180)
 
     st.subheader("Diagnósticos")
-    diagnosticos = st.text_area("Diagnósticos", key=f"{prefix}_diagnosticos", height=120)
+    if usar_modo_urgencias:
+        diagnosticos = _construir_diagnostico_cie10(prefix)
+    else:
+        diagnosticos = st.text_area("Diagnósticos", key=f"{prefix}_diagnosticos", height=120)
     observacion_dx = st.text_area("Observación diagnóstica", key=f"{prefix}_obs_dx", height=100)
 
     st.subheader("Plan")
+    if usar_modo_urgencias and st.session_state.get(f"{prefix}_plan") == plan_default:
+        st.session_state[f"{prefix}_plan"] = PLAN_URGENCIAS_DEFAULT
     plan = st.text_area("Plan", key=f"{prefix}_plan", height=220)
 
     col_btn_1, col_btn_2 = st.columns(2)
@@ -303,7 +408,7 @@ REVISIÓN POR SISTEMAS:
 {revision}
 
 SIGNOS VITALES:
-TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C
+TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C{f" PB: {pb} cm" if mostrar_pb else ""}
 
 ANTROPOMETRÍA:
 PESO: {peso} kg TALLA: {talla} cm"""
@@ -341,7 +446,7 @@ PLAN:
         secciones.extend(
             [
                 ("REVISIÓN POR SISTEMAS", revision),
-                ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C"),
+                ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C" + (f" PB: {pb} cm" if mostrar_pb else "")),
                 ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm" + (f" PC: {pc} cm" if es_pediatrica else "")),
                 ("EXAMEN FÍSICO", examen),
                 ("ANÁLISIS", analisis),

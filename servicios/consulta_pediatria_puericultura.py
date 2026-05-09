@@ -9,4 +9,6 @@ def render():
         es_pediatrica=True,
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=True,
+        mostrar_pb=True,
+        modo_pediatrico_urgencias_primera_vez=True,
     )
