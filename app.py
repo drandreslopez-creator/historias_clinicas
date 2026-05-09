@@ -133,7 +133,7 @@ elif area_servicio == "Neonatología":
             "RESPUESTA DE INTERCONSULTA - SERVICIO DE PEDIATRÍA PERINATAL Y NEONATOLOGÍA",
             "EVOLUCIÓN DEL RECIÉN NACIDOS EN SERVICIO DE URGENCIAS",
             "HISTORIA CLINICA DE INGRESO A UNIDAD DE RECIÉN NACIDOS",
-            "EVOLUCIÓN DEL RECIÉN NACIDOS EN UCIN",
+            "EVOLUCIÓN DEL RECIÉN NACIDO EN UCIN",
         ],
         key="tipo_historia_clinica_neonatologia",
     )
@@ -181,7 +181,7 @@ elif area_servicio == "Neonatología":
         plantillas_genericas.render_neonatologia_evolucion_urgencias()
     elif tipo_neonatologia == "HISTORIA CLINICA DE INGRESO A UNIDAD DE RECIÉN NACIDOS":
         plantillas_genericas.render_neonatologia_ingreso_unidad()
-    elif tipo_neonatologia == "EVOLUCIÓN DEL RECIÉN NACIDOS EN UCIN":
+    elif tipo_neonatologia == "EVOLUCIÓN DEL RECIÉN NACIDO EN UCIN":
         plantillas_genericas.render_neonatologia_evolucion_ucin()
 elif area_servicio == "Telemedicina":
     tipo_telemedicina = st.session_state.get("tipo_historia_clinica_telemedicina")
