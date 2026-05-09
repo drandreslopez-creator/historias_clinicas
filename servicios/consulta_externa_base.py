@@ -9,6 +9,7 @@ from core.calculos import calcular_edad
 from core.clasificacion import grupo_etario
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
 from servicios.pediatria_urgencias import (
+    construir_nombre_base_docx,
     eliminar_historia_guardada,
     generar_docx_informe,
     guardar_docx_exportado,
@@ -337,13 +338,21 @@ PLAN:
         )
 
         st.success("Historia clínica generada")
+        fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         docx_bytes = generar_docx_informe(titulo.upper(), secciones)
+        nombre_base_docx = construir_nombre_base_docx(
+            "consulta",
+            nombre=nombre,
+            documento=documento,
+            fecha_guardado=fecha_guardado,
+            prefijo=prefix,
+        )
         ruta_docx_guardado = guardar_docx_exportado(
             docx_bytes,
-            f"{nombre or 'historia'}_consulta",
+            nombre_base_docx,
             subcarpeta=prefix,
         )
-        nombre_docx = f"{(nombre or 'historia').strip().replace(' ', '_')}_consulta.docx"
+        nombre_docx = f"{nombre_base_docx}.docx"
         st.download_button(
             "Descargar informe en Word",
             data=docx_bytes,
@@ -364,7 +373,6 @@ PLAN:
         else:
             st.info("Google Drive no está configurado aún. El Word sí quedó guardado localmente y disponible para descarga.")
 
-        fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
         _save_history(
             history_path,
@@ -409,6 +417,11 @@ PLAN:
                             elif resultado_eliminacion.get("local_error"):
                                 mensajes.append(f"No se pudo eliminar el Word local: {resultado_eliminacion['local_error']}")
                         if historia_sel.get("drive_file_id"):
+                            if resultado_eliminacion.get("drive_ok"):
+                                mensajes.append("Archivo de Google Drive eliminado.")
+                            elif resultado_eliminacion.get("drive_error"):
+                                mensajes.append(f"No se pudo eliminar el archivo de Drive: {resultado_eliminacion['drive_error']}")
+                        elif historia_sel.get("drive_webview_link"):
                             if resultado_eliminacion.get("drive_ok"):
                                 mensajes.append("Archivo de Google Drive eliminado.")
                             elif resultado_eliminacion.get("drive_error"):
