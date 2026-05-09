@@ -8,7 +8,12 @@ import streamlit as st
 from core.calculos import calcular_edad
 from core.clasificacion import grupo_etario
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
-from servicios.pediatria_urgencias import generar_docx_informe, render_informe_html
+from servicios.pediatria_urgencias import (
+    generar_docx_informe,
+    guardar_docx_exportado,
+    subir_docx_a_google_drive,
+    render_informe_html,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -345,14 +350,32 @@ PLAN:
 
         st.success("Historia clínica generada")
         docx_bytes = generar_docx_informe(titulo.upper(), secciones)
+        ruta_docx_guardado = guardar_docx_exportado(
+            docx_bytes,
+            f"{nombre or 'historia'}_consulta",
+            subcarpeta=prefix,
+        )
+        nombre_docx = f"{(nombre or 'historia').strip().replace(' ', '_')}_consulta.docx"
         st.download_button(
             "Descargar informe en Word",
             data=docx_bytes,
-            file_name=f"{(nombre or 'historia').strip().replace(' ', '_')}_consulta.docx",
+            file_name=nombre_docx,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True,
             key=f"{prefix}_download_docx",
         )
+        st.caption(f"Word guardado automáticamente en: {ruta_docx_guardado}")
+        resultado_drive = subir_docx_a_google_drive(docx_bytes, nombre_docx)
+        if resultado_drive.get("ok"):
+            enlace_drive = resultado_drive.get("webViewLink")
+            if enlace_drive:
+                st.success(f"Word guardado también en Google Drive: {enlace_drive}")
+            else:
+                st.success("Word guardado también en Google Drive.")
+        elif resultado_drive.get("configured"):
+            st.warning(resultado_drive.get("message", "No se pudo guardar en Google Drive."))
+        else:
+            st.info("Google Drive no está configurado aún. El Word sí quedó guardado localmente y disponible para descarga.")
         render_informe_html(titulo.upper(), secciones, historia.upper())
 
     st.divider()

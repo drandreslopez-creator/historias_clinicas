@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -42,6 +43,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 HISTORIAS_PATH = BASE_DIR / "data" / "historias_pediatria_urgencias.jsonl"
 PLANES_PATOLOGIA_PATH = BASE_DIR / "data" / "planes_manejo_pediatria_urgencias.json"
 DOSIS_MEDICACION_PATH = BASE_DIR / "data" / "dosis_medicacion_pediatria_urgencias.json"
+WORD_EXPORT_DIR_DEFAULT = BASE_DIR / "data" / "word_exports"
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
 ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO XX GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO Y ECOGRAFÍAS ANTENATALES: NACE VÍA VAGINAL/ CESAREA A LAS XX SEM A TÉRMINO. EGRESO CONJUNTO, PESO XXXX GR - TALLA XX CM.
@@ -2323,6 +2325,122 @@ def generar_docx_informe(titulo, secciones):
     return buffer.getvalue()
 
 
+def obtener_directorio_exportacion_word():
+    ruta_configurada = os.getenv("HISTORIAS_WORD_EXPORT_DIR", "").strip()
+    if ruta_configurada:
+        return Path(ruta_configurada).expanduser()
+    return WORD_EXPORT_DIR_DEFAULT
+
+
+def normalizar_nombre_archivo(texto):
+    texto = (texto or "historia").strip()
+    texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    texto = re.sub(r"[^A-Za-z0-9._-]+", "_", texto)
+    texto = re.sub(r"_+", "_", texto).strip("._")
+    return texto or "historia"
+
+
+def guardar_docx_exportado(docx_bytes, nombre_base, subcarpeta=None):
+    export_dir = obtener_directorio_exportacion_word()
+    if subcarpeta:
+        export_dir = export_dir / normalizar_nombre_archivo(subcarpeta)
+    export_dir.mkdir(parents=True, exist_ok=True)
+
+    marca_tiempo = datetime.now(BOGOTA_TZ).strftime("%Y%m%d_%H%M%S")
+    nombre_archivo = f"{normalizar_nombre_archivo(nombre_base)}_{marca_tiempo}.docx"
+    ruta_final = export_dir / nombre_archivo
+    ruta_final.write_bytes(docx_bytes)
+    return ruta_final
+
+
+def obtener_config_google_drive():
+    credenciales = None
+    folder_id = None
+
+    try:
+        if "google_drive_service_account" in st.secrets:
+            credenciales = dict(st.secrets["google_drive_service_account"])
+    except Exception:
+        credenciales = None
+
+    if not credenciales:
+        json_credenciales = os.getenv("GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON", "").strip()
+        if json_credenciales:
+            try:
+                credenciales = json.loads(json_credenciales)
+            except json.JSONDecodeError:
+                credenciales = None
+
+    try:
+        folder_id = st.secrets.get("google_drive_folder_id", None)
+    except Exception:
+        folder_id = None
+
+    if not folder_id:
+        folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip() or None
+
+    if credenciales and "private_key" in credenciales:
+        credenciales["private_key"] = str(credenciales["private_key"]).replace("\\n", "\n")
+
+    return credenciales, folder_id
+
+
+def subir_docx_a_google_drive(docx_bytes, nombre_archivo):
+    credenciales_info, folder_id = obtener_config_google_drive()
+    if not credenciales_info:
+        return {
+            "ok": False,
+            "configured": False,
+            "message": "Google Drive no está configurado en secrets o variables de entorno.",
+        }
+
+    try:
+        from google.oauth2.service_account import Credentials
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+    except Exception as e:
+        return {
+            "ok": False,
+            "configured": True,
+            "message": f"No se pudieron importar las librerías de Google Drive: {e}",
+        }
+
+    try:
+        scopes = ["https://www.googleapis.com/auth/drive.file"]
+        credentials = Credentials.from_service_account_info(credenciales_info, scopes=scopes)
+        service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+
+        metadata = {"name": nombre_archivo}
+        if folder_id:
+            metadata["parents"] = [folder_id]
+
+        media = MediaIoBaseUpload(
+            BytesIO(docx_bytes),
+            mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            resumable=False,
+        )
+
+        archivo = service.files().create(
+            body=metadata,
+            media_body=media,
+            fields="id,name,webViewLink",
+        ).execute()
+
+        return {
+            "ok": True,
+            "configured": True,
+            "file_id": archivo.get("id"),
+            "name": archivo.get("name"),
+            "webViewLink": archivo.get("webViewLink"),
+        }
+    except Exception as e:
+        return {
+            "ok": False,
+            "configured": True,
+            "message": f"No se pudo subir el archivo a Google Drive: {e}",
+        }
+
+
 def cargar_historias_guardadas():
     if not HISTORIAS_PATH.exists():
         return []
@@ -2760,13 +2878,31 @@ PLAN:
             ("PLAN", plan),
         ]
         docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
+        ruta_docx_guardado = guardar_docx_exportado(
+            docx_bytes,
+            f"{nombre or 'historia'}_historia_clinica",
+            subcarpeta="pediatria_urgencias",
+        )
+        nombre_docx = f"{(nombre or 'historia').strip().replace(' ', '_')}_historia_clinica.docx"
         st.download_button(
             "Descargar informe en Word",
             data=docx_bytes,
-            file_name=f"{(nombre or 'historia').strip().replace(' ', '_')}_historia_clinica.docx",
+            file_name=nombre_docx,
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             use_container_width=True,
         )
+        st.caption(f"Word guardado automáticamente en: {ruta_docx_guardado}")
+        resultado_drive = subir_docx_a_google_drive(docx_bytes, nombre_docx)
+        if resultado_drive.get("ok"):
+            enlace_drive = resultado_drive.get("webViewLink")
+            if enlace_drive:
+                st.success(f"Word guardado también en Google Drive: {enlace_drive}")
+            else:
+                st.success("Word guardado también en Google Drive.")
+        elif resultado_drive.get("configured"):
+            st.warning(resultado_drive.get("message", "No se pudo guardar en Google Drive."))
+        else:
+            st.info("Google Drive no está configurado aún. El Word sí quedó guardado localmente y disponible para descarga.")
         render_informe_html(titulo_historia.upper(), secciones_informe, historia.upper())
 
     st.divider()
