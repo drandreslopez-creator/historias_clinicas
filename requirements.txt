@@ -8,3 +8,4 @@ pypdf
 rapidocr-onnxruntime
 google-api-python-client
 google-auth
+requests-oauthlib

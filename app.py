@@ -1,4 +1,12 @@
 import streamlit as st
+from utils.google_drive_oauth import (
+    desconectar_google_drive,
+    google_drive_conectado,
+    google_oauth_configurado,
+    obtener_google_auth_url,
+    obtener_google_drive_usuario,
+    procesar_google_oauth_callback,
+)
 
 # IMPORTAR SERVICIOS
 from servicios import pediatria_urgencias
@@ -10,6 +18,12 @@ from servicios import consulta_pediatria_puericultura
 PASSWORD_APP = "8041003"
 
 st.set_page_config(page_title="Historias Clínicas", page_icon="🩺", layout="wide")
+
+oauth_resultado = procesar_google_oauth_callback()
+if oauth_resultado is True:
+    st.session_state["google_drive_oauth_notice"] = "Google Drive conectado correctamente."
+elif oauth_resultado is False:
+    st.session_state["google_drive_oauth_notice"] = "No se pudo completar la conexión con Google Drive."
 
 if "app_autenticada" not in st.session_state:
     st.session_state["app_autenticada"] = False
@@ -31,6 +45,26 @@ if not st.session_state["app_autenticada"]:
     st.stop()
 
 st.title("🩺 FORMATO DE HISTORIA CLÍNICA DEL DR. ANDRÉS LÓPEZ RUIZ")
+
+with st.sidebar:
+    st.subheader("Google Drive")
+    if google_oauth_configurado():
+        usuario_drive = obtener_google_drive_usuario()
+        if google_drive_conectado():
+            st.success(
+                f"Conectado{f' como {usuario_drive.get('email')}' if usuario_drive and usuario_drive.get('email') else ''}"
+            )
+            if st.button("Desconectar Google Drive", use_container_width=True):
+                desconectar_google_drive()
+                st.rerun()
+        else:
+            auth_url = obtener_google_auth_url()
+            if auth_url:
+                st.link_button("Conectar Google Drive", auth_url, use_container_width=True)
+        if st.session_state.get("google_drive_oauth_notice"):
+            st.info(st.session_state["google_drive_oauth_notice"])
+    else:
+        st.caption("OAuth de Google Drive no configurado en secrets.")
 
 area_servicio = st.selectbox(
     "Área de servicio",
