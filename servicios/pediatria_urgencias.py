@@ -3061,23 +3061,7 @@ PLAN:
                 if st.button("Eliminar esta historia", key="eliminar_historia_guardada", use_container_width=True):
                     resultado_eliminacion = eliminar_historia_guardada(HISTORIAS_PATH, historia_consulta_id)
                     if resultado_eliminacion.get("ok"):
-                        mensajes = ["Historia eliminada del historial."]
-                        if historia_seleccionada.get("docx_local_path"):
-                            if resultado_eliminacion.get("local_ok"):
-                                mensajes.append("Word local eliminado.")
-                            elif resultado_eliminacion.get("local_error"):
-                                mensajes.append(f"No se pudo eliminar el Word local: {resultado_eliminacion['local_error']}")
-                        if historia_seleccionada.get("drive_file_id"):
-                            if resultado_eliminacion.get("drive_ok"):
-                                mensajes.append("Archivo de Google Drive eliminado.")
-                            elif resultado_eliminacion.get("drive_error"):
-                                mensajes.append(f"No se pudo eliminar el archivo de Drive: {resultado_eliminacion['drive_error']}")
-                        elif historia_seleccionada.get("drive_webview_link"):
-                            if resultado_eliminacion.get("drive_ok"):
-                                mensajes.append("Archivo de Google Drive eliminado.")
-                            elif resultado_eliminacion.get("drive_error"):
-                                mensajes.append(f"No se pudo eliminar el archivo de Drive: {resultado_eliminacion['drive_error']}")
-                        st.success(" ".join(mensajes))
+                        st.success("Historia eliminada correctamente.")
                         st.rerun()
                     else:
                         st.warning(resultado_eliminacion.get("message", "No se pudo eliminar la historia."))
