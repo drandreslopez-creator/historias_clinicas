@@ -231,29 +231,30 @@ def render():
         st.info(f"Edad: {años} años, {meses} meses, {dias} días")
 
     st.subheader("Motivo de consulta")
-    motivo = st.text_area("Motivo de consulta", key=f"{prefix}_motivo", height=90)
+    motivo = st.text_area("", key=f"{prefix}_motivo", height=90, label_visibility="collapsed")
 
     st.subheader("Enfermedad actual")
     enfermedad_actual = st.text_area(
-        "Enfermedad actual (evolución y modalidades)",
+        "",
         key=f"{prefix}_enfermedad_actual",
         height=220,
+        label_visibility="collapsed",
     )
 
     st.subheader("Antecedentes relevantes")
-    antecedentes = st.text_area("Antecedentes relevantes", key=f"{prefix}_antecedentes", height=220)
+    antecedentes = st.text_area("", key=f"{prefix}_antecedentes", height=220, label_visibility="collapsed")
 
     st.subheader("Revisión por sistemas")
-    revision = st.text_area("Revisión por sistemas", key=f"{prefix}_revision", height=90)
+    revision = st.text_area("", key=f"{prefix}_revision", height=90, label_visibility="collapsed")
 
     st.subheader("Resumen de biopatografía")
-    biopatografia = st.text_area("Resumen de biopatografía", key=f"{prefix}_biopatografia", height=180)
+    biopatografia = st.text_area("", key=f"{prefix}_biopatografia", height=180, label_visibility="collapsed")
 
     st.subheader("Síntomas generales")
-    sintomas_generales = st.text_area("Síntomas generales", key=f"{prefix}_sintomas_generales", height=180)
+    sintomas_generales = st.text_area("", key=f"{prefix}_sintomas_generales", height=180, label_visibility="collapsed")
 
     st.subheader("Síntomas mentales")
-    sintomas_mentales = st.text_area("Síntomas mentales", key=f"{prefix}_sintomas_mentales", height=220)
+    sintomas_mentales = st.text_area("", key=f"{prefix}_sintomas_mentales", height=220, label_visibility="collapsed")
 
     st.subheader("Examen físico")
     col_sv1, col_sv2, col_sv3 = st.columns(3)
@@ -290,26 +291,27 @@ def render():
         _float_or_none(talla),
     )
 
-    examen = st.text_area("Examen físico", key=f"{prefix}_examen", height=220)
+    examen = st.text_area("", key=f"{prefix}_examen", height=220, label_visibility="collapsed")
 
     st.subheader("Diagnósticos médicos")
-    diagnosticos = st.text_area("Diagnósticos médicos", key=f"{prefix}_diagnosticos", height=120)
+    diagnosticos = st.text_area("", key=f"{prefix}_diagnosticos", height=120, label_visibility="collapsed")
 
     st.subheader("Exámenes paraclínicos")
-    paraclinicos = st.text_area("Exámenes paraclínicos", key=f"{prefix}_paraclinicos", height=110)
+    paraclinicos = st.text_area("", key=f"{prefix}_paraclinicos", height=110, label_visibility="collapsed")
 
     st.subheader("Análisis homeopático")
     analisis_homeopatico = st.text_area(
-        "Análisis homeopático",
+        "",
         key=f"{prefix}_analisis_homeopatico",
         height=280,
+        label_visibility="collapsed",
     )
 
     st.subheader("Rubros importantes")
-    rubros = st.text_area("Rubros importantes", key=f"{prefix}_rubros", height=220)
+    rubros = st.text_area("", key=f"{prefix}_rubros", height=220, label_visibility="collapsed")
 
     st.subheader("Análisis y tratamiento")
-    tratamiento = st.text_area("Análisis y tratamiento", key=f"{prefix}_tratamiento", height=320)
+    tratamiento = st.text_area("", key=f"{prefix}_tratamiento", height=320, label_visibility="collapsed")
 
     col_btn_1, col_btn_2 = st.columns(2)
     generar = col_btn_1.button("Generar Historia Clínica", key=f"{prefix}_generar", use_container_width=True)
