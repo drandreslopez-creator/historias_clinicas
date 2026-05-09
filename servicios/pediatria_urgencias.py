@@ -2424,6 +2424,7 @@ def subir_docx_a_google_drive(docx_bytes, nombre_archivo):
             body=metadata,
             media_body=media,
             fields="id,name,webViewLink",
+            supportsAllDrives=True,
         ).execute()
 
         return {
