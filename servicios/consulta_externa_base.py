@@ -62,6 +62,16 @@ PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
 - CONTROL SEGUN EVOLUCIÓN"""
 
 
+def _float_or_none(valor):
+    texto = str(valor or "").strip().replace(",", ".")
+    if not texto:
+        return None
+    try:
+        return float(texto)
+    except ValueError:
+        return None
+
+
 def _construir_diagnostico_cie10(prefix):
     cie10 = cargar_cie10()
     busqueda_cie10 = st.text_input(
@@ -194,16 +204,16 @@ def render_consulta_externa(
         f"{prefix}_enfermedad_actual": "",
         f"{prefix}_antecedentes": antecedentes_default,
         f"{prefix}_revision": "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS.",
-        f"{prefix}_fc": 0.0,
-        f"{prefix}_fr": 0.0,
+        f"{prefix}_fc": "",
+        f"{prefix}_fr": "",
         f"{prefix}_ta": "",
-        f"{prefix}_sat": 0.0,
-        f"{prefix}_glucometria": 0.0,
-        f"{prefix}_temp": 0.0,
-        f"{prefix}_pb": 0.0,
-        f"{prefix}_peso": 0.0,
-        f"{prefix}_talla": 0.0,
-        f"{prefix}_pc": 0.0,
+        f"{prefix}_sat": "",
+        f"{prefix}_glucometria": "",
+        f"{prefix}_temp": "",
+        f"{prefix}_pb": "",
+        f"{prefix}_peso": "",
+        f"{prefix}_talla": "",
+        f"{prefix}_pc": "",
         f"{prefix}_neuro": "",
         f"{prefix}_examen": EXAMEN_DEFAULT,
         f"{prefix}_analisis": "",
@@ -322,36 +332,46 @@ def render_consulta_externa(
     with col_sv_1:
         ta = st.text_input("TA (mmHg)", key=f"{prefix}_ta")
     with col_sv_2:
-        fc = st.number_input("FC (lpm)", min_value=0.0, key=f"{prefix}_fc")
+        fc = st.text_input("FC (lpm)", key=f"{prefix}_fc")
     with col_sv_3:
-        sat = st.number_input("SpO2 (%)", min_value=0.0, key=f"{prefix}_sat")
+        sat = st.text_input("SpO2 (%)", key=f"{prefix}_sat")
 
     col_sv_4, col_sv_5, col_sv_6 = st.columns(3)
     with col_sv_4:
-        fr = st.number_input("FR (rpm)", min_value=0.0, key=f"{prefix}_fr")
+        fr = st.text_input("FR (rpm)", key=f"{prefix}_fr")
     with col_sv_5:
-        glucometria = st.number_input("Glucometría (mg/dl)", min_value=0.0, key=f"{prefix}_glucometria")
+        glucometria = st.text_input("Glucometría (mg/dl)", key=f"{prefix}_glucometria")
     with col_sv_6:
-        temp = st.number_input("Temperatura (°C)", min_value=0.0, key=f"{prefix}_temp")
+        temp = st.text_input("Temperatura (°C)", key=f"{prefix}_temp")
 
     col_sv_7, col_sv_8 = st.columns(2)
     with col_sv_7:
-        peso = st.number_input("Peso (kg)", min_value=0.0, key=f"{prefix}_peso")
+        peso = st.text_input("Peso (kg)", key=f"{prefix}_peso")
     with col_sv_8:
-        talla = st.number_input("Talla (cm)", min_value=0.0, key=f"{prefix}_talla")
+        talla = st.text_input("Talla (cm)", key=f"{prefix}_talla")
 
     if es_pediatrica:
         col_sv_9, col_sv_10 = st.columns(2)
         with col_sv_9:
-            pc = st.number_input("Perímetro cefálico (cm)", min_value=0.0, key=f"{prefix}_pc")
+            pc = st.text_input("Perímetro cefálico (cm)", key=f"{prefix}_pc")
         with col_sv_10:
             if mostrar_pb:
-                pb = st.number_input("PB (cm)", min_value=0.0, key=f"{prefix}_pb")
+                pb = st.text_input("PB (cm)", key=f"{prefix}_pb")
             else:
-                pb = 0.0
+                pb = ""
     else:
-        pc = 0.0
-        pb = 0.0
+        pc = ""
+        pb = ""
+
+    fc_num = _float_or_none(fc)
+    fr_num = _float_or_none(fr)
+    sat_num = _float_or_none(sat)
+    glucometria_num = _float_or_none(glucometria)
+    temp_num = _float_or_none(temp)
+    peso_num = _float_or_none(peso)
+    talla_num = _float_or_none(talla)
+    pc_num = _float_or_none(pc)
+    pb_num = _float_or_none(pb)
 
     st.subheader("Examen físico")
     if usar_modo_urgencias and st.session_state.get(f"{prefix}_examen") == EXAMEN_DEFAULT:

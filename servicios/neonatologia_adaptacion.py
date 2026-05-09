@@ -64,17 +64,17 @@ Se recibe recién nacido con adecuado esfuerzo respiratorio y tono, se coloca ba
     with col_sv1:
         ta = st.text_input("TA (mmHg)")
     with col_sv2:
-        fc = st.number_input("FC (lpm)")
+        fc = st.text_input("FC (lpm)")
     with col_sv3:
-        sat = st.number_input("SpO2 (%)")
+        sat = st.text_input("SpO2 (%)")
 
     col_sv4, col_sv5, col_sv6 = st.columns(3)
     with col_sv4:
-        fr = st.number_input("FR (rpm)")
+        fr = st.text_input("FR (rpm)")
     with col_sv5:
-        glucometria = st.number_input("Glucometría (mg/dl)")
+        glucometria = st.text_input("Glucometría (mg/dl)")
     with col_sv6:
-        temp = st.number_input("Temperatura (°C)")
+        temp = st.text_input("Temperatura (°C)")
 
     # =========================
     # GENERAR HISTORIA 🔥

@@ -66,6 +66,16 @@ RECOMENDACIONES:
 SEGUIMIENTO:"""
 
 
+def _float_or_none(valor):
+    texto = str(valor or "").strip().replace(",", ".")
+    if not texto:
+        return None
+    try:
+        return float(texto)
+    except ValueError:
+        return None
+
+
 def _historia_path(nombre_archivo):
     return BASE_DIR / "data" / nombre_archivo
 
@@ -147,13 +157,13 @@ def render():
         f"{prefix}_sintomas_generales": SINTOMAS_GENERALES_DEFAULT,
         f"{prefix}_sintomas_mentales": SINTOMAS_MENTALES_DEFAULT,
         f"{prefix}_ta": "",
-        f"{prefix}_fc": 0.0,
-        f"{prefix}_fr": 0.0,
-        f"{prefix}_sat": 0.0,
-        f"{prefix}_glucometria": 0.0,
-        f"{prefix}_temp": 0.0,
-        f"{prefix}_peso": 0.0,
-        f"{prefix}_talla": 0.0,
+        f"{prefix}_fc": "",
+        f"{prefix}_fr": "",
+        f"{prefix}_sat": "",
+        f"{prefix}_glucometria": "",
+        f"{prefix}_temp": "",
+        f"{prefix}_peso": "",
+        f"{prefix}_talla": "",
         f"{prefix}_imc_manual": "",
         f"{prefix}_examen": EXAMEN_HOMEO_ADULTOS_DEFAULT,
         f"{prefix}_signos_positivos": "",
@@ -251,23 +261,33 @@ def render():
     with col_sv1:
         ta = st.text_input("TA (mmHg)", key=f"{prefix}_ta")
     with col_sv2:
-        fc = st.number_input("FC (lpm)", min_value=0.0, key=f"{prefix}_fc")
+        fc = st.text_input("FC (lpm)", key=f"{prefix}_fc")
     with col_sv3:
-        sat = st.number_input("SpO2 (%)", min_value=0.0, key=f"{prefix}_sat")
+        sat = st.text_input("SpO2 (%)", key=f"{prefix}_sat")
 
     col_sv4, col_sv5, col_sv6 = st.columns(3)
     with col_sv4:
-        fr = st.number_input("FR (rpm)", min_value=0.0, key=f"{prefix}_fr")
+        fr = st.text_input("FR (rpm)", key=f"{prefix}_fr")
     with col_sv5:
-        glucometria = st.number_input("Glucometría (mg/dl)", min_value=0.0, key=f"{prefix}_glucometria")
+        glucometria = st.text_input("Glucometría (mg/dl)", key=f"{prefix}_glucometria")
     with col_sv6:
-        temp = st.number_input("Temperatura (°C)", min_value=0.0, key=f"{prefix}_temp")
+        temp = st.text_input("Temperatura (°C)", key=f"{prefix}_temp")
 
     col_ant1, col_ant2 = st.columns(2)
     with col_ant1:
-        peso = st.number_input("Peso (kg)", min_value=0.0, key=f"{prefix}_peso")
+        peso = st.text_input("Peso (kg)", key=f"{prefix}_peso")
     with col_ant2:
-        talla = st.number_input("Talla (cm)", min_value=0.0, key=f"{prefix}_talla")
+        talla = st.text_input("Talla (cm)", key=f"{prefix}_talla")
+
+    _ = (
+        _float_or_none(fc),
+        _float_or_none(fr),
+        _float_or_none(sat),
+        _float_or_none(glucometria),
+        _float_or_none(temp),
+        _float_or_none(peso),
+        _float_or_none(talla),
+    )
 
     imc_manual = st.text_input("IMC", key=f"{prefix}_imc_manual")
 

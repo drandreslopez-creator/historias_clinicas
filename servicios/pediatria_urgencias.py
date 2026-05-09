@@ -765,16 +765,16 @@ FORM_DEFAULTS = {
     "neuro_prev": None,
     "revision": REVISION_DEFAULT,
     "ta": "",
-    "fc": 0.0,
-    "fr": 0.0,
-    "sat": 0.0,
-    "glucometria": 0.0,
-    "temp": 0.0,
-    "pb": 0.0,
-    "peso": 0.0,
-    "talla": 0.0,
-    "pc": 0.0,
-    "scq_pct": 0.0,
+    "fc": "",
+    "fr": "",
+    "sat": "",
+    "glucometria": "",
+    "temp": "",
+    "pb": "",
+    "peso": "",
+    "talla": "",
+    "pc": "",
+    "scq_pct": "",
     "examen": EXAMEN_DEFAULT,
     "analisis": "",
     "analisis_base": "",
@@ -1984,6 +1984,16 @@ def formatear_numero_clinico(valor, decimales=1):
     return texto
 
 
+def float_or_none(valor):
+    texto = str(valor or "").strip().replace(",", ".")
+    if not texto:
+        return None
+    try:
+        return float(texto)
+    except ValueError:
+        return None
+
+
 def extraer_codigo_cie10(diagnostico):
     if not diagnostico:
         return ""
@@ -2696,44 +2706,55 @@ def render():
     with col1:
         ta = st.text_input("TA (mmHg)", key="ta")
     with col2:
-        fc = st.number_input("FC (lpm)", min_value=0.0, key="fc")
+        fc = st.text_input("FC (lpm)", key="fc")
     with col3:
-        sat = st.number_input("SpO2 (%)", min_value=0.0, key="sat")
+        sat = st.text_input("SpO2 (%)", key="sat")
 
     col4, col5, col6 = st.columns(3)
     with col4:
-        fr = st.number_input("FR (rpm)", min_value=0.0, key="fr")
+        fr = st.text_input("FR (rpm)", key="fr")
     with col5:
-        glucometria = st.number_input("Glucometría (mg/dl)", min_value=0.0, key="glucometria")
+        glucometria = st.text_input("Glucometría (mg/dl)", key="glucometria")
     with col6:
-        temp = st.number_input("Temperatura (°C)", min_value=0.0, key="temp")
+        temp = st.text_input("Temperatura (°C)", key="temp")
 
     col7, col8 = st.columns(2)
     with col7:
-        peso = st.number_input("Peso (kg)", min_value=0.0, key="peso")
+        peso = st.text_input("Peso (kg)", key="peso")
     with col8:
-        talla = st.number_input("Talla (cm)", min_value=0.0, key="talla")
+        talla = st.text_input("Talla (cm)", key="talla")
 
     col9, col10 = st.columns(2)
     with col9:
-        pc = st.number_input("Perímetro cefálico (cm)", min_value=0.0, key="pc")
+        pc = st.text_input("Perímetro cefálico (cm)", key="pc")
     with col10:
-        pb = st.number_input("PB (cm)", min_value=0.0, key="pb")
+        pb = st.text_input("PB (cm)", key="pb")
 
-    scq_pct = st.number_input("Superficie corporal quemada (%)", min_value=0.0, max_value=100.0, key="scq_pct")
+    scq_pct = st.text_input("Superficie corporal quemada (%)", key="scq_pct")
 
-    if fecha_nacimiento and peso > 0 and talla > 0:
+    fc_num = float_or_none(fc)
+    fr_num = float_or_none(fr)
+    sat_num = float_or_none(sat)
+    glucometria_num = float_or_none(glucometria)
+    temp_num = float_or_none(temp)
+    peso_num = float_or_none(peso)
+    talla_num = float_or_none(talla)
+    pc_num = float_or_none(pc)
+    pb_num = float_or_none(pb)
+    scq_pct_num = float_or_none(scq_pct) or 0.0
+
+    if fecha_nacimiento and peso_num and peso_num > 0 and talla_num and talla_num > 0:
 
         edad_meses = edad_en_meses(fecha_nacimiento)
         sexo_oms = 1 if sexo == "Masculino" else 2
 
-        imc = calcular_imc(peso, talla)
+        imc = calcular_imc(peso_num, talla_num)
 
-        z_pe = zscore_peso_edad(peso, edad_meses, sexo_oms)
-        z_te = zscore_talla_edad(talla, edad_meses, sexo_oms)
+        z_pe = zscore_peso_edad(peso_num, edad_meses, sexo_oms)
+        z_te = zscore_talla_edad(talla_num, edad_meses, sexo_oms)
         z_imc = zscore_imc_edad(imc, edad_meses, sexo_oms)
-        z_pt = zscore_peso_talla(peso, talla, sexo_oms, edad_meses)
-        z_pc = zscore_pc_edad(pc, edad_meses, sexo_oms)
+        z_pt = zscore_peso_talla(peso_num, talla_num, sexo_oms, edad_meses)
+        z_pc = zscore_pc_edad(pc_num, edad_meses, sexo_oms) if pc_num and pc_num > 0 else None
 
         st.subheader("OMS Automático 🔥")
         st.write(f"P/E Z: {z_pe}")
@@ -2897,7 +2918,7 @@ def render():
 
     edad_meses_actual = edad_en_meses(fecha_nacimiento) if fecha_nacimiento else None
     diagnostico_plan = diagnostico_seleccionado or ""
-    plan_sugerido = generar_plan_sugerido(diagnostico_plan, peso, edad_meses_actual)
+    plan_sugerido = generar_plan_sugerido(diagnostico_plan, peso_num, edad_meses_actual)
 
     if "plan" not in st.session_state:
         st.session_state["plan"] = plan_sugerido
