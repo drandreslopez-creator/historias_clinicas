@@ -37,6 +37,7 @@ from herramientas.diagnostico_nutricional import (
     diagnostico_menor_5,
     diagnostico_mayor_5
 )
+from utils.google_drive_oauth import subir_docx_con_oauth
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -2386,6 +2387,20 @@ def obtener_config_google_drive():
 
 
 def subir_docx_a_google_drive(docx_bytes, nombre_archivo):
+    folder_id = None
+    try:
+        folder_id = st.secrets.get("google_drive_folder_id", None)
+    except Exception:
+        folder_id = None
+    if not folder_id:
+        folder_id = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip() or None
+
+    resultado_oauth = subir_docx_con_oauth(docx_bytes, nombre_archivo, folder_id=folder_id)
+    if resultado_oauth.get("ok"):
+        return resultado_oauth
+    if resultado_oauth.get("configured"):
+        return resultado_oauth
+
     credenciales_info, folder_id = obtener_config_google_drive()
     if not credenciales_info:
         return {
