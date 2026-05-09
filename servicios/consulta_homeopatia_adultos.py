@@ -276,6 +276,7 @@ def render():
     motivo = st.text_area("", key=f"{prefix}_motivo", height=90, label_visibility="collapsed")
 
     st.subheader("Enfermedad actual")
+    st.caption("Guía sugerida: inicio, tiempo de evolución, desencadenantes, forma de presentación, localización, irradiación, intensidad, modalidades, agravantes, mejorías, tratamientos previos y estado actual.")
     enfermedad_actual = st.text_area(
         "",
         key=f"{prefix}_enfermedad_actual",
@@ -290,6 +291,7 @@ def render():
     revision = st.text_area("", key=f"{prefix}_revision", height=90, label_visibility="collapsed")
 
     st.subheader("Resumen de biopatografía")
+    st.caption("Guía sugerida: infancia, dinámica familiar, duelos, traumas, pérdidas, enfermedades previas, eventos vitales marcantes, relaciones afectivas, escolaridad/trabajo y cambios importantes de vida.")
     biopatografia = st.text_area("", key=f"{prefix}_biopatografia", height=180, label_visibility="collapsed")
 
     st.subheader("Síntomas generales")
