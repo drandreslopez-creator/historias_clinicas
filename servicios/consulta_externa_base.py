@@ -341,11 +341,10 @@ PLAN:
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         docx_bytes = generar_docx_informe(titulo.upper(), secciones)
         nombre_base_docx = construir_nombre_base_docx(
-            "consulta",
+            "CE",
             nombre=nombre,
             documento=documento,
             fecha_guardado=fecha_guardado,
-            prefijo=prefix,
         )
         ruta_docx_guardado = guardar_docx_exportado(
             docx_bytes,

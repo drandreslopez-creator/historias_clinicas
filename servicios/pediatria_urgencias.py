@@ -2431,14 +2431,16 @@ def normalizar_nombre_archivo(texto):
 
 def construir_nombre_base_docx(tipo_archivo, nombre=None, documento=None, fecha_guardado=None, prefijo=None):
     partes = []
-    if prefijo:
-        partes.append(prefijo)
     if nombre and str(nombre).strip():
         partes.append(str(nombre).strip())
     if documento and str(documento).strip():
-        partes.append(f"doc_{str(documento).strip()}")
+        partes.append(str(documento).strip())
     if fecha_guardado and str(fecha_guardado).strip():
-        partes.append(str(fecha_guardado).strip().replace(" ", "_").replace(":", "-"))
+        fecha_compacta = re.sub(r"[^0-9]", "", str(fecha_guardado))
+        if len(fecha_compacta) >= 8:
+            partes.append(fecha_compacta[:8])
+        else:
+            partes.append(fecha_compacta or str(fecha_guardado).strip())
     if not partes:
         partes.append("sin_nombre")
     partes.append(tipo_archivo)
@@ -2988,11 +2990,10 @@ PLAN:
         docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         nombre_base_docx = construir_nombre_base_docx(
-            "historia_clinica",
+            "HC",
             nombre=nombre,
             documento=documento,
             fecha_guardado=fecha_guardado,
-            prefijo="pediatria_urgencias",
         )
         ruta_docx_guardado = guardar_docx_exportado(
             docx_bytes,
