@@ -176,6 +176,17 @@ def render():
     col1, col2 = st.columns(2)
     with col1:
         nombre = st.text_input("Nombres y apellidos", key=f"{prefix}_nombre")
+    with col2:
+        sexo = st.selectbox(
+            "Sexo",
+            ["Masculino", "Femenino"],
+            index=None,
+            placeholder="Seleccione sexo",
+            key=f"{prefix}_sexo",
+        )
+
+    col3, col4 = st.columns(2)
+    with col3:
         tipo_documento = st.selectbox(
             "Tipo de documento",
             ["CC", "CE", "PEP", "PS", "OTRO"],
@@ -183,6 +194,11 @@ def render():
             placeholder="Seleccione tipo de documento",
             key=f"{prefix}_tipo_documento",
         )
+    with col4:
+        documento = st.text_input("Documento", key=f"{prefix}_documento")
+
+    col5, col6 = st.columns(2)
+    with col5:
         fecha_nacimiento = st.date_input(
             "Fecha de nacimiento",
             value=None,
@@ -191,19 +207,14 @@ def render():
             format="DD/MM/YYYY",
             key=f"{prefix}_fecha_nacimiento",
         )
-        eps = st.text_input("EPS", key=f"{prefix}_eps")
-
-    with col2:
-        telefono = st.text_input("Telefono", key=f"{prefix}_telefono")
-        sexo = st.selectbox(
-            "Sexo",
-            ["Masculino", "Femenino"],
-            index=None,
-            placeholder="Seleccione sexo",
-            key=f"{prefix}_sexo",
-        )
-        documento = st.text_input("Documento", key=f"{prefix}_documento")
+    with col6:
         informante = st.text_input("Informante / acompañante", key=f"{prefix}_informante")
+
+    col7, col8 = st.columns(2)
+    with col7:
+        eps = st.text_input("EPS", key=f"{prefix}_eps")
+    with col8:
+        telefono = st.text_input("Telefono", key=f"{prefix}_telefono")
 
     if fecha_nacimiento:
         años, meses, dias = calcular_edad(fecha_nacimiento)

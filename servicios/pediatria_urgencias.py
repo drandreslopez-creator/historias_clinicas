@@ -2603,6 +2603,17 @@ def render():
 
     with col1:
         nombre = st.text_input("Nombres y apellidos", key="nombre_1")
+    with col2:
+        sexo = st.selectbox(
+            "Sexo",
+            ["Masculino", "Femenino"],
+            index=None,
+            placeholder="Seleccione sexo",
+            key="sexo_1"
+        )
+
+    col3, col4 = st.columns(2)
+    with col3:
         tipo_documento = st.selectbox(
             "Tipo de documento",
             ["NV", "RC", "TI", "PEP", "PS", "OTRO"],
@@ -2610,6 +2621,11 @@ def render():
             placeholder="Seleccione tipo de documento",
             key="tipo_documento_1"
         )
+    with col4:
+        documento = st.text_input("Documento", key="documento_1")
+
+    col5, col6 = st.columns(2)
+    with col5:
         fecha_nacimiento = st.date_input(
             "Fecha de nacimiento",
             value=None,
@@ -2618,20 +2634,16 @@ def render():
             format="DD/MM/YYYY",
             key="fecha_1"
         )
-        eps = st.text_input("EPS", key="eps_1")
-
-    with col2:
-        telefono = st.text_input("Telefono", key="telefono_1")
-        sexo = st.selectbox(
-            "Sexo",
-            ["Masculino", "Femenino"],
-            index=None,
-            placeholder="Seleccione sexo",
-            key="sexo_1"
-        )
-        documento = st.text_input("Documento", key="documento_1")
+    with col6:
         informante = st.text_input("Informante (parentesco - edad - ocupacion)", key="informante_1")
-        proveniente = st.text_input("Proveniente", key="proveniente_1")
+
+    col7, col8 = st.columns(2)
+    with col7:
+        eps = st.text_input("EPS", key="eps_1")
+    with col8:
+        telefono = st.text_input("Telefono", key="telefono_1")
+
+    proveniente = st.text_input("Proveniente", key="proveniente_1")
 
     z_pe = z_te = z_imc = z_pt = z_pc = None
     dx_nutricional = "NO EVALUADO"
