@@ -768,6 +768,7 @@ FORM_DEFAULTS = {
     "fr": 0.0,
     "sat": 0.0,
     "temp": 0.0,
+    "pb": 0.0,
     "peso": 0.0,
     "talla": 0.0,
     "pc": 0.0,
@@ -2685,6 +2686,7 @@ def render():
     with col2:
         sat = st.number_input("SpO2 (%)", min_value=0.0, key="sat")
         temp = st.number_input("Temperatura (°C)", min_value=0.0, key="temp")
+        pb = st.number_input("PB (cm)", min_value=0.0, key="pb")
 
     peso = st.number_input("Peso (kg)", min_value=0.0, key="peso")
     talla = st.number_input("Talla (cm)", min_value=0.0, key="talla")
@@ -2929,7 +2931,7 @@ NEURODESARROLLO:
 {neuro_editable}
 
 SIGNOS VITALES:
-TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C
+TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C PB: {pb} cm
 
 ANTROPOMETRÍA:
 PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm
@@ -2975,7 +2977,7 @@ PLAN:
             ("REVISIÓN POR SISTEMAS", revision),
             ("ANTECEDENTES", antecedentes),
             ("NEURODESARROLLO", neuro_editable),
-            ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C"),
+            ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C PB: {pb} cm"),
             ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm\nP/E Z: {z_pe}\nT/E Z: {z_te}\nP/T Z: {z_pt}\nIMC/E Z: {z_imc}\nPC/E Z: {z_pc}"),
             ("EXAMEN FÍSICO", examen),
             ("LABORATORIOS", paraclinicos_final),

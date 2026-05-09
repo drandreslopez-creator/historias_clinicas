@@ -9,6 +9,7 @@ def render_telemedicina_pediatria():
         es_pediatrica=True,
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=True,
+        mostrar_pb=True,
     )
 
 
@@ -20,6 +21,7 @@ def render_telemedicina_homeopatia_pediatrica():
         es_pediatrica=True,
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=True,
+        mostrar_pb=True,
     )
 
 
@@ -31,6 +33,7 @@ def render_telemedicina_homeopatia_adultos():
         es_pediatrica=False,
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=True,
+        mostrar_pb=False,
     )
 
 
@@ -42,6 +45,7 @@ def render_consulta_neonatologia():
         es_pediatrica=True,
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=True,
+        mostrar_pb=False,
     )
 
 
@@ -53,6 +57,7 @@ def render_hospitalizacion_ingreso():
         es_pediatrica=True,
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=True,
     )
 
 
@@ -64,6 +69,7 @@ def render_hospitalizacion_evolucion():
         es_pediatrica=True,
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=True,
     )
 
 
@@ -75,6 +81,7 @@ def render_hospitalizacion_interconsulta():
         es_pediatrica=True,
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=True,
     )
 
 
@@ -86,6 +93,7 @@ def render_neonatologia_evolucion_alojamiento():
         es_pediatrica=True,
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=False,
     )
 
 
@@ -97,6 +105,7 @@ def render_neonatologia_interconsulta():
         es_pediatrica=True,
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=False,
     )
 
 
@@ -108,6 +117,7 @@ def render_neonatologia_evolucion_urgencias():
         es_pediatrica=True,
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=False,
     )
 
 
@@ -119,6 +129,7 @@ def render_neonatologia_ingreso_unidad():
         es_pediatrica=True,
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=False,
     )
 
 
@@ -130,4 +141,5 @@ def render_neonatologia_evolucion_ucin():
         es_pediatrica=True,
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
+        mostrar_pb=False,
     )

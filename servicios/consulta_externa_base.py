@@ -170,6 +170,7 @@ def render_consulta_externa(
     mostrar_modalidad_consulta=True,
     mostrar_pb=None,
     modo_pediatrico_urgencias_primera_vez=False,
+    modalidad_consulta_forzada=None,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -210,7 +211,7 @@ def render_consulta_externa(
         f"{prefix}_plan": plan_default,
         f"{prefix}_plan_base": plan_default,
         f"{prefix}_historia_consulta_id": None,
-        f"{prefix}_modalidad_consulta": "PRIMERA VEZ",
+        f"{prefix}_modalidad_consulta": modalidad_consulta_forzada or "PRIMERA VEZ",
     }
 
     if st.session_state.pop(f"{prefix}_clear_requested", False):
@@ -221,8 +222,10 @@ def render_consulta_externa(
 
     st.header(f"📌 {titulo}")
 
-    modalidad_consulta = None
-    if mostrar_modalidad_consulta:
+    modalidad_consulta = modalidad_consulta_forzada
+    if modalidad_consulta_forzada is not None:
+        st.info(f"Modalidad de la consulta: {modalidad_consulta_forzada}")
+    elif mostrar_modalidad_consulta:
         modalidad_consulta = st.selectbox(
             "Modalidad de la consulta",
             ["PRIMERA VEZ", "CITA DE CONTROL"],
