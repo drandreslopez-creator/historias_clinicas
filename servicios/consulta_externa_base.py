@@ -198,6 +198,7 @@ def render_consulta_externa(
         f"{prefix}_fr": 0.0,
         f"{prefix}_ta": "",
         f"{prefix}_sat": 0.0,
+        f"{prefix}_glucometria": 0.0,
         f"{prefix}_temp": 0.0,
         f"{prefix}_pb": 0.0,
         f"{prefix}_peso": 0.0,
@@ -317,25 +318,40 @@ def render_consulta_externa(
     revision = st.text_area("Revisión", key=f"{prefix}_revision")
 
     st.subheader("Signos vitales")
-    col_sv_1, col_sv_2 = st.columns(2)
+    col_sv_1, col_sv_2, col_sv_3 = st.columns(3)
     with col_sv_1:
         ta = st.text_input("TA (mmHg)", key=f"{prefix}_ta")
-        fc = st.number_input("FC (lpm)", min_value=0.0, key=f"{prefix}_fc")
-        fr = st.number_input("FR (rpm)", min_value=0.0, key=f"{prefix}_fr")
     with col_sv_2:
+        fc = st.number_input("FC (lpm)", min_value=0.0, key=f"{prefix}_fc")
+    with col_sv_3:
         sat = st.number_input("SpO2 (%)", min_value=0.0, key=f"{prefix}_sat")
-        temp = st.number_input("Temperatura (°C)", min_value=0.0, key=f"{prefix}_temp")
-        if mostrar_pb:
-            pb = st.number_input("PB (cm)", min_value=0.0, key=f"{prefix}_pb")
-        else:
-            pb = 0.0
 
-    peso = st.number_input("Peso (kg)", min_value=0.0, key=f"{prefix}_peso")
-    talla = st.number_input("Talla (cm)", min_value=0.0, key=f"{prefix}_talla")
+    col_sv_4, col_sv_5, col_sv_6 = st.columns(3)
+    with col_sv_4:
+        fr = st.number_input("FR (rpm)", min_value=0.0, key=f"{prefix}_fr")
+    with col_sv_5:
+        glucometria = st.number_input("Glucometría (mg/dl)", min_value=0.0, key=f"{prefix}_glucometria")
+    with col_sv_6:
+        temp = st.number_input("Temperatura (°C)", min_value=0.0, key=f"{prefix}_temp")
+
+    col_sv_7, col_sv_8 = st.columns(2)
+    with col_sv_7:
+        peso = st.number_input("Peso (kg)", min_value=0.0, key=f"{prefix}_peso")
+    with col_sv_8:
+        talla = st.number_input("Talla (cm)", min_value=0.0, key=f"{prefix}_talla")
+
     if es_pediatrica:
-        pc = st.number_input("Perímetro cefálico (cm)", min_value=0.0, key=f"{prefix}_pc")
+        col_sv_9, col_sv_10 = st.columns(2)
+        with col_sv_9:
+            pc = st.number_input("Perímetro cefálico (cm)", min_value=0.0, key=f"{prefix}_pc")
+        with col_sv_10:
+            if mostrar_pb:
+                pb = st.number_input("PB (cm)", min_value=0.0, key=f"{prefix}_pb")
+            else:
+                pb = 0.0
     else:
         pc = 0.0
+        pb = 0.0
 
     st.subheader("Examen físico")
     if usar_modo_urgencias and st.session_state.get(f"{prefix}_examen") == EXAMEN_DEFAULT:
@@ -425,7 +441,7 @@ REVISIÓN POR SISTEMAS:
 {revision}
 
 SIGNOS VITALES:
-TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C{f" PB: {pb} cm" if mostrar_pb else ""}
+TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C{f" PB: {pb} cm" if mostrar_pb else ""}
 
 ANTROPOMETRÍA:
 PESO: {peso} kg TALLA: {talla} cm"""
@@ -463,7 +479,7 @@ PLAN:
         secciones.extend(
             [
                 ("REVISIÓN POR SISTEMAS", revision),
-                ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C" + (f" PB: {pb} cm" if mostrar_pb else "")),
+                ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C" + (f" PB: {pb} cm" if mostrar_pb else "")),
                 ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm" + (f" PC: {pc} cm" if es_pediatrica else "")),
                 ("EXAMEN FÍSICO", examen),
                 ("ANÁLISIS", analisis),

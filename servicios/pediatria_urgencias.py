@@ -768,6 +768,7 @@ FORM_DEFAULTS = {
     "fc": 0.0,
     "fr": 0.0,
     "sat": 0.0,
+    "glucometria": 0.0,
     "temp": 0.0,
     "pb": 0.0,
     "peso": 0.0,
@@ -2690,21 +2691,35 @@ def render():
 
     st.subheader("Signos vitales")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
 
     with col1:
         ta = st.text_input("TA (mmHg)", key="ta")
-        fc = st.number_input("FC (lpm)", min_value=0.0, key="fc")
-        fr = st.number_input("FR (rpm)", min_value=0.0, key="fr")
-
     with col2:
+        fc = st.number_input("FC (lpm)", min_value=0.0, key="fc")
+    with col3:
         sat = st.number_input("SpO2 (%)", min_value=0.0, key="sat")
+
+    col4, col5, col6 = st.columns(3)
+    with col4:
+        fr = st.number_input("FR (rpm)", min_value=0.0, key="fr")
+    with col5:
+        glucometria = st.number_input("Glucometría (mg/dl)", min_value=0.0, key="glucometria")
+    with col6:
         temp = st.number_input("Temperatura (°C)", min_value=0.0, key="temp")
+
+    col7, col8 = st.columns(2)
+    with col7:
+        peso = st.number_input("Peso (kg)", min_value=0.0, key="peso")
+    with col8:
+        talla = st.number_input("Talla (cm)", min_value=0.0, key="talla")
+
+    col9, col10 = st.columns(2)
+    with col9:
+        pc = st.number_input("Perímetro cefálico (cm)", min_value=0.0, key="pc")
+    with col10:
         pb = st.number_input("PB (cm)", min_value=0.0, key="pb")
 
-    peso = st.number_input("Peso (kg)", min_value=0.0, key="peso")
-    talla = st.number_input("Talla (cm)", min_value=0.0, key="talla")
-    pc = st.number_input("Perímetro cefálico (cm)", min_value=0.0, key="pc")
     scq_pct = st.number_input("Superficie corporal quemada (%)", min_value=0.0, max_value=100.0, key="scq_pct")
 
     if fecha_nacimiento and peso > 0 and talla > 0:
@@ -2946,7 +2961,7 @@ NEURODESARROLLO:
 {neuro_editable}
 
 SIGNOS VITALES:
-TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C PB: {pb} cm
+TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C PB: {pb} cm
 
 ANTROPOMETRÍA:
 PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm
@@ -2992,7 +3007,7 @@ PLAN:
             ("REVISIÓN POR SISTEMAS", revision),
             ("ANTECEDENTES", antecedentes),
             ("NEURODESARROLLO", neuro_editable),
-            ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm FR: {fr} rpm SpO2: {sat}% T: {temp} °C PB: {pb} cm"),
+            ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C PB: {pb} cm"),
             ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm\nP/E Z: {z_pe}\nT/E Z: {z_te}\nP/T Z: {z_pt}\nIMC/E Z: {z_imc}\nPC/E Z: {z_pc}"),
             ("EXAMEN FÍSICO", examen),
             ("LABORATORIOS", paraclinicos_final),

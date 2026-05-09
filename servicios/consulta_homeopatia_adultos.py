@@ -150,6 +150,7 @@ def render():
         f"{prefix}_fc": 0.0,
         f"{prefix}_fr": 0.0,
         f"{prefix}_sat": 0.0,
+        f"{prefix}_glucometria": 0.0,
         f"{prefix}_temp": 0.0,
         f"{prefix}_peso": 0.0,
         f"{prefix}_talla": 0.0,
@@ -246,22 +247,29 @@ def render():
     sintomas_mentales = st.text_area("Síntomas mentales", key=f"{prefix}_sintomas_mentales", height=220)
 
     st.subheader("Examen físico")
-    col_sv1, col_sv2 = st.columns(2)
+    col_sv1, col_sv2, col_sv3 = st.columns(3)
     with col_sv1:
         ta = st.text_input("TA (mmHg)", key=f"{prefix}_ta")
-        fc = st.number_input("FC (lpm)", min_value=0.0, key=f"{prefix}_fc")
-        fr = st.number_input("FR (rpm)", min_value=0.0, key=f"{prefix}_fr")
     with col_sv2:
+        fc = st.number_input("FC (lpm)", min_value=0.0, key=f"{prefix}_fc")
+    with col_sv3:
         sat = st.number_input("SpO2 (%)", min_value=0.0, key=f"{prefix}_sat")
+
+    col_sv4, col_sv5, col_sv6 = st.columns(3)
+    with col_sv4:
+        fr = st.number_input("FR (rpm)", min_value=0.0, key=f"{prefix}_fr")
+    with col_sv5:
+        glucometria = st.number_input("Glucometría (mg/dl)", min_value=0.0, key=f"{prefix}_glucometria")
+    with col_sv6:
         temp = st.number_input("Temperatura (°C)", min_value=0.0, key=f"{prefix}_temp")
 
-    col_ant1, col_ant2, col_ant3 = st.columns(3)
+    col_ant1, col_ant2 = st.columns(2)
     with col_ant1:
         peso = st.number_input("Peso (kg)", min_value=0.0, key=f"{prefix}_peso")
     with col_ant2:
         talla = st.number_input("Talla (cm)", min_value=0.0, key=f"{prefix}_talla")
-    with col_ant3:
-        imc_manual = st.text_input("IMC", key=f"{prefix}_imc_manual")
+
+    imc_manual = st.text_input("IMC", key=f"{prefix}_imc_manual")
 
     examen = st.text_area("Examen físico", key=f"{prefix}_examen", height=220)
     signos_positivos = st.text_area("Signos positivos", key=f"{prefix}_signos_positivos", height=120)
@@ -334,7 +342,7 @@ SÍNTOMAS MENTALES:
 {sintomas_mentales}
 
 EXAMEN FÍSICO:
-TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm T {temp} °C
+TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm GLUCOMETRÍA {glucometria} mg/dl T {temp} °C
 {antropometria}
 {examen}
 
@@ -372,7 +380,7 @@ ANÁLISIS Y TRATAMIENTO:
             ("SÍNTOMAS MENTALES", sintomas_mentales),
             (
                 "EXAMEN FÍSICO",
-                f"TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm T {temp} °C\n{antropometria}\n{examen}",
+                f"TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm GLUCOMETRÍA {glucometria} mg/dl T {temp} °C\n{antropometria}\n{examen}",
             ),
             ("SIGNOS POSITIVOS", signos_positivos),
             ("DIAGNÓSTICOS MÉDICOS", diagnosticos),

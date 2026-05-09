@@ -60,10 +60,21 @@ Se recibe recién nacido con adecuado esfuerzo respiratorio y tono, se coloca ba
     # =========================
     st.subheader("Signos vitales")
 
-    fc = st.number_input("FC")
-    fr = st.number_input("FR")
-    temp = st.number_input("Temperatura")
-    sat = st.number_input("Sat O2")
+    col_sv1, col_sv2, col_sv3 = st.columns(3)
+    with col_sv1:
+        ta = st.text_input("TA (mmHg)")
+    with col_sv2:
+        fc = st.number_input("FC (lpm)")
+    with col_sv3:
+        sat = st.number_input("SpO2 (%)")
+
+    col_sv4, col_sv5, col_sv6 = st.columns(3)
+    with col_sv4:
+        fr = st.number_input("FR (rpm)")
+    with col_sv5:
+        glucometria = st.number_input("Glucometría (mg/dl)")
+    with col_sv6:
+        temp = st.number_input("Temperatura (°C)")
 
     # =========================
     # GENERAR HISTORIA 🔥
@@ -90,8 +101,10 @@ EXAMEN FÍSICO:
 {examen}
 
 SIGNOS VITALES:
+TA: {ta} mmHg
 FC: {fc} lpm
 FR: {fr} rpm
+GLUCOMETRÍA: {glucometria} mg/dl
 TEMP: {temp} °C
 SAT O2: {sat}%
 """
