@@ -233,7 +233,7 @@ def render_consulta_externa(
 
     _init_state(defaults)
 
-    st.header(f"📌 {titulo}")
+    st.header(titulo)
 
     modalidad_consulta = modalidad_consulta_forzada
     if modalidad_consulta_forzada is not None:

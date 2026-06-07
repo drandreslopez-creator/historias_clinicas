@@ -222,7 +222,7 @@ def render():
 
     _init_state(defaults)
 
-    st.header(f"📌 {titulo}")
+    st.header(titulo)
     st.info(f"Modalidad de la consulta: {modalidad}")
 
     col1, col2 = st.columns(2)

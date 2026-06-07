@@ -3,7 +3,7 @@ from datetime import date
 
 def render():
 
-    st.header("👶 HISTORIA CLÍNICA - ADAPTACIÓN NEONATAL")
+    st.header("HISTORIA CLÍNICA - ADAPTACIÓN NEONATAL")
 
     # =========================
     # DATOS DEL RECIÉN NACIDO

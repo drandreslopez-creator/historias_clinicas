@@ -244,7 +244,7 @@ def render():
 
     _init_state(defaults)
 
-    st.header(f"📌 {TITULO}")
+    st.header(TITULO)
 
     modalidad = st.selectbox(
         "Modalidad de la consulta",

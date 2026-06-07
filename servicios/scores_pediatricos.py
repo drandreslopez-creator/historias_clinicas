@@ -414,7 +414,7 @@ def _render_wood_downes():
 
 
 def _render_tal():
-    st.subheader("TAL")
+    st.subheader("TAL (Test de Asma en Lactantes)")
     st.caption("Escala clínica orientativa para bronquiolitis / obstrucción.")
     total = sum(_radio_score(item["label"], item["options"], key=f"tal_{k}") for k, item in TAL_ITEMS.items())
     interpretacion = _interpretar_tal(total)
@@ -434,7 +434,7 @@ def _render_deshidratacion():
 
 
 def _render_tep():
-    st.subheader("Triángulo de Evaluación Pediátrica (TEP)")
+    st.subheader("TEP (Triángulo de Evaluación Pediátrica)")
     st.caption("Evaluación visual rápida: apariencia, trabajo respiratorio y circulación cutánea.")
     apariencia = _radio_score("Apariencia", TEP_OPTIONS, key="tep_apariencia")
     respiratorio = _radio_score("Trabajo respiratorio", TEP_OPTIONS, key="tep_respiratorio")
@@ -446,7 +446,7 @@ def _render_tep():
 
 
 def _render_pews():
-    st.subheader("PEWS")
+    st.subheader("PEWS (Pediatric Early Warning Score)")
     st.caption("Versión práctica por comportamiento, cardiovascular y respiratorio.")
     conducta = _radio_score("Comportamiento", PEWS_BEHAVIOR, key="pews_behavior")
     cardio = _radio_score("Cardiovascular", PEWS_CARDIO, key="pews_cardio")
@@ -459,7 +459,7 @@ def _render_pews():
 
 
 def render():
-    st.header("📏 Scores pediátricos")
+    st.header("Scores pediátricos")
     st.caption("Módulo independiente de las historias clínicas para cálculos rápidos.")
 
     score = st.selectbox(
@@ -470,10 +470,10 @@ def render():
             "Pediatric Trauma Score",
             "Westley",
             "Wood-Downes-Ferrés",
-            "TAL",
+            "TAL (Test de Asma en Lactantes)",
             "Deshidratación clínica",
-            "Triángulo de Evaluación Pediátrica (TEP)",
-            "PEWS",
+            "TEP (Triángulo de Evaluación Pediátrica)",
+            "PEWS (Pediatric Early Warning Score)",
         ],
         key="score_pediatrico_selector",
     )
@@ -488,13 +488,13 @@ def render():
         _render_westley()
     elif score == "Wood-Downes-Ferrés":
         _render_wood_downes()
-    elif score == "TAL":
+    elif score == "TAL (Test de Asma en Lactantes)":
         _render_tal()
     elif score == "Deshidratación clínica":
         _render_deshidratacion()
-    elif score == "Triángulo de Evaluación Pediátrica (TEP)":
+    elif score == "TEP (Triángulo de Evaluación Pediátrica)":
         _render_tep()
-    elif score == "PEWS":
+    elif score == "PEWS (Pediatric Early Warning Score)":
         _render_pews()
 
     st.caption("PRISM no está incluida por ahora porque requiere muchas variables fisiológicas y de laboratorio tipo UCI; prefiero dejarla bien hecha en un siguiente paso.")

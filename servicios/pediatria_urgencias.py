@@ -2860,7 +2860,7 @@ def render():
         "HISTORIA CLINICA DE INGRESO A URGENCIAS PEDIATRICAS"
     )
 
-    st.header(f"📌 {titulo_historia}")
+    st.header(titulo_historia)
 
     col1, col2 = st.columns(2)
 
@@ -3008,7 +3008,7 @@ def render():
         z_pt = zscore_peso_talla(peso_num, talla_num, sexo_oms, edad_meses)
         z_pc = zscore_pc_edad(pc_num, edad_meses, sexo_oms) if pc_num and pc_num > 0 else None
 
-        st.subheader("OMS Automático 🔥")
+        st.subheader("OMS Automático")
         st.write(f"P/E Z: {z_pe}")
         st.write(f"T/E Z: {z_te}")
         st.write(f"P/T Z: {z_pt}")
