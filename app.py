@@ -21,7 +21,7 @@ from servicios import plantillas_genericas
 
 PASSWORD_APP = "8041003"
 
-st.set_page_config(page_title="Historias Clínicas", page_icon="🩺", layout="wide")
+st.set_page_config(page_title="Medinexus", layout="wide")
 components.html(
     """
     <script>
@@ -46,7 +46,8 @@ if "app_autenticada" not in st.session_state:
     st.session_state["app_autenticada"] = False
 
 if not st.session_state["app_autenticada"]:
-    st.title("🩺 FORMATO DE HISTORIA CLÍNICA DEL DR. ANDRÉS LÓPEZ RUIZ")
+    st.title("Medinexus")
+    st.caption("Plataforma de documentación clínica")
     st.subheader("Acceso")
     with st.form("login_form"):
         password_input = st.text_input("Contraseña", type="password")
@@ -61,7 +62,8 @@ if not st.session_state["app_autenticada"]:
 
     st.stop()
 
-st.title("🩺 FORMATO DE HISTORIA CLÍNICA DEL DR. ANDRÉS LÓPEZ RUIZ")
+st.title("Medinexus")
+st.caption("Plataforma de documentación clínica")
 
 col_titulo, col_drive = st.columns([6, 1.8])
 with col_drive:
