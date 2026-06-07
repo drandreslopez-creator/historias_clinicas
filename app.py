@@ -69,7 +69,7 @@ col_titulo, col_drive = st.columns([6, 1.8])
 with col_drive:
     if google_oauth_configurado():
         usuario_drive = obtener_google_drive_usuario()
-        etiqueta_drive = "🟢 Drive" if google_drive_conectado() else "⚪ Drive"
+        etiqueta_drive = "Drive"
         with st.popover(etiqueta_drive, use_container_width=True):
             if google_drive_conectado():
                 correo = usuario_drive.get("email") if usuario_drive else ""
@@ -84,7 +84,7 @@ with col_drive:
             if st.session_state.get("google_drive_oauth_notice"):
                 st.caption(st.session_state["google_drive_oauth_notice"])
     else:
-        with st.popover("⚪ Drive", use_container_width=True):
+        with st.popover("Drive", use_container_width=True):
             st.caption("OAuth de Google Drive no configurado.")
 
 area_servicio = st.selectbox(
