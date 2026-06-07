@@ -789,6 +789,22 @@ FORM_DEFAULTS = {
     "imagenes_texto": "",
     "imagenes_auto": "",
     "imagenes_pdf_sig": "",
+    "codigo_trauma_activar": False,
+    "codigo_trauma_procedencia": "",
+    "codigo_trauma_tiempo": "",
+    "codigo_trauma_mecanismo": "",
+    "codigo_trauma_lesiones": "",
+    "codigo_trauma_fast": "NO REALIZADO",
+    "codigo_trauma_lactato": "",
+    "codigo_trauma_via_aerea": False,
+    "codigo_trauma_hemodinamica": False,
+    "codigo_trauma_penetrante": False,
+    "codigo_trauma_pelvis_amputacion": False,
+    "codigo_trauma_gcs": "",
+    "codigo_trauma_nivel_final": "II",
+    "codigo_trauma_nivel_sugerido_prev": "",
+    "codigo_trauma_especialidades": "",
+    "codigo_trauma_especialidades_auto_prev": "",
 }
 
 EQUIVALENCIAS_BUSQUEDA = {
@@ -1972,6 +1988,192 @@ def render_informe_html(titulo, secciones, texto_copiar):
     components.html(html, height=1200, scrolling=True)
 
 
+def render_texto_copiable(titulo, texto, boton="Copiar texto", height=320):
+    html = f"""
+    <div style="border:1px solid rgba(15,23,42,.12); border-radius:12px; padding:14px; background:#f8fafc; font-family:Arial,sans-serif;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:12px;">
+            <div style="font-weight:700; color:#0f172a;">{escape(titulo)}</div>
+            <button
+                onclick='(async () => {{
+                    try {{
+                        await navigator.clipboard.writeText({json.dumps(texto)});
+                        this.textContent = "Copiado";
+                        setTimeout(() => this.textContent = {json.dumps(boton)}, 1500);
+                    }} catch (err) {{
+                        this.textContent = "No se pudo copiar";
+                        setTimeout(() => this.textContent = {json.dumps(boton)}, 1500);
+                    }}
+                }})()'
+                style="background:#2b6cb0; color:white; border:none; border-radius:8px; padding:8px 12px; cursor:pointer; font-size:14px;"
+            >
+                {escape(boton)}
+            </button>
+        </div>
+        <pre style="margin:0; white-space:pre-wrap; font-family:Arial,sans-serif; font-size:14px; line-height:1.45; color:#111827;">{escape(texto)}</pre>
+    </div>
+    """
+    components.html(html, height=height, scrolling=True)
+
+
+def construir_edad_genero_codigo_trauma(fecha_nacimiento, sexo):
+    if not fecha_nacimiento:
+        edad_texto = "EDAD NO REGISTRADA"
+    else:
+        años, meses, dias = calcular_edad(fecha_nacimiento)
+        if años > 0:
+            edad_texto = f"{años} AÑOS"
+        elif meses > 0:
+            edad_texto = f"{meses} MESES"
+        else:
+            edad_texto = f"{dias} DÍAS"
+
+    sexo_txt = "SEXO NO REGISTRADO"
+    if sexo == "Masculino":
+        sexo_txt = "MASCULINO"
+    elif sexo == "Femenino":
+        sexo_txt = "FEMENINO"
+
+    return f"{edad_texto} {sexo_txt}"
+
+
+def sugerir_nivel_codigo_trauma(
+    mecanismo,
+    lesiones,
+    fast_resultado,
+    lactato,
+    compromiso_via_aerea,
+    compromiso_hemodinamico,
+    trauma_penetrante_central,
+    pelvis_amputacion,
+    gcs,
+):
+    texto = normalizar_texto(f"{mecanismo} {lesiones}")
+    lactato_num = float_or_none(lactato)
+    gcs_num = int(float(gcs)) if str(gcs).strip().replace(".", "", 1).isdigit() else None
+    fast_positivo = "positivo" in normalizar_texto(fast_resultado)
+
+    criterios_nivel_i = [
+        compromiso_via_aerea,
+        compromiso_hemodinamico,
+        trauma_penetrante_central,
+        pelvis_amputacion,
+        fast_positivo,
+        gcs_num is not None and gcs_num <= 13,
+        lactato_num is not None and lactato_num >= 4,
+        any(
+            termino in texto
+            for termino in [
+                "choque",
+                "shock",
+                "paro",
+                "amputacion",
+                "pelvis inestable",
+                "trauma penetrante",
+                "herida por arma de fuego",
+                "hemoneumotorax",
+                "hemotorax",
+                "neumotorax a tension",
+            ]
+        ),
+    ]
+    if any(criterios_nivel_i):
+        return "I"
+
+    criterios_nivel_ii = [
+        any(
+            termino in texto
+            for termino in [
+                "accidente de transito",
+                "motocicleta",
+                "atropell",
+                "volcamiento",
+                "caida",
+                "tce",
+                "trauma craneoencefalico",
+                "fractura",
+                "trauma toracico",
+                "trauma abdominal",
+                "trauma raquimedular",
+                "politrauma",
+            ]
+        ),
+        lactato_num is not None and lactato_num >= 2,
+        gcs_num is not None and 14 <= gcs_num <= 15,
+    ]
+    if any(criterios_nivel_ii):
+        return "II"
+
+    return "III"
+
+
+def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compromiso_via_aerea, compromiso_hemodinamico):
+    texto = normalizar_texto(lesiones)
+    especialidades = []
+
+    def agregar(nombre):
+        nombre = nombre.upper()
+        if nombre not in especialidades:
+            especialidades.append(nombre)
+
+    if nivel in {"I", "II"}:
+        agregar("CIRUGÍA GENERAL")
+        agregar("ORTOPEDIA")
+        agregar("IMÁGENES / RADIOLOGÍA")
+
+    if nivel == "I":
+        agregar("ANESTESIA")
+        agregar("LABORATORIO")
+
+    if compromiso_hemodinamico:
+        agregar("BANCO DE SANGRE")
+
+    if compromiso_via_aerea:
+        agregar("ANESTESIA")
+
+    if "tce" in texto or "craneo" in texto or "neuro" in texto:
+        agregar("NEUROCIRUGÍA")
+
+    if "cara" in texto or "maxil" in texto or "facial" in texto:
+        agregar("CIRUGÍA MAXILOFACIAL")
+
+    if "torac" in texto or "pleura" in normalizar_texto(fast_resultado):
+        agregar("CIRUGÍA GENERAL")
+
+    if "abdomen" in texto or "abdominal" in texto or "positivo para abdomen" in normalizar_texto(fast_resultado):
+        agregar("CIRUGÍA GENERAL")
+
+    if "pelvis" in texto or "fractura" in texto or "extremidad" in texto or "femur" in texto:
+        agregar("ORTOPEDIA")
+
+    if nivel == "I":
+        agregar("UCI / UCIP")
+
+    return ", ".join(especialidades)
+
+
+def construir_texto_codigo_trauma(
+    nivel,
+    procedencia,
+    edad_genero,
+    tiempo_evolucion,
+    mecanismo,
+    lesiones,
+    fast_resultado,
+    lactato,
+    especialidades,
+):
+    return f"""ACTIVACION CODIGO TRAUMA
+NIVEL: {nivel}
+1. PROCEDENCIA: {procedencia}
+2. EDAD Y GENERO: {edad_genero}
+3. TIEMPO DE EVOLUCIÓN: {tiempo_evolucion}
+4. MECANISMO DE LESIÓN: {mecanismo}
+5. SUPUESTAS LESIONES: {lesiones}
+6. FAST: {fast_resultado}
+7. LACTATO: {lactato}
+8. ESPECIALIDADES / APOYO: {especialidades}"""
+
+
 def formatear_numero_clinico(valor, decimales=1):
     try:
         numero = round(float(valor), decimales)
@@ -2933,6 +3135,170 @@ def render():
         key="plan",
         height=200
     )
+
+    st.subheader("Código trauma")
+    st.caption("Opcional. Este bloque no se incorpora a la historia clínica; solo sirve para copiar y reportar al grupo.")
+    activar_codigo_trauma = st.checkbox(
+        "Activar código trauma",
+        key="codigo_trauma_activar"
+    )
+
+    texto_codigo_trauma = ""
+    if activar_codigo_trauma:
+        edad_genero_codigo = construir_edad_genero_codigo_trauma(fecha_nacimiento, sexo)
+
+        if not st.session_state.get("codigo_trauma_procedencia") and proveniente:
+            st.session_state["codigo_trauma_procedencia"] = proveniente
+
+        col_ct_1, col_ct_2 = st.columns(2)
+        with col_ct_1:
+            procedencia_trauma = st.text_input(
+                "Procedencia para código trauma",
+                key="codigo_trauma_procedencia"
+            )
+        with col_ct_2:
+            tiempo_codigo_trauma = st.text_input(
+                "Tiempo de evolución",
+                key="codigo_trauma_tiempo",
+                placeholder="Ej. 30 MIN / INDETERMINADO"
+            )
+
+        mecanismo_codigo_trauma = st.text_area(
+            "Mecanismo de lesión",
+            key="codigo_trauma_mecanismo",
+            height=90
+        )
+        lesiones_codigo_trauma = st.text_area(
+            "Supuestas lesiones",
+            key="codigo_trauma_lesiones",
+            height=110
+        )
+
+        col_ct_3, col_ct_4, col_ct_5 = st.columns(3)
+        with col_ct_3:
+            fast_codigo_trauma = st.selectbox(
+                "FAST",
+                [
+                    "NO REALIZADO",
+                    "NEGATIVO",
+                    "POSITIVO PARA ABDOMEN",
+                    "POSITIVO PARA PLEURA DERECHA",
+                    "POSITIVO PARA PLEURA IZQUIERDA",
+                    "POSITIVO PARA ABDOMEN Y PLEURA DERECHA",
+                    "POSITIVO PARA ABDOMEN Y PLEURA IZQUIERDA",
+                ],
+                key="codigo_trauma_fast"
+            )
+        with col_ct_4:
+            lactato_codigo_trauma = st.text_input(
+                "Lactato",
+                key="codigo_trauma_lactato",
+                placeholder="Ej. 2.1"
+            )
+        with col_ct_5:
+            gcs_codigo_trauma = st.text_input(
+                "GCS",
+                key="codigo_trauma_gcs",
+                placeholder="Ej. 15"
+            )
+
+        col_ct_6, col_ct_7 = st.columns(2)
+        with col_ct_6:
+            compromiso_via_aerea = st.checkbox(
+                "Compromiso de vía aérea / ventilación",
+                key="codigo_trauma_via_aerea"
+            )
+            trauma_penetrante_central = st.checkbox(
+                "Trauma penetrante central",
+                key="codigo_trauma_penetrante"
+            )
+        with col_ct_7:
+            compromiso_hemodinamico = st.checkbox(
+                "Compromiso hemodinámico / choque",
+                key="codigo_trauma_hemodinamica"
+            )
+            pelvis_amputacion = st.checkbox(
+                "Pelvis inestable / amputación / lesión devastadora",
+                key="codigo_trauma_pelvis_amputacion"
+            )
+
+        nivel_sugerido_codigo_trauma = sugerir_nivel_codigo_trauma(
+            mecanismo_codigo_trauma,
+            lesiones_codigo_trauma,
+            fast_codigo_trauma,
+            lactato_codigo_trauma,
+            compromiso_via_aerea,
+            compromiso_hemodinamico,
+            trauma_penetrante_central,
+            pelvis_amputacion,
+            gcs_codigo_trauma,
+        )
+
+        nivel_sugerido_previo = st.session_state.get("codigo_trauma_nivel_sugerido_prev", "")
+        nivel_final_previo = st.session_state.get("codigo_trauma_nivel_final", "")
+        if nivel_sugerido_previo != nivel_sugerido_codigo_trauma:
+            if not nivel_final_previo or nivel_final_previo == nivel_sugerido_previo:
+                st.session_state["codigo_trauma_nivel_final"] = nivel_sugerido_codigo_trauma
+            st.session_state["codigo_trauma_nivel_sugerido_prev"] = nivel_sugerido_codigo_trauma
+
+        especialidades_sugeridas = sugerir_especialidades_codigo_trauma(
+            nivel_sugerido_codigo_trauma,
+            lesiones_codigo_trauma,
+            fast_codigo_trauma,
+            compromiso_via_aerea,
+            compromiso_hemodinamico,
+        )
+
+        especialidades_previas_auto = st.session_state.get("codigo_trauma_especialidades_auto_prev", "")
+        especialidades_actuales = st.session_state.get("codigo_trauma_especialidades", "")
+        if especialidades_sugeridas != especialidades_previas_auto:
+            if not especialidades_actuales or especialidades_actuales == especialidades_previas_auto:
+                st.session_state["codigo_trauma_especialidades"] = especialidades_sugeridas
+            st.session_state["codigo_trauma_especialidades_auto_prev"] = especialidades_sugeridas
+
+        st.info(
+            f"Nivel sugerido: {nivel_sugerido_codigo_trauma}. "
+            "Es orientativo y debes ajustarlo al protocolo institucional."
+        )
+
+        col_ct_8, col_ct_9 = st.columns(2)
+        with col_ct_8:
+            nivel_final_codigo_trauma = st.selectbox(
+                "Nivel final a reportar",
+                ["I", "II", "III"],
+                key="codigo_trauma_nivel_final"
+            )
+        with col_ct_9:
+            st.text_input(
+                "Edad y género",
+                value=edad_genero_codigo,
+                disabled=True
+            )
+
+        especialidades_codigo_trauma = st.text_area(
+            "Especialidades / apoyo a notificar",
+            key="codigo_trauma_especialidades",
+            height=90
+        )
+
+        texto_codigo_trauma = construir_texto_codigo_trauma(
+            nivel_final_codigo_trauma,
+            procedencia_trauma or "NO REGISTRADA",
+            edad_genero_codigo,
+            tiempo_codigo_trauma or "NO REGISTRADO",
+            mecanismo_codigo_trauma or "NO REGISTRADO",
+            lesiones_codigo_trauma or "NO REGISTRADAS",
+            fast_codigo_trauma,
+            lactato_codigo_trauma or "NO REPORTADO",
+            especialidades_codigo_trauma or "SIN ESPECIALIDADES DEFINIDAS",
+        )
+
+        render_texto_copiable(
+            "Vista previa del código trauma",
+            texto_codigo_trauma,
+            boton="Copiar código trauma",
+            height=360
+        )
 
     # =========================
     # GENERAR / LIMPIAR
