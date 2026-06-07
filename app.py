@@ -15,6 +15,7 @@ from servicios import neonatologia_adaptacion
 from servicios import consulta_homeopatia_pediatrica
 from servicios import consulta_homeopatia_adultos
 from servicios import consulta_pediatria_puericultura
+from servicios import scores_pediatricos
 from servicios import plantillas_genericas
 
 PASSWORD_APP = "8041003"
@@ -91,6 +92,7 @@ area_servicio = st.selectbox(
         "Pediatría Hospitalización",
         "Neonatología",
         "Telemedicina",
+        "Scores Pediátricos",
     ]
 )
 
@@ -147,6 +149,8 @@ elif area_servicio == "Telemedicina":
         ],
         key="tipo_historia_clinica_telemedicina",
     )
+elif area_servicio == "Scores Pediátricos":
+    st.caption("Módulo independiente de scores. No genera historia clínica.")
 
 # ENRUTADOR 🔥
 if area_servicio == "Pediatría Urgencias":
@@ -191,3 +195,5 @@ elif area_servicio == "Telemedicina":
         plantillas_genericas.render_telemedicina_homeopatia_pediatrica()
     elif tipo_telemedicina == "HISTORIA CLÍNICA DE TELEMEDICINA - HOMEOPATÍA ADULTOS":
         plantillas_genericas.render_telemedicina_homeopatia_adultos()
+elif area_servicio == "Scores Pediátricos":
+    scores_pediatricos.render()
