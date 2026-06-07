@@ -16,6 +16,7 @@ from servicios import consulta_homeopatia_pediatrica
 from servicios import consulta_homeopatia_adultos
 from servicios import consulta_pediatria_puericultura
 from servicios import scores_pediatricos
+from servicios import procedimientos_espirometria
 from servicios import plantillas_genericas
 
 PASSWORD_APP = "8041003"
@@ -92,6 +93,7 @@ area_servicio = st.selectbox(
         "Pediatría Hospitalización",
         "Neonatología",
         "Telemedicina",
+        "Procedimientos",
         "Scores Pediátricos",
     ]
 )
@@ -149,6 +151,14 @@ elif area_servicio == "Telemedicina":
         ],
         key="tipo_historia_clinica_telemedicina",
     )
+elif area_servicio == "Procedimientos":
+    st.selectbox(
+        "Subitem",
+        [
+            "Espirometría",
+        ],
+        key="tipo_procedimiento",
+    )
 elif area_servicio == "Scores Pediátricos":
     st.caption("Módulo independiente de scores. No genera historia clínica.")
 
@@ -195,5 +205,9 @@ elif area_servicio == "Telemedicina":
         plantillas_genericas.render_telemedicina_homeopatia_pediatrica()
     elif tipo_telemedicina == "HISTORIA CLÍNICA DE TELEMEDICINA - HOMEOPATÍA ADULTOS":
         plantillas_genericas.render_telemedicina_homeopatia_adultos()
+elif area_servicio == "Procedimientos":
+    tipo_procedimiento = st.session_state.get("tipo_procedimiento")
+    if tipo_procedimiento == "Espirometría":
+        procedimientos_espirometria.render()
 elif area_servicio == "Scores Pediátricos":
     scores_pediatricos.render()
