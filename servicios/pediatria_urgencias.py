@@ -2122,9 +2122,19 @@ def sugerir_nivel_codigo_trauma(
     return "III", ["SIN CRITERIOS MAYORES DE ACTIVACIÓN"]
 
 
-def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compromiso_via_aerea, es_pediatrico):
+def sugerir_especialidades_codigo_trauma(
+    nivel,
+    lesiones,
+    fast_resultado,
+    compromiso_via_aerea,
+    es_pediatrico,
+    trauma_craneoencefalico=False,
+    gcs=None,
+):
     texto = normalizar_texto(lesiones)
+    fast_texto = normalizar_texto(fast_resultado)
     especialidades = []
+    gcs_num = int(float(gcs)) if str(gcs).strip().replace(".", "", 1).isdigit() else None
 
     def agregar(nombre):
         nombre = nombre.upper()
@@ -2132,29 +2142,61 @@ def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compro
             especialidades.append(nombre)
 
     especialidad_quirurgica = "CIRUGÍA PEDIÁTRICA" if es_pediatrico else "CIRUGÍA GENERAL"
+    requiere_cirugia = any(
+        termino in texto
+        for termino in [
+            "abdomen",
+            "abdominal",
+            "torax",
+            "torac",
+            "politrauma",
+            "penetrante",
+            "hemoperitoneo",
+            "eviscer",
+            "periton",
+        ]
+    ) or "positivo para abdomen" in fast_texto or "pleura" in fast_texto
 
-    if nivel in {"I", "II"}:
+    requiere_ortopedia = any(
+        termino in texto
+        for termino in [
+            "fractura",
+            "pelvis",
+            "extremidad",
+            "femur",
+            "humero",
+            "radio",
+            "cubito",
+            "tibia",
+            "perone",
+            "clavicula",
+            "luxacion",
+        ]
+    )
+
+    if nivel in {"I", "II"} and requiere_cirugia:
         agregar(especialidad_quirurgica)
+
+    if nivel in {"I", "II"} and requiere_ortopedia:
         agregar("ORTOPEDIA")
+
+    if nivel in {"I", "II"} and (requiere_cirugia or requiere_ortopedia or trauma_craneoencefalico):
         agregar("IMÁGENES / RADIOLOGÍA")
 
-    if compromiso_via_aerea:
+    if compromiso_via_aerea or (nivel == "I" and requiere_cirugia):
         agregar("ANESTESIA")
 
-    if "tce" in texto or "craneo" in texto or "neuro" in texto:
+    if (
+        "tce" in texto
+        or "craneo" in texto
+        or "neuro" in texto
+        or trauma_craneoencefalico
+        or (gcs_num is not None and gcs_num <= 13)
+    ):
         agregar("NEUROCIRUGÍA")
 
     if "cara" in texto or "maxil" in texto or "facial" in texto:
         agregar("CIRUGÍA MAXILOFACIAL")
-
-    if "torac" in texto or "pleura" in normalizar_texto(fast_resultado):
-        agregar(especialidad_quirurgica)
-
-    if "abdomen" in texto or "abdominal" in texto or "positivo para abdomen" in normalizar_texto(fast_resultado):
-        agregar(especialidad_quirurgica)
-
-    if "pelvis" in texto or "fractura" in texto or "extremidad" in texto or "femur" in texto:
-        agregar("ORTOPEDIA")
 
     return ", ".join(especialidades)
 
@@ -3271,6 +3313,8 @@ def render():
             fast_codigo_trauma,
             compromiso_via_aerea,
             es_pediatrico,
+            trauma_craneoencefalico=trauma_craneoencefalico,
+            gcs=gcs_codigo_trauma,
         )
 
         especialidades_previas_auto = st.session_state.get("codigo_trauma_especialidades_auto_prev", "")
