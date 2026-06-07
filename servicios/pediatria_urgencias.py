@@ -2056,65 +2056,70 @@ def sugerir_nivel_codigo_trauma(
     lactato_num = float_or_none(lactato)
     gcs_num = int(float(gcs)) if str(gcs).strip().replace(".", "", 1).isdigit() else None
     fast_positivo = "positivo" in normalizar_texto(fast_resultado)
+    criterios_nivel_i = []
+    criterios_nivel_ii = []
 
-    criterios_nivel_i = [
-        compromiso_via_aerea,
-        compromiso_hemodinamico,
-        trauma_penetrante_central,
-        pelvis_amputacion,
-        fracturas_multiples and compromiso_hemodinamico,
-        trauma_toracoabdominal and fast_positivo,
-        trauma_craneoencefalico and gcs_num is not None and gcs_num <= 13,
-        fast_positivo,
-        gcs_num is not None and gcs_num <= 13,
-        lactato_num is not None and lactato_num >= 4,
-        any(
-            termino in texto
-            for termino in [
-                "choque",
-                "shock",
-                "paro",
-                "amputacion",
-                "pelvis inestable",
-                "trauma penetrante",
-                "herida por arma de fuego",
-                "hemoneumotorax",
-                "hemotorax",
-                "neumotorax a tension",
-            ]
-        ),
-    ]
-    if any(criterios_nivel_i):
-        return "I"
+    if compromiso_via_aerea:
+        criterios_nivel_i.append("COMPROMISO DE VÍA AÉREA / VENTILACIÓN")
+    if compromiso_hemodinamico:
+        criterios_nivel_i.append("COMPROMISO HEMODINÁMICO / CHOQUE")
+    if trauma_penetrante_central:
+        criterios_nivel_i.append("TRAUMA PENETRANTE CENTRAL")
+    if pelvis_amputacion:
+        criterios_nivel_i.append("PELVIS INESTABLE / AMPUTACIÓN / LESIÓN DEVASTADORA")
+    if fast_positivo:
+        criterios_nivel_i.append(f"FAST {fast_resultado}")
+    if gcs_num is not None and gcs_num <= 8:
+        criterios_nivel_i.append(f"GCS {gcs_num}")
+    if lactato_num is not None and lactato_num >= 4:
+        criterios_nivel_i.append(f"LACTATO {formatear_numero_clinico(lactato_num, 1)}")
+    if any(
+        termino in texto
+        for termino in [
+            "choque",
+            "shock",
+            "paro",
+            "amputacion",
+            "pelvis inestable",
+            "herida por arma de fuego",
+            "hemoneumotorax",
+            "hemotorax",
+            "neumotorax a tension",
+        ]
+    ):
+        criterios_nivel_i.append("LESIÓN MAYOR DESCRITA EN TEXTO")
 
-    criterios_nivel_ii = [
-        any(
-            termino in texto
-            for termino in [
-                "accidente de transito",
-                "motocicleta",
-                "atropell",
-                "volcamiento",
-                "caida",
-                "tce",
-                "trauma craneoencefalico",
-                "fractura",
-                "trauma toracico",
-                "trauma abdominal",
-                "trauma raquimedular",
-                "politrauma",
-            ]
-        ),
-        fracturas_multiples,
-        trauma_toracoabdominal,
-        trauma_craneoencefalico,
-        lactato_num is not None and lactato_num >= 2,
-        gcs_num is not None and 14 <= gcs_num <= 15,
-    ]
-    if any(criterios_nivel_ii):
-        return "II"
+    if criterios_nivel_i:
+        return "I", criterios_nivel_i
 
-    return "III"
+    mecanismo_mayor = any(
+        termino in texto
+        for termino in [
+            "accidente de transito",
+            "motocicleta",
+            "atropell",
+            "volcamiento",
+            "caida",
+            "politrauma",
+        ]
+    )
+    if mecanismo_mayor:
+        criterios_nivel_ii.append("MECANISMO DE ALTA ENERGÍA")
+    if fracturas_multiples:
+        criterios_nivel_ii.append("FRACTURAS MÚLTIPLES / HUESO LARGO")
+    if trauma_toracoabdominal:
+        criterios_nivel_ii.append("TRAUMA TORÁCICO / ABDOMINAL RELEVANTE")
+    if trauma_craneoencefalico:
+        criterios_nivel_ii.append("TCE CLÍNICAMENTE RELEVANTE")
+    if gcs_num is not None and 9 <= gcs_num <= 13:
+        criterios_nivel_ii.append(f"GCS {gcs_num}")
+    if lactato_num is not None and lactato_num >= 2:
+        criterios_nivel_ii.append(f"LACTATO {formatear_numero_clinico(lactato_num, 1)}")
+
+    if criterios_nivel_ii:
+        return "II", criterios_nivel_ii
+
+    return "III", ["SIN CRITERIOS MAYORES DE ACTIVACIÓN"]
 
 
 def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compromiso_via_aerea, es_pediatrico):
@@ -3242,7 +3247,7 @@ def render():
                 key="codigo_trauma_tce"
             )
 
-        nivel_sugerido_codigo_trauma = sugerir_nivel_codigo_trauma(
+        nivel_sugerido_codigo_trauma, criterios_codigo_trauma = sugerir_nivel_codigo_trauma(
             mecanismo_codigo_trauma,
             lesiones_codigo_trauma,
             fast_codigo_trauma,
@@ -3279,6 +3284,7 @@ def render():
             f"Nivel calculado automáticamente: {nivel_sugerido_codigo_trauma}. "
             "Se basa en los criterios marcados y en los datos clínicos registrados."
         )
+        st.caption("Criterios que activaron el nivel: " + "; ".join(criterios_codigo_trauma))
 
         col_ct_8, col_ct_9 = st.columns(2)
         with col_ct_8:
