@@ -800,8 +800,10 @@ FORM_DEFAULTS = {
     "codigo_trauma_hemodinamica": False,
     "codigo_trauma_penetrante": False,
     "codigo_trauma_pelvis_amputacion": False,
+    "codigo_trauma_fracturas_multiples": False,
+    "codigo_trauma_toracoabdominal": False,
+    "codigo_trauma_tce": False,
     "codigo_trauma_gcs": "",
-    "codigo_trauma_nivel_final": "II",
     "codigo_trauma_nivel_sugerido_prev": "",
     "codigo_trauma_especialidades": "",
     "codigo_trauma_especialidades_auto_prev": "",
@@ -2045,6 +2047,9 @@ def sugerir_nivel_codigo_trauma(
     compromiso_hemodinamico,
     trauma_penetrante_central,
     pelvis_amputacion,
+    fracturas_multiples,
+    trauma_toracoabdominal,
+    trauma_craneoencefalico,
     gcs,
 ):
     texto = normalizar_texto(f"{mecanismo} {lesiones}")
@@ -2057,6 +2062,9 @@ def sugerir_nivel_codigo_trauma(
         compromiso_hemodinamico,
         trauma_penetrante_central,
         pelvis_amputacion,
+        fracturas_multiples and compromiso_hemodinamico,
+        trauma_toracoabdominal and fast_positivo,
+        trauma_craneoencefalico and gcs_num is not None and gcs_num <= 13,
         fast_positivo,
         gcs_num is not None and gcs_num <= 13,
         lactato_num is not None and lactato_num >= 4,
@@ -2097,6 +2105,9 @@ def sugerir_nivel_codigo_trauma(
                 "politrauma",
             ]
         ),
+        fracturas_multiples,
+        trauma_toracoabdominal,
+        trauma_craneoencefalico,
         lactato_num is not None and lactato_num >= 2,
         gcs_num is not None and 14 <= gcs_num <= 15,
     ]
@@ -2106,7 +2117,7 @@ def sugerir_nivel_codigo_trauma(
     return "III"
 
 
-def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compromiso_via_aerea, compromiso_hemodinamico):
+def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compromiso_via_aerea, es_pediatrico):
     texto = normalizar_texto(lesiones)
     especialidades = []
 
@@ -2115,17 +2126,12 @@ def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compro
         if nombre not in especialidades:
             especialidades.append(nombre)
 
+    especialidad_quirurgica = "CIRUGÍA PEDIÁTRICA" if es_pediatrico else "CIRUGÍA GENERAL"
+
     if nivel in {"I", "II"}:
-        agregar("CIRUGÍA GENERAL")
+        agregar(especialidad_quirurgica)
         agregar("ORTOPEDIA")
         agregar("IMÁGENES / RADIOLOGÍA")
-
-    if nivel == "I":
-        agregar("ANESTESIA")
-        agregar("LABORATORIO")
-
-    if compromiso_hemodinamico:
-        agregar("BANCO DE SANGRE")
 
     if compromiso_via_aerea:
         agregar("ANESTESIA")
@@ -2137,16 +2143,13 @@ def sugerir_especialidades_codigo_trauma(nivel, lesiones, fast_resultado, compro
         agregar("CIRUGÍA MAXILOFACIAL")
 
     if "torac" in texto or "pleura" in normalizar_texto(fast_resultado):
-        agregar("CIRUGÍA GENERAL")
+        agregar(especialidad_quirurgica)
 
     if "abdomen" in texto or "abdominal" in texto or "positivo para abdomen" in normalizar_texto(fast_resultado):
-        agregar("CIRUGÍA GENERAL")
+        agregar(especialidad_quirurgica)
 
     if "pelvis" in texto or "fractura" in texto or "extremidad" in texto or "femur" in texto:
         agregar("ORTOPEDIA")
-
-    if nivel == "I":
-        agregar("UCI / UCIP")
 
     return ", ".join(especialidades)
 
@@ -3222,6 +3225,23 @@ def render():
                 key="codigo_trauma_pelvis_amputacion"
             )
 
+        col_ct_10, col_ct_11, col_ct_12 = st.columns(3)
+        with col_ct_10:
+            fracturas_multiples = st.checkbox(
+                "Fracturas múltiples / hueso largo",
+                key="codigo_trauma_fracturas_multiples"
+            )
+        with col_ct_11:
+            trauma_toracoabdominal = st.checkbox(
+                "Trauma torácico / abdominal relevante",
+                key="codigo_trauma_toracoabdominal"
+            )
+        with col_ct_12:
+            trauma_craneoencefalico = st.checkbox(
+                "TCE clínicamente relevante",
+                key="codigo_trauma_tce"
+            )
+
         nivel_sugerido_codigo_trauma = sugerir_nivel_codigo_trauma(
             mecanismo_codigo_trauma,
             lesiones_codigo_trauma,
@@ -3231,22 +3251,21 @@ def render():
             compromiso_hemodinamico,
             trauma_penetrante_central,
             pelvis_amputacion,
+            fracturas_multiples,
+            trauma_toracoabdominal,
+            trauma_craneoencefalico,
             gcs_codigo_trauma,
         )
 
-        nivel_sugerido_previo = st.session_state.get("codigo_trauma_nivel_sugerido_prev", "")
-        nivel_final_previo = st.session_state.get("codigo_trauma_nivel_final", "")
-        if nivel_sugerido_previo != nivel_sugerido_codigo_trauma:
-            if not nivel_final_previo or nivel_final_previo == nivel_sugerido_previo:
-                st.session_state["codigo_trauma_nivel_final"] = nivel_sugerido_codigo_trauma
-            st.session_state["codigo_trauma_nivel_sugerido_prev"] = nivel_sugerido_codigo_trauma
+        st.session_state["codigo_trauma_nivel_sugerido_prev"] = nivel_sugerido_codigo_trauma
+        es_pediatrico = bool(fecha_nacimiento and edad_en_meses(fecha_nacimiento) < 216)
 
         especialidades_sugeridas = sugerir_especialidades_codigo_trauma(
             nivel_sugerido_codigo_trauma,
             lesiones_codigo_trauma,
             fast_codigo_trauma,
             compromiso_via_aerea,
-            compromiso_hemodinamico,
+            es_pediatrico,
         )
 
         especialidades_previas_auto = st.session_state.get("codigo_trauma_especialidades_auto_prev", "")
@@ -3257,16 +3276,16 @@ def render():
             st.session_state["codigo_trauma_especialidades_auto_prev"] = especialidades_sugeridas
 
         st.info(
-            f"Nivel sugerido: {nivel_sugerido_codigo_trauma}. "
-            "Es orientativo y debes ajustarlo al protocolo institucional."
+            f"Nivel calculado automáticamente: {nivel_sugerido_codigo_trauma}. "
+            "Se basa en los criterios marcados y en los datos clínicos registrados."
         )
 
         col_ct_8, col_ct_9 = st.columns(2)
         with col_ct_8:
-            nivel_final_codigo_trauma = st.selectbox(
-                "Nivel final a reportar",
-                ["I", "II", "III"],
-                key="codigo_trauma_nivel_final"
+            st.text_input(
+                "Nivel calculado",
+                value=nivel_sugerido_codigo_trauma,
+                disabled=True
             )
         with col_ct_9:
             st.text_input(
@@ -3282,7 +3301,7 @@ def render():
         )
 
         texto_codigo_trauma = construir_texto_codigo_trauma(
-            nivel_final_codigo_trauma,
+            nivel_sugerido_codigo_trauma,
             procedencia_trauma or "NO REGISTRADA",
             edad_genero_codigo,
             tiempo_codigo_trauma or "NO REGISTRADO",
