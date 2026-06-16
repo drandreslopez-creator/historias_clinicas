@@ -1,9 +1,22 @@
 from pathlib import Path
+import importlib.util
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+
+UTILS_DIR = PROJECT_ROOT / "utils"
+if UTILS_DIR.exists() and "utils" not in sys.modules:
+    utils_spec = importlib.util.spec_from_file_location(
+        "utils",
+        UTILS_DIR / "__init__.py",
+        submodule_search_locations=[str(UTILS_DIR)],
+    )
+    if utils_spec and utils_spec.loader:
+        utils_module = importlib.util.module_from_spec(utils_spec)
+        sys.modules["utils"] = utils_module
+        utils_spec.loader.exec_module(utils_module)
 
 import streamlit as st
 import streamlit.components.v1 as components
