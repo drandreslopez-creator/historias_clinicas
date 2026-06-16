@@ -18,7 +18,7 @@ from pypdf import PdfReader
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, Inches
-from PIL import ImageOps
+from PIL import Image, ImageOps
 
 from core.calculos import calcular_edad, edad_en_meses
 from core.clasificacion import grupo_etario
@@ -1357,17 +1357,6 @@ def extraer_texto_ocr_de_imagenes(page):
 
     imagenes_principales.sort(key=lambda item: item[0], reverse=True)
 
-    def puntaje_texto_ocr(texto):
-        texto_upper = texto.upper()
-        claves = [
-            "HEMOGRAMA", "PROTEINA C REACTIVA", "PCR", "LEUCOCITOS",
-            "HEMOGLOBINA", "HEMATOCRITO", "PLAQUETAS", "GLUCOSA",
-            "CREATININA", "SODIO", "POTASIO", "CLORO", "CALCIO"
-        ]
-        puntaje = sum(4 for clave in claves if clave in texto_upper)
-        puntaje += min(len(texto_upper) // 250, 20)
-        return puntaje
-
     textos_vistos = set()
 
     for _, image_file in imagenes_principales[:3]:
@@ -1388,24 +1377,11 @@ def extraer_texto_ocr_de_imagenes(page):
             pass
 
         try:
-            pil_image = image_file.image.convert("L")
-            pil_image = ImageOps.autocontrast(pil_image)
+            pil_image = image_file.image
         except Exception:
             continue
 
-        variantes = []
-        for psm in ("6", "11", "4"):
-            try:
-                texto = ocr.image_to_string(
-                    pil_image,
-                    lang="spa+eng",
-                    config=f"--oem 3 --psm {psm}"
-                )
-            except Exception:
-                continue
-            texto = "\n".join(line.strip() for line in str(texto).splitlines() if line.strip())
-            if texto:
-                variantes.append(texto)
+        variantes = extraer_variantes_ocr_desde_pil(pil_image, ocr)
 
         if not variantes:
             continue
@@ -1416,6 +1392,92 @@ def extraer_texto_ocr_de_imagenes(page):
             continue
         textos_vistos.add(firma_texto)
         bloques.append(mejor_texto)
+
+    return "\n\n".join(bloques).strip()
+
+
+def puntaje_texto_ocr(texto):
+    texto_upper = texto.upper()
+    claves = [
+        "HEMOGRAMA", "PROTEINA C REACTIVA", "PCR", "LEUCOCITOS",
+        "HEMOGLOBINA", "HEMATOCRITO", "PLAQUETAS", "GLUCOSA",
+        "CREATININA", "SODIO", "POTASIO", "CLORO", "CALCIO",
+        "LINFOCITOS", "NEUTROFILOS", "MONOCITOS", "EOSINOFILOS",
+    ]
+    puntaje = sum(4 for clave in claves if clave in texto_upper)
+    puntaje += min(len(texto_upper) // 250, 20)
+    return puntaje
+
+
+def extraer_variantes_ocr_desde_pil(pil_image, ocr):
+    variantes = []
+    try:
+        base = pil_image.convert("L")
+    except Exception:
+        return variantes
+
+    candidatas = [
+        ImageOps.autocontrast(base),
+        ImageOps.autocontrast(base.point(lambda p: 255 if p > 170 else 0)),
+        ImageOps.autocontrast(base.resize((base.width * 2, base.height * 2))),
+    ]
+
+    for candidata in candidatas:
+        for psm in ("6", "11", "4"):
+            try:
+                texto = ocr.image_to_string(
+                    candidata,
+                    lang="spa+eng",
+                    config=f"--oem 3 --psm {psm}"
+                )
+            except Exception:
+                continue
+            texto = "\n".join(line.strip() for line in str(texto).splitlines() if line.strip())
+            if texto:
+                variantes.append(texto)
+    return variantes
+
+
+def extraer_texto_ocr_por_render(pdf_bytes):
+    ocr = cargar_ocr()
+    if ocr is None or isinstance(ocr, dict):
+        return ""
+
+    try:
+        import fitz
+    except Exception:
+        return ""
+
+    bloques = []
+    textos_vistos = set()
+
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception:
+        return ""
+
+    for page in doc:
+        try:
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+            pil_image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        except Exception:
+            continue
+
+        variantes = extraer_variantes_ocr_desde_pil(pil_image, ocr)
+        if not variantes:
+            continue
+
+        mejor_texto = max(variantes, key=puntaje_texto_ocr)
+        firma_texto = hashlib.md5(mejor_texto.encode("utf-8", errors="ignore")).hexdigest()
+        if firma_texto in textos_vistos:
+            continue
+        textos_vistos.add(firma_texto)
+        bloques.append(mejor_texto)
+
+    try:
+        doc.close()
+    except Exception:
+        pass
 
     return "\n\n".join(bloques).strip()
 
@@ -1441,6 +1503,9 @@ def extraer_texto_pdf(pdf_file):
         if paginas:
             return "\n".join(paginas)
         if tiene_imagenes:
+            texto_render = extraer_texto_ocr_por_render(pdf_bytes)
+            if texto_render:
+                return texto_render
             paginas_ocr = []
             for page in reader.pages:
                 texto_ocr = extraer_texto_ocr_de_imagenes(page)
@@ -2408,7 +2473,7 @@ def organizar_pdf_segun_tipo(texto, tipo):
     return formatear_resumen_paraclinico(texto)
 
 
-PARSER_PARACLINICOS_VERSION = "2026-06-16-v6"
+PARSER_PARACLINICOS_VERSION = "2026-06-16-v7"
 
 
 def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
