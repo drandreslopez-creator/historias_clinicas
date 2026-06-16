@@ -7,6 +7,7 @@ import streamlit as st
 from core.calculos import calcular_edad
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
 from servicios.consulta_externa_base import (
+    _float_or_none,
     _clear_state,
     _construir_diagnostico_cie10,
     _historia_path,
