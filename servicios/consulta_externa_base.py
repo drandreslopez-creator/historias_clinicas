@@ -30,6 +30,7 @@ from servicios.pediatria_urgencias import (
     extraer_destinatario_informacion,
     extraer_resumen_antecedentes_para_analisis,
     extraer_resumen_examen_para_analisis,
+    fusionar_analisis_editado_con_base_nueva,
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
     guardar_docx_exportado,
@@ -536,6 +537,24 @@ def render_consulta_externa(
     if st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
         if st.session_state.get(f"{prefix}_analisis") == st.session_state.get(f"{prefix}_analisis_base", ""):
             st.session_state[f"{prefix}_analisis"] = analisis_default
+        else:
+            merge_fp = hashlib.md5(
+                json.dumps(
+                    {
+                        "actual": st.session_state.get(f"{prefix}_analisis", ""),
+                        "base_anterior": st.session_state.get(f"{prefix}_analisis_base", ""),
+                        "base_nueva": analisis_default,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            st.session_state[f"{prefix}_analisis"] = fusionar_analisis_editado_con_base_nueva(
+                st.session_state.get(f"{prefix}_analisis", ""),
+                st.session_state.get(f"{prefix}_analisis_base", ""),
+                analisis_default,
+                merge_fp,
+            )
         st.session_state[f"{prefix}_analisis_base"] = analisis_default
 
     analisis = st.text_area("Análisis clínico", key=f"{prefix}_analisis", height=180)

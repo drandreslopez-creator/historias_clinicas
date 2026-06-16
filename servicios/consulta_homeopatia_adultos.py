@@ -19,6 +19,7 @@ from servicios.pediatria_urgencias import (
     extraer_destinatario_informacion,
     extraer_resumen_antecedentes_para_analisis,
     extraer_resumen_examen_para_analisis,
+    fusionar_analisis_editado_con_base_nueva,
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
     guardar_docx_exportado,
@@ -492,6 +493,24 @@ def render():
             "",
         ):
             st.session_state[f"{prefix}_analisis_homeopatico"] = analisis_homeopatico_default
+        else:
+            merge_fp = hashlib.md5(
+                json.dumps(
+                    {
+                        "actual": st.session_state.get(f"{prefix}_analisis_homeopatico", ""),
+                        "base_anterior": st.session_state.get(f"{prefix}_analisis_homeopatico_base", ""),
+                        "base_nueva": analisis_homeopatico_default,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            st.session_state[f"{prefix}_analisis_homeopatico"] = fusionar_analisis_editado_con_base_nueva(
+                st.session_state.get(f"{prefix}_analisis_homeopatico", ""),
+                st.session_state.get(f"{prefix}_analisis_homeopatico_base", ""),
+                analisis_homeopatico_default,
+                merge_fp,
+            )
         st.session_state[f"{prefix}_analisis_homeopatico_base"] = analisis_homeopatico_default
     analisis_homeopatico = st.text_area(
         "",

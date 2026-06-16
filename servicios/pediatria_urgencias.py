@@ -2736,8 +2736,8 @@ def construir_conducta_sugerida_analisis(enfermedad_actual, examen, paraclinicos
     if any(x in texto for x in ["DESHIDRAT", "EMESIS", "VOMIT", "DIARRE", "NO TOLERA LA VIA ORAL", "NO TOLERA LA VÍA ORAL"]):
         conducta.append("SE INDICA MANEJO INTRAHOSPITALARIO CON HIDRATACIÓN Y VIGILANCIA CLÍNICA SEGÚN EVOLUCIÓN")
 
-    if any(x in texto for x in ["SIBILAN", "ASMA", "BRONCO", "DIFICULTAD RESPIRATORIA", "TIRAJES"]):
-        conducta.append("SE INDICA MANEJO MÉDICO Y VIGILANCIA RESPIRATORIA SEGÚN RESPUESTA CLÍNICA")
+    if any(x in texto for x in ["SIBILAN", "BRONCOESPAS", "DIFICULTAD RESPIRATORIA", "TIRAJES", "HIPOXEMIA", "REQUERIMIENTO DE O2"]):
+        conducta.append("SE INDICA VIGILANCIA RESPIRATORIA Y REVALORACIÓN SEGÚN RESPUESTA CLÍNICA")
 
     if any(x in texto for x in ["PCR ELEVADA", "LEUCOCITOSIS", "NEUTROFILIA", "HIPONATREMIA", "HIPERPOTASEMIA", "HIPOXEMIA"]):
         conducta.append("SE CORRELACIONAN PARACLÍNICOS Y SE DEFINEN ESTUDIOS DE EXTENSIÓN SEGÚN HALLAZGOS")
@@ -3012,6 +3012,75 @@ def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucci
         return base_analisis
 
     return base_analisis
+
+
+def fusionar_analisis_editado_con_base_nueva(analisis_actual, base_anterior, base_nueva, fingerprint, instrucciones=None):
+    analisis_actual = str(analisis_actual or "").strip()
+    base_anterior = str(base_anterior or "").strip()
+    base_nueva = str(base_nueva or "").strip()
+
+    if not analisis_actual:
+        return base_nueva
+    if analisis_actual == base_anterior or not base_anterior:
+        return base_nueva
+    if analisis_actual == base_nueva:
+        return analisis_actual
+
+    if ia_analisis_configurada():
+        api_key = obtener_secret_app("openai_api_key")
+        model = obtener_secret_app("openai_model", "gpt-4o-mini")
+        cache_key = "analisis_merge_ia_cache"
+        cache = st.session_state.get(cache_key, {})
+        if cache.get("fingerprint") == fingerprint and cache.get("texto"):
+            return cache["texto"]
+
+        instrucciones = instrucciones or (
+            "Eres un asistente clínico que actualiza un análisis médico ya editado por un profesional. "
+            "Debes conservar al máximo el texto escrito manualmente por el médico, pero incorporar de forma coherente "
+            "los cambios nuevos del borrador actualizado. No inventes datos. No elimines aportes manuales útiles. "
+            "Redacta un solo párrafo en MAYÚSCULAS."
+        )
+        prompt = {
+            "analisis_editado_actual": analisis_actual,
+            "borrador_anterior": base_anterior,
+            "borrador_actualizado": base_nueva,
+        }
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "input": json.dumps(prompt, ensure_ascii=False),
+                    "instructions": instrucciones,
+                    "temperature": 0.1,
+                    "max_output_tokens": 600,
+                },
+                timeout=25,
+            )
+            response.raise_for_status()
+            texto = extraer_texto_respuesta_openai(response.json())
+            if texto:
+                cache = {"fingerprint": fingerprint, "texto": texto.strip()}
+                st.session_state[cache_key] = cache
+                return texto.strip()
+        except Exception:
+            pass
+
+    actual_norm = limpiar_fragmento_analisis(analisis_actual)
+    nuevas_oraciones = []
+    for fragmento in re.split(r"(?<=[.])\s+", base_nueva):
+        fragmento = fragmento.strip()
+        if not fragmento:
+            continue
+        if limpiar_fragmento_analisis(fragmento) not in actual_norm:
+            nuevas_oraciones.append(fragmento)
+    if nuevas_oraciones:
+        return f"{analisis_actual.rstrip()} {' '.join(nuevas_oraciones)}".strip()
+    return analisis_actual
 
 
 def contenido_seccion_html(texto, color):
@@ -4293,6 +4362,24 @@ def render():
     elif st.session_state.get("analisis_base") != analisis_default:
         if st.session_state.get("analisis") == st.session_state.get("analisis_base"):
             st.session_state["analisis"] = analisis_default
+        else:
+            merge_fp = hashlib.md5(
+                json.dumps(
+                    {
+                        "actual": st.session_state.get("analisis", ""),
+                        "base_anterior": st.session_state.get("analisis_base", ""),
+                        "base_nueva": analisis_default,
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                ).encode("utf-8")
+            ).hexdigest()
+            st.session_state["analisis"] = fusionar_analisis_editado_con_base_nueva(
+                st.session_state.get("analisis", ""),
+                st.session_state.get("analisis_base", ""),
+                analisis_default,
+                merge_fp,
+            )
         st.session_state["analisis_base"] = analisis_default
 
     analisis = st.text_area("Análisis clínico", key="analisis", height=200)
