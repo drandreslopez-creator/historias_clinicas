@@ -1326,8 +1326,8 @@ def construir_linea_medicamento(nombre, configuracion, peso):
 @st.cache_resource
 def cargar_ocr():
     try:
-        from rapidocr_onnxruntime import RapidOCR
-        return RapidOCR()
+        import pytesseract
+        return pytesseract
     except Exception as e:
         return {"_error": str(e)}
 
@@ -1374,23 +1374,18 @@ def extraer_texto_ocr_de_imagenes(page):
             pass
 
         try:
-            resultado, _ = ocr(image_file.data)
+            pil_image = image_file.image.convert("L")
+            texto = ocr.image_to_string(
+                pil_image,
+                lang="spa+eng",
+                config="--psm 6"
+            )
         except Exception:
             continue
 
-        if not resultado:
-            continue
-
-        lineas = sorted(
-            resultado,
-            key=lambda item: (
-                min(p[1] for p in item[0]),
-                min(p[0] for p in item[0]),
-            )
-        )
-        textos = [str(item[1]).strip() for item in lineas if str(item[1]).strip()]
-        if textos:
-            bloques.append("\n".join(textos))
+        texto = "\n".join(line.strip() for line in str(texto).splitlines() if line.strip())
+        if texto:
+            bloques.append(texto)
 
     return "\n\n".join(bloques).strip()
 
@@ -2258,7 +2253,7 @@ def organizar_pdf_segun_tipo(texto, tipo):
     return formatear_resumen_paraclinico(texto)
 
 
-PARSER_PARACLINICOS_VERSION = "2026-06-16-v3"
+PARSER_PARACLINICOS_VERSION = "2026-06-16-v4"
 
 
 def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
