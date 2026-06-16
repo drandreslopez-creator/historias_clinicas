@@ -22,9 +22,13 @@ from servicios.pediatria_urgencias import (
     BOGOTA_TZ,
     actualizar_texto_extraido,
     complementar_analisis_con_ia,
+    construir_conducta_final_analisis,
+    construir_conducta_sugerida_analisis,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
+    extraer_destinatario_informacion,
+    extraer_resumen_antecedentes_para_analisis,
     extraer_resumen_examen_para_analisis,
     eliminar_historia_guardada,
     generar_analisis_asistido_urgencias,
@@ -247,6 +251,7 @@ def render():
         f"{PREFIX}_imagenes_pdf_sig": "",
         f"{PREFIX}_analisis": ANALISIS_PRIMERA_VEZ_DEFAULT,
         f"{PREFIX}_analisis_base": "",
+        f"{PREFIX}_conducta_final_analisis": "PENDIENTE DEFINIR",
         f"{PREFIX}_diagnosticos": "",
         f"{PREFIX}_obs_dx": "",
         f"{PREFIX}_plan": PLAN_PUERICULTURA_DEFAULT,
@@ -428,8 +433,15 @@ def render():
 
     paraclinicos_texto = st.text_area("Laboratorios", key=f"{PREFIX}_paraclinicos_texto", height=160)
     imagenes_texto = st.text_area("Imágenes", key=f"{PREFIX}_imagenes_texto", height=120)
+    conducta_final_analisis = st.selectbox(
+        "Conducta final",
+        ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
+        key=f"{PREFIX}_conducta_final_analisis",
+    )
 
     grupo = grupo_etario(años) if fecha_nacimiento else ""
+    resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
+    destinatario_informacion = extraer_destinatario_informacion(informante)
     fc_num = _float_or_none(fc)
     fr_num = _float_or_none(fr)
     sat_num = _float_or_none(sat)
@@ -453,12 +465,24 @@ def render():
         grupo,
     )
     resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos_texto)
+    conducta_sugerida_analisis = construir_conducta_sugerida_analisis(
+        enfermedad_actual,
+        examen,
+        paraclinicos_texto,
+        resumen_signos_analisis,
+    )
+    conducta_final_texto = construir_conducta_final_analisis(
+        conducta_final_analisis,
+        conducta_sugerida_analisis,
+    )
     analisis_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
-        "",
+        resumen_antecedentes_analisis,
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,
+        conducta_final_texto,
+        destinatario_informacion,
     )
     contexto_analisis_ia = {
         "titulo": TITULO,
@@ -466,6 +490,10 @@ def render():
         "motivo_consulta": motivo,
         "enfermedad_actual": enfermedad_actual,
         "antecedentes": antecedentes,
+        "parentesco_acompanante": destinatario_informacion,
+        "conducta_final_definida": conducta_final_analisis,
+        "conducta_sugerida_local": conducta_sugerida_analisis,
+        "conducta_final_texto": conducta_final_texto,
         "alimentacion": alimentacion,
         "sueno_y_eliminacion": sueno_eliminacion,
         "vacunacion": vacunas,
@@ -500,7 +528,8 @@ def render():
             "Eres un asistente clínico que redacta análisis médicos pediátricos y de puericultura en español. "
             "Usa únicamente la información entregada. No inventes diagnósticos ni tratamientos. "
             "Redacta un solo párrafo en MAYÚSCULAS, claro, coherente y profesional, integrando motivo de consulta, "
-            "enfermedad actual, estado general, crecimiento, desarrollo, hábitos y paraclínicos cuando existan."
+            "enfermedad actual, antecedentes relevantes, estado general, crecimiento, desarrollo, hábitos y paraclínicos cuando existan. "
+            "Formula una conducta coherente con la historia y usa el parentesco del acompañante en el cierre si está disponible."
         ),
     )
 

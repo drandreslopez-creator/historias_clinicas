@@ -10,10 +10,14 @@ from core.calculos import calcular_edad
 from servicios.pediatria_urgencias import (
     actualizar_texto_extraido,
     complementar_analisis_con_ia,
+    construir_conducta_final_analisis,
+    construir_conducta_sugerida_analisis,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
     eliminar_historia_guardada,
+    extraer_destinatario_informacion,
+    extraer_resumen_antecedentes_para_analisis,
     extraer_resumen_examen_para_analisis,
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
@@ -224,6 +228,7 @@ def render():
         f"{prefix}_imagenes_pdf_sig": "",
         f"{prefix}_analisis_homeopatico": ANALISIS_HOMEOPATICO_DEFAULT,
         f"{prefix}_analisis_homeopatico_base": "",
+        f"{prefix}_conducta_final_analisis": "PENDIENTE DEFINIR",
         f"{prefix}_rubros": RUBROS_DEFAULT,
         f"{prefix}_tratamiento": TRATAMIENTO_DEFAULT,
         f"{prefix}_historia_consulta_id": None,
@@ -391,8 +396,15 @@ def render():
 
     paraclinicos = st.text_area("", key=f"{prefix}_paraclinicos", height=140, label_visibility="collapsed")
     imagenes_texto = st.text_area("Imágenes", key=f"{prefix}_imagenes_texto", height=120)
+    conducta_final_analisis = st.selectbox(
+        "Conducta final",
+        ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
+        key=f"{prefix}_conducta_final_analisis",
+    )
 
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
+    resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
+    destinatario_informacion = extraer_destinatario_informacion(informante)
     resumen_signos_analisis = construir_resumen_signos_para_analisis(
         _float_or_none(fc),
         _float_or_none(fr),
@@ -403,16 +415,28 @@ def render():
         "",
     )
     resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos)
+    conducta_sugerida_analisis = construir_conducta_sugerida_analisis(
+        enfermedad_actual,
+        examen,
+        paraclinicos,
+        resumen_signos_analisis,
+    )
+    conducta_final_texto = construir_conducta_final_analisis(
+        conducta_final_analisis,
+        conducta_sugerida_analisis,
+    )
     enfermedad_auto = (
         f"PACIENTE {(sexo or '').upper()} DE "
         f"{f'{años} AÑOS' if fecha_nacimiento and años > 0 else ''}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}"
     ).replace("  ", " ").strip(" ,")
     analisis_homeopatico_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
-        "",
+        resumen_antecedentes_analisis,
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,
+        conducta_final_texto,
+        destinatario_informacion,
     )
     contexto_analisis_ia = {
         "titulo": titulo,
@@ -420,6 +444,10 @@ def render():
         "motivo_consulta": motivo,
         "enfermedad_actual": enfermedad_actual,
         "antecedentes": antecedentes,
+        "parentesco_acompanante": destinatario_informacion,
+        "conducta_final_definida": conducta_final_analisis,
+        "conducta_sugerida_local": conducta_sugerida_analisis,
+        "conducta_final_texto": conducta_final_texto,
         "revision_por_sistemas": revision,
         "biopatografia": biopatografia,
         "sintomas_generales": sintomas_generales,
@@ -452,7 +480,8 @@ def render():
             "Eres un asistente clínico que redacta análisis clínico-homeopáticos en español. "
             "Usa únicamente la información entregada. No inventes diagnósticos, remedios ni hallazgos. "
             "Redacta un solo párrafo en MAYÚSCULAS, profesional y coherente, integrando motivo de consulta, "
-            "evolución, biopatografía, síntomas generales, síntomas mentales, examen físico y paraclínicos."
+            "antecedentes relevantes, evolución, biopatografía, síntomas generales, síntomas mentales, examen físico y paraclínicos. "
+            "Propón una conducta coherente y usa el parentesco del acompañante en el cierre si está disponible."
         ),
     )
 

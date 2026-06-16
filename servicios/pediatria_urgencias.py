@@ -786,6 +786,7 @@ FORM_DEFAULTS = {
     "obs_dx": "",
     "plan": PLAN_DEFAULT,
     "plan_base": PLAN_DEFAULT,
+    "conducta_final_analisis": "PENDIENTE DEFINIR",
     "paraclinicos_texto": "",
     "paraclinicos_auto": "",
     "paraclinicos_pdf_sig": "",
@@ -2757,6 +2758,26 @@ def construir_conducta_sugerida_analisis(enfermedad_actual, examen, paraclinicos
     return ". ".join(conducta_limpia) + "."
 
 
+def construir_conducta_final_analisis(conducta_final, conducta_sugerida):
+    conducta_final = limpiar_fragmento_analisis(conducta_final)
+    sugerida = limpiar_fragmento_analisis(conducta_sugerida).rstrip(".")
+
+    prefijos = {
+        "OBSERVACIÓN": "SE DEFINE OBSERVACIÓN CLÍNICA PARA VIGILANCIA Y REVALORACIÓN SEGÚN EVOLUCIÓN",
+        "HOSPITALIZACIÓN": "SE DEFINE HOSPITALIZACIÓN PARA MANEJO INTRAHOSPITALARIO Y VIGILANCIA CLÍNICA",
+        "EGRESO": "SE DEFINE EGRESO CON MANEJO AMBULATORIO, RECOMENDACIONES Y SIGNOS DE ALARMA",
+        "REMISIÓN": "SE DEFINE REMISIÓN A MAYOR NIVEL DE COMPLEJIDAD SEGÚN HALLAZGOS Y REQUERIMIENTOS DE MANEJO",
+    }
+
+    if conducta_final in prefijos:
+        base = prefijos[conducta_final]
+        if sugerida:
+            return f"{base}. {sugerida}."
+        return f"{base}."
+
+    return f"{sugerida}." if sugerida else "SE INDICA MANEJO SEGÚN HALLAZGOS CLÍNICOS."
+
+
 def construir_resumen_signos_para_analisis(fc_num, fr_num, sat_num, temp_num, glucometria_num, peso_num, grupo):
     hallazgos = []
 
@@ -4156,6 +4177,12 @@ def render():
         height=220
     )
 
+    conducta_final_analisis = st.selectbox(
+        "Conducta final",
+        ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
+        key="conducta_final_analisis",
+    )
+
     # =========================
     # ANÁLISIS
     # =========================
@@ -4196,6 +4223,10 @@ def render():
         paraclinicos_texto,
         resumen_signos_analisis,
     )
+    conducta_final_texto = construir_conducta_final_analisis(
+        conducta_final_analisis,
+        conducta_sugerida_analisis,
+    )
 
     analisis_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
@@ -4203,7 +4234,7 @@ def render():
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,
-        conducta_sugerida_analisis,
+        conducta_final_texto,
         destinatario_informacion,
     )
 
@@ -4215,7 +4246,9 @@ def render():
         "enfermedad_actual": enfermedad_input,
         "antecedentes": antecedentes,
         "parentesco_acompanante": destinatario_informacion,
+        "conducta_final_definida": conducta_final_analisis,
         "conducta_sugerida_local": conducta_sugerida_analisis,
+        "conducta_final_texto": conducta_final_texto,
         "revision_por_sistemas": revision,
         "signos_vitales": {
             "ta": ta,

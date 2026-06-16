@@ -7,6 +7,8 @@ import streamlit as st
 from servicios.pediatria_urgencias import (
     actualizar_texto_extraido,
     complementar_analisis_con_ia,
+    construir_conducta_final_analisis,
+    construir_conducta_sugerida_analisis,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
     extraer_resumen_examen_para_analisis,
@@ -55,6 +57,7 @@ SE RECIBE RECIÉN NACIDO CON ADECUADO ESFUERZO RESPIRATORIO Y TONO, SE COLOCA BA
         f"{PREFIX}_imagenes_pdf_sig": "",
         f"{PREFIX}_analisis": "",
         f"{PREFIX}_analisis_base": "",
+        f"{PREFIX}_conducta_final_analisis": "PENDIENTE DEFINIR",
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -155,6 +158,11 @@ def render():
 
     paraclinicos_texto = st.text_area("Laboratorios", key=f"{PREFIX}_paraclinicos_texto", height=150)
     imagenes_texto = st.text_area("Imágenes", key=f"{PREFIX}_imagenes_texto", height=120)
+    conducta_final_analisis = st.selectbox(
+        "Conducta final",
+        ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
+        key=f"{PREFIX}_conducta_final_analisis",
+    )
 
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
     resumen_signos_analisis = construir_resumen_signos_para_analisis(
@@ -167,6 +175,16 @@ def render():
         "RECIÉN NACIDO",
     )
     resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos_texto)
+    conducta_sugerida_analisis = construir_conducta_sugerida_analisis(
+        nacimiento_editable,
+        examen,
+        paraclinicos_texto,
+        resumen_signos_analisis,
+    )
+    conducta_final_texto = construir_conducta_final_analisis(
+        conducta_final_analisis,
+        conducta_sugerida_analisis,
+    )
     enfermedad_auto = (
         f"RECIÉN NACIDO DE {edad_gestacional} SEMANAS, QUIEN SE ENCUENTRA EN PROCESO DE ADAPTACIÓN NEONATAL"
     ).strip()
@@ -176,6 +194,8 @@ def render():
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,
+        conducta_final_texto,
+        "FAMILIAR",
     )
     contexto_analisis_ia = {
         "titulo": "HISTORIA CLÍNICA - ADAPTACIÓN NEONATAL",
@@ -183,6 +203,9 @@ def render():
         "edad_gestacional": edad_gestacional,
         "apgar_1": apgar1,
         "apgar_5": apgar5,
+        "conducta_final_definida": conducta_final_analisis,
+        "conducta_sugerida_local": conducta_sugerida_analisis,
+        "conducta_final_texto": conducta_final_texto,
         "examen_fisico": examen,
         "signos_vitales": {
             "ta": ta,
@@ -206,7 +229,8 @@ def render():
             "Eres un asistente clínico que redacta análisis neonatales en español. "
             "Usa únicamente la información entregada. No inventes diagnósticos ni conductas. "
             "Redacta un solo párrafo en MAYÚSCULAS, coherente y profesional, integrando datos perinatales, adaptación, "
-            "examen físico, signos vitales y paraclínicos cuando existan."
+            "examen físico, signos vitales y paraclínicos cuando existan. "
+            "Formula una conducta coherente con la información disponible."
         ),
     )
 

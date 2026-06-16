@@ -19,12 +19,16 @@ from servicios.pediatria_urgencias import (
     cargar_cie10,
     coincide_grupos,
     complementar_analisis_con_ia,
+    construir_conducta_final_analisis,
+    construir_conducta_sugerida_analisis,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
     construir_grupos_busqueda,
     eliminar_historia_guardada,
     expandir_terminos_busqueda,
+    extraer_destinatario_informacion,
+    extraer_resumen_antecedentes_para_analisis,
     extraer_resumen_examen_para_analisis,
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
@@ -236,6 +240,7 @@ def render_consulta_externa(
         f"{prefix}_obs_dx": "",
         f"{prefix}_plan": plan_default,
         f"{prefix}_plan_base": plan_default,
+        f"{prefix}_conducta_final_analisis": "PENDIENTE DEFINIR",
         f"{prefix}_historia_consulta_id": None,
         f"{prefix}_modalidad_consulta": modalidad_consulta_forzada or "PRIMERA VEZ",
     }
@@ -438,12 +443,19 @@ def render_consulta_externa(
 
     paraclinicos_texto = st.text_area("Laboratorios", key=f"{prefix}_paraclinicos_texto", height=160)
     imagenes_texto = st.text_area("Imágenes", key=f"{prefix}_imagenes_texto", height=120)
+    conducta_final_analisis = st.selectbox(
+        "Conducta final",
+        ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
+        key=f"{prefix}_conducta_final_analisis",
+    )
 
     sexo_txt = (sexo or "").upper()
     grupo_txt = f" {grupo.upper()}" if grupo else ""
     edad_resumen = f"{años} AÑOS" if años > 0 else (f"{meses} MESES" if fecha_nacimiento else "")
 
     enfermedad_auto = f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}".strip()
+    resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
+    destinatario_informacion = extraer_destinatario_informacion(informante)
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
     resumen_signos_analisis = construir_resumen_signos_para_analisis(
         fc_num,
@@ -455,12 +467,24 @@ def render_consulta_externa(
         grupo,
     )
     resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos_texto)
+    conducta_sugerida_analisis = construir_conducta_sugerida_analisis(
+        enfermedad_actual,
+        examen,
+        paraclinicos_texto,
+        resumen_signos_analisis,
+    )
+    conducta_final_texto = construir_conducta_final_analisis(
+        conducta_final_analisis,
+        conducta_sugerida_analisis,
+    )
     analisis_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
-        "",
+        resumen_antecedentes_analisis,
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,
+        conducta_final_texto,
+        destinatario_informacion,
     )
     contexto_analisis_ia = {
         "titulo": titulo,
@@ -468,6 +492,10 @@ def render_consulta_externa(
         "motivo_consulta": motivo,
         "enfermedad_actual": enfermedad_actual,
         "antecedentes": antecedentes,
+        "parentesco_acompanante": destinatario_informacion,
+        "conducta_final_definida": conducta_final_analisis,
+        "conducta_sugerida_local": conducta_sugerida_analisis,
+        "conducta_final_texto": conducta_final_texto,
         "revision_por_sistemas": revision,
         "signos_vitales": {
             "ta": ta,
@@ -494,6 +522,14 @@ def render_consulta_externa(
         analisis_default,
         contexto_analisis_ia,
         fingerprint_analisis_ia,
+        instrucciones=(
+            "Eres un asistente clínico que redacta análisis médicos en español. "
+            "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+            "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+            "Integra antecedentes relevantes cuando aporten al caso clínico. "
+            "Formula una conducta coherente con la historia, el examen físico, los signos vitales y los paraclínicos. "
+            "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
+        ),
     )
 
     st.subheader("Análisis")
