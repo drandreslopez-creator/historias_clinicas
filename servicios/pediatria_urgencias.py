@@ -1845,6 +1845,59 @@ def extraer_valor_cercano_a_etiqueta(
     return ""
 
 
+def extraer_valor_cercano_en_texto(
+    texto,
+    etiquetas,
+    minimo=None,
+    maximo=None,
+    preferencia="after",
+    ventana=80,
+):
+    if not texto:
+        return ""
+
+    texto = re.sub(r"\s+", " ", texto.upper())
+
+    def valores_validos(fragmento):
+        candidatos = []
+        for match in re.finditer(r"[<>]?\d+(?:[.,]\d+)?", fragmento):
+            valor = match.group(0)
+            try:
+                numero = float(valor.replace(",", ".").replace("<", "").replace(">", ""))
+                if minimo is not None and numero < minimo:
+                    continue
+                if maximo is not None and numero > maximo:
+                    continue
+            except Exception:
+                continue
+            candidatos.append(valor)
+        return candidatos
+
+    for etiqueta in etiquetas:
+        idx = texto.find(etiqueta)
+        if idx == -1:
+            continue
+
+        antes = texto[max(0, idx - ventana):idx]
+        despues = texto[idx + len(etiqueta):idx + len(etiqueta) + ventana]
+
+        valores_antes = valores_validos(antes)
+        valores_despues = valores_validos(despues)
+
+        if preferencia == "before":
+            if valores_antes:
+                return valores_antes[-1]
+            if valores_despues:
+                return valores_despues[0]
+        else:
+            if valores_despues:
+                return valores_despues[0]
+            if valores_antes:
+                return valores_antes[-1]
+
+    return ""
+
+
 def formatear_resumen_paraclinico_sogamoso(texto):
     texto = compactar_espaciado_letras(normalizar_texto_para_reporte(texto))
     if not texto:
@@ -1862,6 +1915,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
         if not pcr:
             pcr = extraer_valor_cercano_a_etiqueta(
                 lineas,
+                ["PROTEINA C REACTIVA CUANTITATIVA"],
+                minimo=0,
+                maximo=500,
+                preferencia="before",
+            )
+        if not pcr:
+            pcr = extraer_valor_cercano_en_texto(
+                lineal,
                 ["PROTEINA C REACTIVA CUANTITATIVA"],
                 minimo=0,
                 maximo=500,
@@ -1902,6 +1963,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             preferencia="before",
         )
         if not leucos:
+            leucos = extraer_valor_cercano_en_texto(
+                lineal,
+                ["RECUENTO DE LEUCOCITOS", "RECUENTODELEUCOCITOS"],
+                minimo=0.1,
+                maximo=30,
+                preferencia="before",
+            )
+        if not leucos:
             leucos = extraer_valor_linea(lineas, ["HEMOGRAMA"], minimo=0.1, maximo=30)
 
         neu = extraer_valor_cercano_a_etiqueta(
@@ -1911,6 +1980,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             maximo=100,
             preferencia="before",
         )
+        if not neu:
+            neu = extraer_valor_cercano_en_texto(
+                lineal,
+                ["%NEUTROFILOS", "% NEUTROFILOS", "%NEUTRÓFILOS", "% NEUTRÓFILOS"],
+                minimo=0,
+                maximo=100,
+                preferencia="before",
+            )
         linf = extraer_valor_cercano_a_etiqueta(
             lineas,
             ["% LINFOCITOS", "%LINFOCITOS"],
@@ -1918,6 +1995,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             maximo=100,
             preferencia="before",
         )
+        if not linf:
+            linf = extraer_valor_cercano_en_texto(
+                lineal,
+                ["% LINFOCITOS", "%LINFOCITOS"],
+                minimo=0,
+                maximo=100,
+                preferencia="before",
+            )
         mono = extraer_valor_cercano_a_etiqueta(
             lineas,
             ["% MONOCITOS", "%MONOCITOS"],
@@ -1925,6 +2010,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             maximo=100,
             preferencia="before",
         )
+        if not mono:
+            mono = extraer_valor_cercano_en_texto(
+                lineal,
+                ["% MONOCITOS", "%MONOCITOS"],
+                minimo=0,
+                maximo=100,
+                preferencia="before",
+            )
         eos = extraer_valor_cercano_a_etiqueta(
             lineas,
             ["% EOSINOFILOS", "%EOSINOFILOS"],
@@ -1932,6 +2025,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             maximo=100,
             preferencia="before",
         )
+        if not eos:
+            eos = extraer_valor_cercano_en_texto(
+                lineal,
+                ["% EOSINOFILOS", "%EOSINOFILOS"],
+                minimo=0,
+                maximo=100,
+                preferencia="before",
+            )
         hb = extraer_valor_cercano_a_etiqueta(
             lineas,
             ["HEMOGLOBINA"],
@@ -1939,6 +2040,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             maximo=25,
             preferencia="before",
         )
+        if not hb:
+            hb = extraer_valor_cercano_en_texto(
+                lineal,
+                ["HEMOGLOBINA"],
+                minimo=3,
+                maximo=25,
+                preferencia="before",
+            )
         hto = extraer_valor_cercano_a_etiqueta(
             lineas,
             ["HEMATOCRITO"],
@@ -1946,6 +2055,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             maximo=70,
             preferencia="after",
         )
+        if not hto:
+            hto = extraer_valor_cercano_en_texto(
+                lineal,
+                ["HEMATOCRITO"],
+                minimo=10,
+                maximo=70,
+                preferencia="after",
+            )
         plaq = extraer_valor_cercano_a_etiqueta(
             lineas,
             ["RECUENTO DEPLAQUETAS", "RECUENTO DE PLAQUETAS"],
@@ -1953,6 +2070,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             maximo=1500,
             preferencia="before",
         )
+        if not plaq:
+            plaq = extraer_valor_cercano_en_texto(
+                lineal,
+                ["RECUENTO DEPLAQUETAS", "RECUENTO DE PLAQUETAS"],
+                minimo=50,
+                maximo=1500,
+                preferencia="before",
+            )
 
         hemograma_items = []
         for nombre, valor, sufijo in [
@@ -2283,7 +2408,7 @@ def organizar_pdf_segun_tipo(texto, tipo):
     return formatear_resumen_paraclinico(texto)
 
 
-PARSER_PARACLINICOS_VERSION = "2026-06-16-v5"
+PARSER_PARACLINICOS_VERSION = "2026-06-16-v6"
 
 
 def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
