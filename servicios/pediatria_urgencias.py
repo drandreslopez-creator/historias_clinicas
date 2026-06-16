@@ -1675,6 +1675,212 @@ def formatear_estudio_generico(linea):
     return f"{nombre} {resultado}".strip()
 
 
+def extraer_primera_coincidencia(texto, patrones):
+    for patron in patrones:
+        match = re.search(patron, texto, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            valor = next((g for g in match.groups() if g is not None), "")
+            if valor:
+                return re.sub(r"\s+", " ", valor).strip(" ,.;:")
+    return ""
+
+
+def extraer_valor_linea(lineas, prefijos, minimo=None, maximo=None):
+    for linea in lineas:
+        for prefijo in prefijos:
+            if linea.startswith(prefijo):
+                match = re.search(r"([<>]?\d+(?:[.,]\d+)?)", linea[len(prefijo):])
+                if match:
+                    valor = match.group(1)
+                    try:
+                        numero = float(valor.replace(",", ".").replace("<", "").replace(">", ""))
+                        if minimo is not None and numero < minimo:
+                            continue
+                        if maximo is not None and numero > maximo:
+                            continue
+                    except Exception:
+                        pass
+                    return valor
+    return ""
+
+
+def formatear_resumen_paraclinico_sogamoso(texto):
+    texto = compactar_espaciado_letras(normalizar_texto_para_reporte(texto))
+    if not texto:
+        return ""
+
+    upper = texto.upper()
+    lineas = [limpiar_linea_paraclinico(l).upper() for l in upper.splitlines() if limpiar_linea_paraclinico(l)]
+    fecha = extraer_fecha_principal(upper)
+    lineal = re.sub(r"\s+", " ", upper)
+    salida = [fecha] if fecha else []
+
+    if "PROTEINA C REACTIVA CUANTITATIVA" in upper or "HEMOGRAMA" in upper:
+        quimica = []
+        pcr = extraer_primera_coincidencia(lineal, [r"PROTEINA C REACTIVA CUANTITATIVA\s+([<>]?\d+(?:[.,]\d+)?)"])
+        creat = extraer_primera_coincidencia(lineal, [r"CREATININA\s+([<>]?\d+(?:[.,]\d+)?)"])
+        bun = extraer_primera_coincidencia(lineal, [r"NITROGENO UREICO\s+([<>]?\d+(?:[.,]\d+)?)"])
+        glucosa = extraer_primera_coincidencia(
+            lineal,
+            [
+                r"([<>]?\d+(?:[.,]\d+)?)\s+GLUCOSA\s+MG/DL",
+                r"GLUCOSA\s+([<>]?\d+(?:[.,]\d+)?)",
+            ],
+        )
+        sodio = extraer_primera_coincidencia(lineal, [r"SODIO\s+([<>]?\d+(?:[.,]\d+)?)"])
+        potasio = extraer_primera_coincidencia(lineal, [r"POTASIO\s+([<>]?\d+(?:[.,]\d+)?)"])
+        cloro = extraer_primera_coincidencia(lineal, [r"CLORO\s+([<>]?\d+(?:[.,]\d+)?)"])
+        calcio = extraer_primera_coincidencia(lineal, [r"CALCIO LONICO\s+([<>]?\d+(?:[.,]\d+)?)", r"CALCIO IONICO\s+([<>]?\d+(?:[.,]\d+)?)"])
+
+        for nombre, valor in [
+            ("PCR", pcr),
+            ("CREATININA", creat),
+            ("BUN", bun),
+            ("GLUCOSA", glucosa),
+            ("SODIO", sodio),
+            ("POTASIO", potasio),
+            ("CLORO", cloro),
+            ("CALCIO IÓNICO", calcio),
+        ]:
+            if valor:
+                quimica.append(f"{nombre} {valor}")
+
+        leucos = extraer_valor_linea(lineas, ["HEMOGRAMA"], minimo=0.1, maximo=30)
+        if not leucos:
+            leucos = extraer_valor_linea(lineas, ["RECUENTO DE LEUCOCITOS"], minimo=0.1, maximo=30)
+
+        neu = extraer_valor_linea(lineas, ["RECUENTO DE LEUCOCITOS"], minimo=30, maximo=100)
+        if not neu:
+            neu = extraer_valor_linea(lineas, ["%NEUTROFILOS", "% NEUTROFILOS"], minimo=0, maximo=100)
+
+        linf = extraer_valor_linea(lineas, ["%NEUTROFILOS", "% NEUTROFILOS"], minimo=0, maximo=100)
+        if not linf:
+            linf = extraer_valor_linea(lineas, ["% LINFOCITOS", "%LINFOCITOS"], minimo=0, maximo=100)
+
+        mono = extraer_valor_linea(lineas, ["% LINFOCITOS", "%LINFOCITOS"], minimo=0, maximo=100)
+        if not mono:
+            mono = extraer_valor_linea(lineas, ["% MONOCITOS", "%MONOCITOS"], minimo=0, maximo=100)
+
+        eos = extraer_valor_linea(lineas, ["% MONOCITOS", "%MONOCITOS"], minimo=0, maximo=100)
+        if not eos:
+            eos = extraer_valor_linea(lineas, ["% EOSINOFILOS", "%EOSINOFILOS"], minimo=0, maximo=100)
+
+        hb = extraer_valor_linea(lineas, ["RECUENTODEERITROCITOS", "RECUENTO DE ERITROCITOS", "HEMOGLOBINA"], minimo=3, maximo=25)
+        hto = extraer_valor_linea(lineas, ["HEMATOCRITO"], minimo=10, maximo=70)
+
+        hemograma_items = []
+        for nombre, valor, sufijo in [
+            ("LEUCOS", leucos, ""),
+            ("NEU", neu, "%"),
+            ("LINF", linf, "%"),
+            ("MONO", mono, "%"),
+            ("EOS", eos, "%"),
+            ("HB", hb, ""),
+            ("HTO", hto, ""),
+        ]:
+            if valor:
+                hemograma_items.append(f"{nombre} {valor}{sufijo}")
+
+        if quimica:
+            salida.append(", ".join(quimica))
+        if hemograma_items:
+            salida.append("HEMOGRAMA: " + ", ".join(hemograma_items))
+
+        if len(salida) > (1 if fecha else 0):
+            return "\n".join(salida).strip()
+
+    if "COPROSCOPICO" in upper or "UROANALISIS" in upper:
+        copro = []
+        uro = []
+
+        if "COPROSCOPICO" in upper:
+            color = extraer_primera_coincidencia(lineal, [r"COLOR\s+([A-Z]+(?:\s+[A-Z]+)?)\s+CONSISTENCIA"])
+            consistencia = extraer_primera_coincidencia(lineal, [r"CONSISTENCIA\s+([A-Z]+)\s+MOCO"])
+            moco = extraer_primera_coincidencia(lineal, [r"MOCO\s+([A-Z]+(?:\s+[A-Z]+)*)\s+SANGRE OCULTA"])
+            sangre = extraer_primera_coincidencia(lineal, [r"SANGRE OCULTA\s+(NEGATIVO|POSITIVO)"])
+            leucocitos = extraer_primera_coincidencia(lineal, [r"LEUCOCITOS\s+([0-9-]+)\s+XC"])
+            hematies = extraer_primera_coincidencia(lineal, [r"HEMATIES\s+([0-9-]+)\s+XC"])
+            flora = extraer_primera_coincidencia(lineal, [r"FLORA BACTERIANA\s+([A-Z]+)"])
+            ph = extraer_primera_coincidencia(lineal, [r"ESTUDIOQUIMICO\s+PH\s+([0-9.]+)"])
+            azucares = extraer_primera_coincidencia(lineal, [r"AZUCARES REDUCTORES\s+([A-Z]+)"])
+            parasitos = "NEGATIVO PARA PARÁSITOS INTESTINALES" if "NEGATIVO PARA PARASITOS INTESTINALES" in upper else ""
+            if moco == "NOSEOBSERVAN NEGATIVO":
+                moco = "NO SE OBSERVA"
+            elif moco == "NOSEOBSERVAN":
+                moco = "NO SE OBSERVA"
+            color = color.replace("AMARILLOVERDOSO", "AMARILLO VERDOSO")
+
+            for nombre, valor in [
+                ("COLOR", color),
+                ("CONSISTENCIA", consistencia),
+                ("MOCO", moco),
+                ("SANGRE OCULTA", sangre),
+                ("LEUCOCITOS", f"{leucocitos} XC" if leucocitos else ""),
+                ("HEMATÍES", f"{hematies} XC" if hematies else ""),
+                ("FLORA BACTERIANA", flora),
+                ("PH", ph),
+                ("AZÚCARES REDUCTORES", azucares),
+                ("PARASITOLOGÍA", parasitos),
+            ]:
+                if valor:
+                    copro.append(f"{nombre} {valor}")
+
+        if "UROANALISIS" in upper:
+            color = extraer_primera_coincidencia(lineal, [r"UROANALISIS FISICOQUIMICO COLOR\s+([A-Z]+)"])
+            aspecto = extraer_primera_coincidencia(lineal, [r"ASPECTO\s+([A-Z]+(?:\s+[A-Z]+)?)\s+GLUCOSA"])
+            glucosa = extraer_primera_coincidencia(lineal, [r"GLUCOSA\s+(NEGATIVO|POSITIVO|[<>]?\d+(?:[.,]\d+)?)"])
+            proteinas = extraer_primera_coincidencia(lineal, [r"PROTEINAS\s+(NEGATIVO|POSITIVO|[<>]?\d+(?:[.,]\d+)?)"])
+            bilirrubinas = extraer_primera_coincidencia(lineal, [r"BILIRRUBINAS\s+(NEGATIVO|POSITIVO|[<>]?\d+(?:[.,]\d+)?)"])
+            urobilinogeno = extraer_primera_coincidencia(lineal, [r"UROBILINOGENO\s+([A-Z]+)"])
+            vitamina_c = extraer_primera_coincidencia(lineal, [r"VITAMINA C\s+([<>]?\d+(?:[.,]\d+)?)"])
+            ph = extraer_primera_coincidencia(lineal, [r"P\.?H\.?\s+([0-9.]+)\s+1\.025 DENSIDAD", r"P\.?H\.?\s+([0-9.]+)"])
+            densidad = extraer_primera_coincidencia(lineal, [r"([01]\.[0-9]{3})\s+DENSIDAD", r"DENSIDAD\s+([01]\.[0-9]{3})"])
+            sangre = extraer_primera_coincidencia(lineal, [r"SANGRE\s+(NEGATIVO|POSITIVO|[<>]?\d+(?:[.,]\d+)?)"])
+            cetonas = extraer_primera_coincidencia(lineal, [r"CETONAS\s+(NEGATIVO|POSITIVO|[<>]?\d+(?:[.,]\d+)?)"])
+            nitritos = extraer_primera_coincidencia(lineal, [r"NITRITOS\s+(NEGATIVO|POSITIVO)"])
+            esterasa = extraer_primera_coincidencia(lineal, [r"ESTERASA LEUCOCITARIA\s+(NEGATIVO|POSITIVO)"])
+            leucocitos = extraer_primera_coincidencia(lineal, [r"LEUCOCITOS\s+([0-9-]+)\s+XC"])
+            hematies = extraer_primera_coincidencia(lineal, [r"HEMATIES\s+([0-9-]+)"])
+            celulas = extraer_primera_coincidencia(lineal, [r"TIPO DE CELULAS EPITELIALES\s+([A-Z]+)"])
+            bacterias = extraer_primera_coincidencia(lineal, [r"BACTERIAS\s+([A-Z]+)"])
+            if urobilinogeno == "MG":
+                urobilinogeno = "NORMAL"
+            if not proteinas and "PROTEINAS MG/DL BILIRRUBINAS NEGATIVO" in lineal:
+                proteinas = "NEGATIVO"
+
+            for nombre, valor in [
+                ("COLOR", color),
+                ("ASPECTO", aspecto),
+                ("GLUCOSA", glucosa),
+                ("PROTEÍNAS", proteinas),
+                ("BILIRRUBINAS", bilirrubinas),
+                ("UROBILINÓGENO", urobilinogeno),
+                ("VITAMINA C", vitamina_c),
+                ("PH", ph),
+                ("DENSIDAD", densidad),
+                ("SANGRE", sangre),
+                ("CETONAS", cetonas),
+                ("NITRITOS", nitritos),
+                ("ESTERASA LEUCOCITARIA", esterasa),
+                ("LEUCOCITOS", f"{leucocitos} XC" if leucocitos else ""),
+                ("HEMATÍES", f"{hematies} XC" if hematies else ""),
+                ("CÉLULAS EPITELIALES", celulas),
+                ("BACTERIAS", bacterias),
+            ]:
+                if valor:
+                    uro.append(f"{nombre} {valor}")
+
+        if copro:
+            salida.append("COPROSCÓPICO: " + ", ".join(copro))
+        if uro:
+            salida.append("UROANÁLISIS: " + ", ".join(uro))
+
+        if len(salida) > (1 if fecha else 0):
+            return "\n".join(salida).strip()
+
+    return ""
+
+
 def extraer_estudios_ocr(lineas):
     estudios = []
     exam_actual = None
@@ -1743,6 +1949,10 @@ def formatear_resumen_paraclinico(texto):
     texto = compactar_espaciado_letras(normalizar_texto_para_reporte(texto))
     if not texto:
         return ""
+
+    resumen_sogamoso = formatear_resumen_paraclinico_sogamoso(texto)
+    if resumen_sogamoso:
+        return resumen_sogamoso
 
     fecha = extraer_fecha_principal(texto)
     upper = texto.upper()
