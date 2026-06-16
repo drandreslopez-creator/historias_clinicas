@@ -2701,6 +2701,62 @@ def extraer_resumen_antecedentes_para_analisis(antecedentes):
     return ", ".join(resumen_limpio)
 
 
+def extraer_destinatario_informacion(informante):
+    texto = limpiar_fragmento_analisis(informante)
+    if not texto:
+        return "FAMILIAR"
+
+    equivalencias = [
+        ("MADRE", ["MADRE", "MAMA", "MAMÁ"]),
+        ("PADRE", ["PADRE", "PAPA", "PAPÁ"]),
+        ("HERMANO", ["HERMANO"]),
+        ("HERMANA", ["HERMANA"]),
+        ("ABUELA", ["ABUELA"]),
+        ("ABUELO", ["ABUELO"]),
+        ("TÍA", ["TIA", "TÍA"]),
+        ("TÍO", ["TIO", "TÍO"]),
+        ("CUIDADOR", ["CUIDADOR", "CUIDADORA"]),
+    ]
+    for salida, terminos in equivalencias:
+        if any(termino in texto for termino in terminos):
+            return salida
+    return "FAMILIAR"
+
+
+def construir_conducta_sugerida_analisis(enfermedad_actual, examen, paraclinicos_texto, resumen_signos):
+    texto = " ".join(
+        limpiar_fragmento_analisis(x)
+        for x in [enfermedad_actual, examen, paraclinicos_texto, resumen_signos]
+        if limpiar_fragmento_analisis(x)
+    )
+
+    conducta = []
+
+    if any(x in texto for x in ["DESHIDRAT", "EMESIS", "VOMIT", "DIARRE", "NO TOLERA LA VIA ORAL", "NO TOLERA LA VÍA ORAL"]):
+        conducta.append("SE INDICA MANEJO INTRAHOSPITALARIO CON HIDRATACIÓN Y VIGILANCIA CLÍNICA SEGÚN EVOLUCIÓN")
+
+    if any(x in texto for x in ["SIBILAN", "ASMA", "BRONCO", "DIFICULTAD RESPIRATORIA", "TIRAJES"]):
+        conducta.append("SE INDICA MANEJO MÉDICO Y VIGILANCIA RESPIRATORIA SEGÚN RESPUESTA CLÍNICA")
+
+    if any(x in texto for x in ["PCR ELEVADA", "LEUCOCITOSIS", "NEUTROFILIA", "HIPONATREMIA", "HIPERPOTASEMIA", "HIPOXEMIA"]):
+        conducta.append("SE CORRELACIONAN PARACLÍNICOS Y SE DEFINEN ESTUDIOS DE EXTENSIÓN SEGÚN HALLAZGOS")
+
+    if any(x in texto for x in ["FIEBRE", "RINORREA", "TOS", "ODINOFAGIA", "OROFARINGE", "OTIT"]):
+        conducta.append("SE INDICA MANEJO SINTOMÁTICO, VIGILANCIA DE SIGNOS DE ALARMA Y REVALORACIÓN SEGÚN EVOLUCIÓN")
+
+    if not conducta:
+        conducta.append("SE INDICA MANEJO SEGÚN HALLAZGOS CLÍNICOS, CON VIGILANCIA Y DEFINICIÓN DE CONDUCTA DE ACUERDO CON LA EVOLUCIÓN")
+
+    conducta_limpia = []
+    vistos = set()
+    for item in conducta:
+        item = limpiar_fragmento_analisis(item)
+        if item and item not in vistos:
+            vistos.add(item)
+            conducta_limpia.append(item)
+    return ". ".join(conducta_limpia) + "."
+
+
 def construir_resumen_signos_para_analisis(fc_num, fr_num, sat_num, temp_num, glucometria_num, peso_num, grupo):
     hallazgos = []
 
@@ -2823,6 +2879,8 @@ def generar_analisis_asistido_urgencias(
     resumen_examen_analisis,
     resumen_signos_analisis,
     resumen_paraclinicos_analisis,
+    conducta_sugerida="SE INDICA MANEJO SEGÚN HALLAZGOS CLÍNICOS.",
+    destinatario_informacion="FAMILIAR",
 ):
     partes = []
     if enfermedad_auto:
@@ -2845,7 +2903,11 @@ def generar_analisis_asistido_urgencias(
     if cuerpo_texto:
         partes.append(f"AL INGRESO {cuerpo_texto}.")
 
-    partes.append("SE INDICA MANEJO... SE BRINDA INFORMACIÓN A FAMILIARES, SE ACLARAN DUDAS.")
+    conducta_limpia = limpiar_fragmento_analisis(conducta_sugerida).rstrip(".")
+    destinatario_limpio = limpiar_fragmento_analisis(destinatario_informacion) or "FAMILIAR"
+    partes.append(
+        f"{conducta_limpia}. SE BRINDA INFORMACIÓN A {destinatario_limpio}, SE ACLARAN DUDAS (REFIERE ENTENDER Y ACEPTAR)."
+    )
     return " ".join(partes)
 
 
@@ -4109,6 +4171,7 @@ def render():
     enfermedad_auto = f"PACIENTE {sexo_texto_analisis} {grupo.upper()} DE {edad_texto}, QUIEN CONSULTA POR {texto_enfermedad}"
     resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
+    destinatario_informacion = extraer_destinatario_informacion(informante)
     resumen_signos_analisis = construir_resumen_signos_para_analisis(
         fc_num,
         fr_num,
@@ -4127,12 +4190,21 @@ def render():
             "SIN DÉFICIT NEUROLÓGICO, PIEL BIEN PERFUNDIDA SIN LESIONES"
         )
 
+    conducta_sugerida_analisis = construir_conducta_sugerida_analisis(
+        enfermedad_input,
+        examen,
+        paraclinicos_texto,
+        resumen_signos_analisis,
+    )
+
     analisis_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
         resumen_antecedentes_analisis,
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,
+        conducta_sugerida_analisis,
+        destinatario_informacion,
     )
 
     contexto_analisis_ia = {
@@ -4142,6 +4214,8 @@ def render():
         "motivo_consulta": motivo,
         "enfermedad_actual": enfermedad_input,
         "antecedentes": antecedentes,
+        "parentesco_acompanante": destinatario_informacion,
+        "conducta_sugerida_local": conducta_sugerida_analisis,
         "revision_por_sistemas": revision,
         "signos_vitales": {
             "ta": ta,
@@ -4163,6 +4237,17 @@ def render():
         analisis_default,
         contexto_analisis_ia,
         fingerprint_analisis_ia,
+        instrucciones=(
+            "Eres un asistente clínico que redacta análisis médicos en español. "
+            "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+            "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+            "Mantén un estilo médico parecido al de una historia clínica colombiana. "
+            "Integra antecedentes relevantes cuando aporten al caso clínico. "
+            "Formula una conducta coherente con la historia, el examen físico, los signos vitales y los paraclínicos. "
+            "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
+            "Conserva el sentido clínico del borrador base, pero mejora coherencia, orden y conexión entre enfermedad actual, "
+            "signos vitales, examen físico, paraclínicos y conducta."
+        ),
     )
 
     st.subheader("Análisis")
