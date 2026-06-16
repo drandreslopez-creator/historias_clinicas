@@ -1,4 +1,5 @@
 import os
+import hashlib
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -1327,22 +1328,51 @@ def cargar_ocr():
     try:
         from rapidocr_onnxruntime import RapidOCR
         return RapidOCR()
-    except Exception:
-        return None
+    except Exception as e:
+        return {"_error": str(e)}
 
 
 def extraer_texto_ocr_de_imagenes(page):
     ocr = cargar_ocr()
-    if ocr is None:
+    if ocr is None or isinstance(ocr, dict):
         return ""
 
     bloques = []
+    hashes_vistos = set()
     try:
         imagenes = list(page.images)
     except Exception:
         imagenes = []
 
+    imagenes_principales = []
     for image_file in imagenes:
+        try:
+            pil_image = image_file.image
+            ancho, alto = pil_image.size
+            area = ancho * alto
+            imagenes_principales.append((area, image_file))
+        except Exception:
+            continue
+
+    imagenes_principales.sort(key=lambda item: item[0], reverse=True)
+
+    for _, image_file in imagenes_principales[:1]:
+        try:
+            img_hash = hashlib.md5(image_file.data).hexdigest()
+            if img_hash in hashes_vistos:
+                continue
+            hashes_vistos.add(img_hash)
+        except Exception:
+            pass
+
+        try:
+            pil_image = image_file.image
+            ancho, alto = pil_image.size
+            if ancho < 1000 or alto < 1000:
+                continue
+        except Exception:
+            pass
+
         try:
             resultado, _ = ocr(image_file.data)
         except Exception:
@@ -1704,6 +1734,92 @@ def extraer_valor_linea(lineas, prefijos, minimo=None, maximo=None):
     return ""
 
 
+def linea_es_rango_o_unidad(linea):
+    if not linea:
+        return True
+    linea = linea.strip().upper()
+    if re.fullmatch(r"(X10\^?\d+/MM\^3|X10\^?\d+/MM3|X10\^?\d+/UL|X10\^?\d+/ML)", linea):
+        return True
+    if re.fullmatch(r"[0-9.,]+\s*-\s*[0-9.,]+", linea):
+        return True
+    if re.fullmatch(r"(MG/DL|MMOL/L|G/DL|FL|PG|X10\^3/MM\^3|X10\^6/MM\^3|%)", linea):
+        return True
+    if re.fullmatch(r"[0-9.,]+\s*(MG/DL|MMOL/L|G/DL|FL|PG|%)", linea):
+        return True
+    return False
+
+
+def extraer_valor_despues_de_etiqueta(lineas, etiquetas, max_busqueda=6, minimo=None, maximo=None):
+    for idx, linea in enumerate(lineas):
+        if any(linea.startswith(etq) for etq in etiquetas):
+            for offset in range(1, max_busqueda + 1):
+                if idx + offset >= len(lineas):
+                    break
+                candidata = lineas[idx + offset].strip()
+                if not candidata or linea_es_rango_o_unidad(candidata):
+                    continue
+                match = re.fullmatch(r"[<>]?\d+(?:[.,]\d+)?", candidata)
+                if not match:
+                    continue
+                valor = match.group(0)
+                try:
+                    numero = float(valor.replace(",", ".").replace("<", "").replace(">", ""))
+                    if minimo is not None and numero < minimo:
+                        continue
+                    if maximo is not None and numero > maximo:
+                        continue
+                except Exception:
+                    pass
+                return valor
+    return ""
+
+
+def extraer_valor_cercano_a_etiqueta(
+    lineas,
+    etiquetas,
+    max_busqueda=6,
+    minimo=None,
+    maximo=None,
+    preferencia="after",
+):
+    def valor_valido(candidata):
+        candidata = candidata.strip()
+        if not candidata or linea_es_rango_o_unidad(candidata):
+            return ""
+        match = re.fullmatch(r"[<>]?\d+(?:[.,]\d+)?", candidata)
+        if not match:
+            return ""
+        valor = match.group(0)
+        try:
+            numero = float(valor.replace(",", ".").replace("<", "").replace(">", ""))
+            if minimo is not None and numero < minimo:
+                return ""
+            if maximo is not None and numero > maximo:
+                return ""
+        except Exception:
+            pass
+        return valor
+
+    for idx, linea in enumerate(lineas):
+        if any(linea.startswith(etq) for etq in etiquetas):
+            rangos = range(1, max_busqueda + 1)
+            if preferencia == "before":
+                direcciones = (-1, 1)
+            elif preferencia == "nearest":
+                direcciones = (-1, 1)
+            else:
+                direcciones = (1, -1)
+            for offset in rangos:
+                for direccion in direcciones:
+                    pos = idx + (offset * direccion)
+                    if pos < 0 or pos >= len(lineas):
+                        continue
+                    valor = valor_valido(lineas[pos])
+                    if valor:
+                        return valor
+    return ""
+
+
 def formatear_resumen_paraclinico_sogamoso(texto):
     texto = compactar_espaciado_letras(normalizar_texto_para_reporte(texto))
     if not texto:
@@ -1718,6 +1834,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
     if "PROTEINA C REACTIVA CUANTITATIVA" in upper or "HEMOGRAMA" in upper:
         quimica = []
         pcr = extraer_primera_coincidencia(lineal, [r"PROTEINA C REACTIVA CUANTITATIVA\s+([<>]?\d+(?:[.,]\d+)?)"])
+        if not pcr:
+            pcr = extraer_valor_cercano_a_etiqueta(
+                lineas,
+                ["PROTEINA C REACTIVA CUANTITATIVA"],
+                minimo=0,
+                maximo=500,
+                preferencia="before",
+            )
         creat = extraer_primera_coincidencia(lineal, [r"CREATININA\s+([<>]?\d+(?:[.,]\d+)?)"])
         bun = extraer_primera_coincidencia(lineal, [r"NITROGENO UREICO\s+([<>]?\d+(?:[.,]\d+)?)"])
         glucosa = extraer_primera_coincidencia(
@@ -1745,28 +1869,65 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             if valor:
                 quimica.append(f"{nombre} {valor}")
 
-        leucos = extraer_valor_linea(lineas, ["HEMOGRAMA"], minimo=0.1, maximo=30)
+        leucos = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["RECUENTO DE LEUCOCITOS", "RECUENTODELEUCOCITOS"],
+            minimo=0.1,
+            maximo=30,
+            preferencia="before",
+        )
         if not leucos:
-            leucos = extraer_valor_linea(lineas, ["RECUENTO DE LEUCOCITOS"], minimo=0.1, maximo=30)
+            leucos = extraer_valor_linea(lineas, ["HEMOGRAMA"], minimo=0.1, maximo=30)
 
-        neu = extraer_valor_linea(lineas, ["RECUENTO DE LEUCOCITOS"], minimo=30, maximo=100)
-        if not neu:
-            neu = extraer_valor_linea(lineas, ["%NEUTROFILOS", "% NEUTROFILOS"], minimo=0, maximo=100)
-
-        linf = extraer_valor_linea(lineas, ["%NEUTROFILOS", "% NEUTROFILOS"], minimo=0, maximo=100)
-        if not linf:
-            linf = extraer_valor_linea(lineas, ["% LINFOCITOS", "%LINFOCITOS"], minimo=0, maximo=100)
-
-        mono = extraer_valor_linea(lineas, ["% LINFOCITOS", "%LINFOCITOS"], minimo=0, maximo=100)
-        if not mono:
-            mono = extraer_valor_linea(lineas, ["% MONOCITOS", "%MONOCITOS"], minimo=0, maximo=100)
-
-        eos = extraer_valor_linea(lineas, ["% MONOCITOS", "%MONOCITOS"], minimo=0, maximo=100)
-        if not eos:
-            eos = extraer_valor_linea(lineas, ["% EOSINOFILOS", "%EOSINOFILOS"], minimo=0, maximo=100)
-
-        hb = extraer_valor_linea(lineas, ["RECUENTODEERITROCITOS", "RECUENTO DE ERITROCITOS", "HEMOGLOBINA"], minimo=3, maximo=25)
-        hto = extraer_valor_linea(lineas, ["HEMATOCRITO"], minimo=10, maximo=70)
+        neu = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["%NEUTROFILOS", "% NEUTROFILOS", "%NEUTRÓFILOS", "% NEUTRÓFILOS"],
+            minimo=0,
+            maximo=100,
+            preferencia="before",
+        )
+        linf = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["% LINFOCITOS", "%LINFOCITOS"],
+            minimo=0,
+            maximo=100,
+            preferencia="before",
+        )
+        mono = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["% MONOCITOS", "%MONOCITOS"],
+            minimo=0,
+            maximo=100,
+            preferencia="before",
+        )
+        eos = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["% EOSINOFILOS", "%EOSINOFILOS"],
+            minimo=0,
+            maximo=100,
+            preferencia="before",
+        )
+        hb = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["HEMOGLOBINA"],
+            minimo=3,
+            maximo=25,
+            preferencia="before",
+        )
+        hto = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["HEMATOCRITO"],
+            minimo=10,
+            maximo=70,
+            preferencia="after",
+        )
+        plaq = extraer_valor_cercano_a_etiqueta(
+            lineas,
+            ["RECUENTO DEPLAQUETAS", "RECUENTO DE PLAQUETAS"],
+            minimo=50,
+            maximo=1500,
+            preferencia="before",
+        )
 
         hemograma_items = []
         for nombre, valor, sufijo in [
@@ -1777,6 +1938,7 @@ def formatear_resumen_paraclinico_sogamoso(texto):
             ("EOS", eos, "%"),
             ("HB", hb, ""),
             ("HTO", hto, ""),
+            ("PLAQ", plaq, ""),
         ]:
             if valor:
                 hemograma_items.append(f"{nombre} {valor}{sufijo}")
@@ -2082,8 +2244,14 @@ def formatear_resumen_paraclinico(texto):
 
 def organizar_pdf_segun_tipo(texto, tipo):
     if texto == "__PDF_ESCANEADO_SIN_TEXTO__":
+        ocr_state = cargar_ocr()
+        ocr_error = ocr_state.get("_error") if isinstance(ocr_state, dict) else ""
         if tipo == "imagenes":
+            if ocr_error:
+                return f"PDF ESCANEADO SIN TEXTO EXTRAÍBLE. OCR NO DISPONIBLE EN ESTE ENTORNO: {ocr_error}"
             return "PDF ESCANEADO SIN TEXTO EXTRAÍBLE. PARA ORGANIZAR AUTOMÁTICAMENTE ESTE REPORTE IMAGENOLÓGICO SE NECESITA OCR."
+        if ocr_error:
+            return f"PDF ESCANEADO SIN TEXTO EXTRAÍBLE. OCR NO DISPONIBLE EN ESTE ENTORNO: {ocr_error}"
         return "PDF ESCANEADO SIN TEXTO EXTRAÍBLE. PARA ORGANIZAR AUTOMÁTICAMENTE ESTOS LABORATORIOS SE NECESITA OCR."
     if tipo == "imagenes":
         return formatear_resumen_imagen(texto)
