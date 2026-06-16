@@ -1419,11 +1419,10 @@ def extraer_variantes_ocr_desde_pil(pil_image, ocr):
     candidatas = [
         ImageOps.autocontrast(base),
         ImageOps.autocontrast(base.point(lambda p: 255 if p > 170 else 0)),
-        ImageOps.autocontrast(base.resize((base.width * 2, base.height * 2))),
     ]
 
     for candidata in candidatas:
-        for psm in ("6", "11", "4"):
+        for psm in ("6", "11"):
             try:
                 texto = ocr.image_to_string(
                     candidata,
@@ -1482,12 +1481,11 @@ def extraer_texto_ocr_por_render(pdf_bytes):
     return "\n\n".join(bloques).strip()
 
 
-def extraer_texto_pdf(pdf_file):
-    if not pdf_file:
-        return ""
+@st.cache_data(show_spinner=False, max_entries=32)
+def extraer_texto_pdf_cache(pdf_hash, pdf_bytes, parser_version):
+    del pdf_hash, parser_version
 
     try:
-        pdf_bytes = pdf_file.getvalue()
         reader = PdfReader(BytesIO(pdf_bytes))
         paginas = []
         tiene_imagenes = False
@@ -1515,6 +1513,18 @@ def extraer_texto_pdf(pdf_file):
                 return "\n\n".join(paginas_ocr)
             return "__PDF_ESCANEADO_SIN_TEXTO__"
         return ""
+    except Exception:
+        return ""
+
+
+def extraer_texto_pdf(pdf_file):
+    if not pdf_file:
+        return ""
+
+    try:
+        pdf_bytes = pdf_file.getvalue()
+        pdf_hash = hashlib.md5(pdf_bytes).hexdigest()
+        return extraer_texto_pdf_cache(pdf_hash, pdf_bytes, PARSER_PARACLINICOS_VERSION)
     except Exception:
         return ""
 
@@ -2473,7 +2483,7 @@ def organizar_pdf_segun_tipo(texto, tipo):
     return formatear_resumen_paraclinico(texto)
 
 
-PARSER_PARACLINICOS_VERSION = "2026-06-16-v7"
+PARSER_PARACLINICOS_VERSION = "2026-06-16-v8"
 
 
 def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
@@ -2488,11 +2498,12 @@ def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
         return
 
     bloques = []
-    for pdf_file in pdf_files:
-        texto_pdf = extraer_texto_pdf(pdf_file)
-        texto_organizado = organizar_pdf_segun_tipo(texto_pdf, tipo)
-        if texto_organizado:
-            bloques.append(texto_organizado)
+    with st.spinner(f"Procesando {len(pdf_files)} archivo(s)..."):
+        for pdf_file in pdf_files:
+            texto_pdf = extraer_texto_pdf(pdf_file)
+            texto_organizado = organizar_pdf_segun_tipo(texto_pdf, tipo)
+            if texto_organizado:
+                bloques.append(texto_organizado)
 
     texto_organizado = "\n\n".join(bloques).strip()
 
@@ -2510,6 +2521,86 @@ def texto_a_html(texto):
     if not texto:
         return ""
     return "<br>".join(escape(str(texto)).splitlines())
+
+
+def limpiar_fragmento_analisis(texto):
+    texto = re.sub(r"\s+", " ", str(texto or "")).strip(" .;,\n\t")
+    return texto.upper()
+
+
+def extraer_resumen_examen_para_analisis(examen):
+    if not examen:
+        return ""
+
+    lineas = [limpiar_fragmento_analisis(linea) for linea in str(examen).splitlines() if limpiar_fragmento_analisis(linea)]
+    if not lineas:
+        return ""
+
+    resumen = []
+    primera = lineas[0]
+    if primera:
+        resumen.append(primera)
+
+    secciones = {}
+    for linea in lineas[1:]:
+        if ":" not in linea:
+            continue
+        encabezado, contenido = linea.split(":", 1)
+        secciones[encabezado.strip()] = contenido.strip()
+
+    ojos = secciones.get("OJOS", "")
+    nariz = secciones.get("NARIZ", "")
+    orofaringe = secciones.get("OROFARINGE", "")
+    torax = secciones.get("TÓRAX", "") or secciones.get("TORAX", "")
+    cardio = secciones.get("CARDIOPULMONAR", "")
+    abdomen = secciones.get("ABDOMEN", "")
+    extremidades = secciones.get("EXTREMIDADES", "")
+    neuro = secciones.get("NEUROLÓGICO", "") or secciones.get("NEUROLOGICO", "")
+    piel = secciones.get("PIEL", "")
+
+    signos_deshidratacion = []
+    for texto in (ojos, orofaringe):
+        if "SECA" in texto or "SECAS" in texto:
+            signos_deshidratacion.append("MUCOSAS SECAS")
+            break
+    if "LLANTO SIN LAGRIMAS" in ojos or "LLANTO SIN LÁGRIMAS" in ojos:
+        signos_deshidratacion.append("LLANTO SIN LÁGRIMAS")
+    if signos_deshidratacion:
+        resumen.append(", ".join(dict.fromkeys(signos_deshidratacion)))
+
+    if "RINORREA" in nariz:
+        match = re.search(r"(RINORREA[^.,;]*)", nariz)
+        resumen.append(match.group(1).strip() if match else nariz)
+
+    cardio_normal = (
+        "SIN SOPLOS" in cardio
+        and "SIN AGREGADOS PULMONARES" in cardio
+        and ("OXIMETRIAS ADECUADAS" in cardio or "OXIMETRÍAS ADECUADAS" in cardio)
+    )
+    if cardio_normal and "SIN TIRAJES" in torax:
+        resumen.append("BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO")
+
+    if "SIN SIGNOS DE IRRITACIÓN PERITONEAL" in abdomen or "SIN SIGNOS DE IRRITACION PERITONEAL" in abdomen:
+        resumen.append("SIN SIGNOS DE ALARMA ABDOMINAL")
+
+    if "SIN EDEMAS" in extremidades:
+        resumen.append("SIN EDEMAS")
+
+    if ("SIN DÉFICIT" in neuro or "SIN DEFICIT" in neuro) and "NO FOCALIZACIONES" in neuro:
+        resumen.append("SIN DÉFICIT NEUROLÓGICO")
+
+    if "BIEN PERFUNDIDA" in piel and "SIN LESIONES" in piel:
+        resumen.append("PIEL BIEN PERFUNDIDA SIN LESIONES")
+
+    resumen_limpio = []
+    vistos = set()
+    for item in resumen:
+        item = limpiar_fragmento_analisis(item)
+        if item and item not in vistos:
+            vistos.add(item)
+            resumen_limpio.append(item)
+
+    return ", ".join(resumen_limpio)
 
 
 def contenido_seccion_html(texto, color):
