@@ -2258,11 +2258,17 @@ def organizar_pdf_segun_tipo(texto, tipo):
     return formatear_resumen_paraclinico(texto)
 
 
+PARSER_PARACLINICOS_VERSION = "2026-06-16-v2"
+
+
 def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
     if not pdf_files:
         return
 
-    firma = "||".join(f"{pdf_file.name}|{pdf_file.size}" for pdf_file in pdf_files)
+    firma = "||".join(
+        f"{PARSER_PARACLINICOS_VERSION}|{tipo}|{pdf_file.name}|{pdf_file.size}"
+        for pdf_file in pdf_files
+    )
     if st.session_state.get(key_sig) == firma:
         return
 
