@@ -2284,11 +2284,9 @@ def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
     if not texto_organizado:
         return
 
-    texto_actual = st.session_state.get(key_texto, "")
-    texto_auto_previo = st.session_state.get(key_auto, "")
-    if not texto_actual or texto_actual == texto_auto_previo:
-        st.session_state[key_texto] = texto_organizado
-
+    # Cuando el usuario vuelve a subir el PDF, priorizamos el resultado
+    # recién procesado para evitar que quede pegado un resumen viejo en sesión.
+    st.session_state[key_texto] = texto_organizado
     st.session_state[key_auto] = texto_organizado
     st.session_state[key_sig] = firma
 
