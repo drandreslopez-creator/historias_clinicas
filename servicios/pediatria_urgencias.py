@@ -2258,7 +2258,7 @@ def organizar_pdf_segun_tipo(texto, tipo):
     return formatear_resumen_paraclinico(texto)
 
 
-PARSER_PARACLINICOS_VERSION = "2026-06-16-v2"
+PARSER_PARACLINICOS_VERSION = "2026-06-16-v3"
 
 
 def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
@@ -3420,7 +3420,7 @@ def render():
         pdf_paraclinicos = st.file_uploader(
             "Subir PDF de laboratorios",
             type=["pdf"],
-            key="pdf_paraclinicos_uploader",
+            key=f"pdf_paraclinicos_uploader_{PARSER_PARACLINICOS_VERSION}",
             accept_multiple_files=True,
             help="Carga un PDF de laboratorio. La app extrae el texto, lo pone en MAYÚSCULA y lo organiza por fechas."
         )
@@ -3436,7 +3436,7 @@ def render():
         pdf_imagenes = st.file_uploader(
             "Subir PDF de imágenes",
             type=["pdf"],
-            key="pdf_imagenes_uploader",
+            key=f"pdf_imagenes_uploader_{PARSER_PARACLINICOS_VERSION}",
             accept_multiple_files=True,
             help="Carga un PDF de reporte imagenológico. La app extrae el texto, lo pone en MAYÚSCULA y lo organiza por fechas."
         )
