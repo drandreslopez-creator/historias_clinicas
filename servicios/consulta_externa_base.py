@@ -457,6 +457,7 @@ def render_consulta_externa(
     resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos_texto)
     analisis_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
+        "",
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,

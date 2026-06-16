@@ -2644,6 +2644,63 @@ def extraer_resumen_examen_para_analisis(examen):
     return ", ".join(resumen_limpio)
 
 
+def extraer_resumen_antecedentes_para_analisis(antecedentes):
+    if not antecedentes:
+        return ""
+
+    lineas = [limpiar_fragmento_analisis(linea) for linea in str(antecedentes).splitlines() if limpiar_fragmento_analisis(linea)]
+    if not lineas:
+        return ""
+
+    secciones = {}
+    for linea in lineas:
+        if ":" not in linea:
+            continue
+        encabezado, contenido = linea.split(":", 1)
+        secciones[encabezado.strip()] = contenido.strip()
+
+    hallazgos = []
+
+    neonatales = secciones.get("NEONATALES", "") or secciones.get("PERINATALES", "") or secciones.get("PERINATALES/NEONATALES", "")
+    if neonatales:
+        sem_match = re.search(r"(\d{1,2})\s*SEM", neonatales)
+        peso_match = re.search(r"PESO\s*(?:AL NACER\s*)?(\d{3,4})\s*GR", neonatales)
+        partes_neonatales = []
+        if sem_match:
+            semanas = int(sem_match.group(1))
+            if semanas < 37 or any(x in neonatales for x in ["PRETÉRMINO", "PRETERMINO", "PREMATURO"]):
+                partes_neonatales.append(f"PREMATUREZ DE {semanas} SEMANAS")
+        elif any(x in neonatales for x in ["PRETÉRMINO", "PRETERMINO", "PREMATURO"]):
+            partes_neonatales.append("PREMATUREZ")
+        if peso_match:
+            peso_nacer = peso_match.group(1)
+            if int(peso_nacer) < 2500 or partes_neonatales:
+                partes_neonatales.append(f"PESO AL NACER DE {peso_nacer} GR")
+        if partes_neonatales:
+            hallazgos.append("ANTECEDENTE DE " + " CON ".join(partes_neonatales))
+
+    for etiqueta in ["PATOLÓGICOS", "HOSPITALARIOS", "ALÉRGICOS", "QUIRÚRGICOS", "FARMACOLÓGICOS"]:
+        contenido = secciones.get(etiqueta, "")
+        if not contenido:
+            continue
+        if any(x in contenido for x in ["NIEGA", "SIN DATOS", "NO REFIERE", "NEGADO", "NEGATIVO"]):
+            continue
+        if etiqueta == "PATOLÓGICOS":
+            hallazgos.append(contenido)
+        else:
+            hallazgos.append(f"{etiqueta[:-1] if etiqueta.endswith('S') else etiqueta}: {contenido}")
+
+    resumen_limpio = []
+    vistos = set()
+    for item in hallazgos:
+        item = limpiar_fragmento_analisis(item)
+        if item and item not in vistos:
+            vistos.add(item)
+            resumen_limpio.append(item)
+
+    return ", ".join(resumen_limpio)
+
+
 def construir_resumen_signos_para_analisis(fc_num, fr_num, sat_num, temp_num, glucometria_num, peso_num, grupo):
     hallazgos = []
 
@@ -2762,13 +2819,17 @@ def construir_resumen_paraclinicos_para_analisis(paraclinicos_texto):
 
 def generar_analisis_asistido_urgencias(
     enfermedad_auto,
+    resumen_antecedentes_analisis,
     resumen_examen_analisis,
     resumen_signos_analisis,
     resumen_paraclinicos_analisis,
 ):
     partes = []
     if enfermedad_auto:
-        partes.append(f"{limpiar_fragmento_analisis(enfermedad_auto)}.")
+        texto_base = limpiar_fragmento_analisis(enfermedad_auto).rstrip(".")
+        if resumen_antecedentes_analisis:
+            texto_base = f"{texto_base}, {limpiar_fragmento_analisis(resumen_antecedentes_analisis)}"
+        partes.append(f"{texto_base}.")
 
     cuerpo = []
     if resumen_examen_analisis:
@@ -4046,6 +4107,7 @@ def render():
     sexo_texto_analisis = sexo.upper() if sexo else ""
 
     enfermedad_auto = f"PACIENTE {sexo_texto_analisis} {grupo.upper()} DE {edad_texto}, QUIEN CONSULTA POR {texto_enfermedad}"
+    resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
     resumen_signos_analisis = construir_resumen_signos_para_analisis(
         fc_num,
@@ -4067,6 +4129,7 @@ def render():
 
     analisis_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
+        resumen_antecedentes_analisis,
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,

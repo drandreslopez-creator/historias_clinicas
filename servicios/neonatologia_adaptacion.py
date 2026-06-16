@@ -172,6 +172,7 @@ def render():
     ).strip()
     analisis_default = generar_analisis_asistido_urgencias(
         enfermedad_auto,
+        "",
         resumen_examen_analisis,
         resumen_signos_analisis,
         resumen_paraclinicos_analisis,
