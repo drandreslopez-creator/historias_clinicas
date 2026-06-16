@@ -18,6 +18,7 @@ from pypdf import PdfReader
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt, Inches
+from PIL import ImageOps
 
 from core.calculos import calcular_edad, edad_en_meses
 from core.clasificacion import grupo_etario
@@ -1356,7 +1357,20 @@ def extraer_texto_ocr_de_imagenes(page):
 
     imagenes_principales.sort(key=lambda item: item[0], reverse=True)
 
-    for _, image_file in imagenes_principales[:1]:
+    def puntaje_texto_ocr(texto):
+        texto_upper = texto.upper()
+        claves = [
+            "HEMOGRAMA", "PROTEINA C REACTIVA", "PCR", "LEUCOCITOS",
+            "HEMOGLOBINA", "HEMATOCRITO", "PLAQUETAS", "GLUCOSA",
+            "CREATININA", "SODIO", "POTASIO", "CLORO", "CALCIO"
+        ]
+        puntaje = sum(4 for clave in claves if clave in texto_upper)
+        puntaje += min(len(texto_upper) // 250, 20)
+        return puntaje
+
+    textos_vistos = set()
+
+    for _, image_file in imagenes_principales[:3]:
         try:
             img_hash = hashlib.md5(image_file.data).hexdigest()
             if img_hash in hashes_vistos:
@@ -1375,17 +1389,33 @@ def extraer_texto_ocr_de_imagenes(page):
 
         try:
             pil_image = image_file.image.convert("L")
-            texto = ocr.image_to_string(
-                pil_image,
-                lang="spa+eng",
-                config="--psm 6"
-            )
+            pil_image = ImageOps.autocontrast(pil_image)
         except Exception:
             continue
 
-        texto = "\n".join(line.strip() for line in str(texto).splitlines() if line.strip())
-        if texto:
-            bloques.append(texto)
+        variantes = []
+        for psm in ("6", "11", "4"):
+            try:
+                texto = ocr.image_to_string(
+                    pil_image,
+                    lang="spa+eng",
+                    config=f"--oem 3 --psm {psm}"
+                )
+            except Exception:
+                continue
+            texto = "\n".join(line.strip() for line in str(texto).splitlines() if line.strip())
+            if texto:
+                variantes.append(texto)
+
+        if not variantes:
+            continue
+
+        mejor_texto = max(variantes, key=puntaje_texto_ocr)
+        firma_texto = hashlib.md5(mejor_texto.encode("utf-8", errors="ignore")).hexdigest()
+        if firma_texto in textos_vistos:
+            continue
+        textos_vistos.add(firma_texto)
+        bloques.append(mejor_texto)
 
     return "\n\n".join(bloques).strip()
 
@@ -2253,7 +2283,7 @@ def organizar_pdf_segun_tipo(texto, tipo):
     return formatear_resumen_paraclinico(texto)
 
 
-PARSER_PARACLINICOS_VERSION = "2026-06-16-v4"
+PARSER_PARACLINICOS_VERSION = "2026-06-16-v5"
 
 
 def actualizar_texto_extraido(key_texto, key_auto, key_sig, pdf_files, tipo):
