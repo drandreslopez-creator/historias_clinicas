@@ -39,7 +39,7 @@ from servicios import scores_pediatricos
 from servicios import procedimientos_espirometria
 from servicios import plantillas_genericas
 
-PASSWORD_APP = "8041003"
+PASSWORD_APP = "Dios1003"
 
 st.set_page_config(page_title="Medinexus", layout="wide")
 components.html(
