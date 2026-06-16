@@ -117,7 +117,8 @@ area_servicio = st.selectbox(
         "Telemedicina",
         "Procedimientos",
         "Scores Pediátricos",
-    ]
+    ],
+    index=1,
 )
 
 if area_servicio == "Pediatría Urgencias":
