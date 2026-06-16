@@ -1,3 +1,5 @@
+import hashlib
+import json
 from datetime import date, datetime
 
 import streamlit as st
@@ -18,8 +20,14 @@ from servicios.pediatria_urgencias import (
     PLAN_DEFAULT as PLAN_URGENCIAS_DEFAULT,
     REVISION_DEFAULT as REVISION_URGENCIAS_DEFAULT,
     BOGOTA_TZ,
+    actualizar_texto_extraido,
+    complementar_analisis_con_ia,
+    construir_resumen_paraclinicos_para_analisis,
+    construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
+    extraer_resumen_examen_para_analisis,
     eliminar_historia_guardada,
+    generar_analisis_asistido_urgencias,
     generar_docx_informe,
     guardar_docx_exportado,
     render_informe_html,
@@ -231,7 +239,14 @@ def render():
         f"{PREFIX}_pb": "",
         f"{PREFIX}_neuro": "",
         f"{PREFIX}_examen": EXAMEN_PUERICULTURA_DEFAULT,
+        f"{PREFIX}_paraclinicos_texto": "",
+        f"{PREFIX}_paraclinicos_auto": "",
+        f"{PREFIX}_paraclinicos_pdf_sig": "",
+        f"{PREFIX}_imagenes_texto": "",
+        f"{PREFIX}_imagenes_auto": "",
+        f"{PREFIX}_imagenes_pdf_sig": "",
         f"{PREFIX}_analisis": ANALISIS_PRIMERA_VEZ_DEFAULT,
+        f"{PREFIX}_analisis_base": "",
         f"{PREFIX}_diagnosticos": "",
         f"{PREFIX}_obs_dx": "",
         f"{PREFIX}_plan": PLAN_PUERICULTURA_DEFAULT,
@@ -258,13 +273,11 @@ def render():
             st.session_state[f"{PREFIX}_antecedentes"] = ANTECEDENTES_URGENCIAS_DEFAULT
             st.session_state[f"{PREFIX}_alimentacion"] = ALIMENTACION_PRIMERA_VEZ_DEFAULT
             st.session_state[f"{PREFIX}_entorno"] = ENTORNO_PRIMERA_VEZ_DEFAULT
-            st.session_state[f"{PREFIX}_analisis"] = ANALISIS_PRIMERA_VEZ_DEFAULT
         else:
             st.session_state[f"{PREFIX}_motivo"] = MOTIVO_CONTROL_DEFAULT
             st.session_state[f"{PREFIX}_antecedentes"] = ANTECEDENTES_CONTROL_DEFAULT
             st.session_state[f"{PREFIX}_alimentacion"] = ALIMENTACION_CONTROL_DEFAULT
             st.session_state[f"{PREFIX}_entorno"] = ENTORNO_CONTROL_DEFAULT
-            st.session_state[f"{PREFIX}_analisis"] = ANALISIS_CONTROL_DEFAULT
         st.session_state[f"{PREFIX}_modalidad_aplicada"] = modalidad
 
     col1, col2 = st.columns(2)
@@ -379,7 +392,122 @@ def render():
     st.subheader("Examen físico")
     examen = st.text_area("", key=f"{PREFIX}_examen", height=300, label_visibility="collapsed")
 
+    st.subheader("Paraclínicos")
+    col_pdf_1, col_pdf_2 = st.columns(2)
+    with col_pdf_1:
+        pdf_labs = st.file_uploader(
+            "Subir PDF de laboratorios",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key=f"{PREFIX}_paraclinicos_pdf_v1",
+        )
+    with col_pdf_2:
+        pdf_imgs = st.file_uploader(
+            "Subir PDF de imágenes",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key=f"{PREFIX}_imagenes_pdf_v1",
+        )
+
+    if pdf_labs:
+        actualizar_texto_extraido(
+            f"{PREFIX}_paraclinicos_texto",
+            f"{PREFIX}_paraclinicos_auto",
+            f"{PREFIX}_paraclinicos_pdf_sig",
+            pdf_labs,
+            "laboratorios",
+        )
+    if pdf_imgs:
+        actualizar_texto_extraido(
+            f"{PREFIX}_imagenes_texto",
+            f"{PREFIX}_imagenes_auto",
+            f"{PREFIX}_imagenes_pdf_sig",
+            pdf_imgs,
+            "imagenes",
+        )
+
+    paraclinicos_texto = st.text_area("Laboratorios", key=f"{PREFIX}_paraclinicos_texto", height=160)
+    imagenes_texto = st.text_area("Imágenes", key=f"{PREFIX}_imagenes_texto", height=120)
+
+    grupo = grupo_etario(años) if fecha_nacimiento else ""
+    fc_num = _float_or_none(fc)
+    fr_num = _float_or_none(fr)
+    sat_num = _float_or_none(sat)
+    glucometria_num = _float_or_none(glucometria)
+    temp_num = _float_or_none(temp)
+    peso_num = _float_or_none(peso)
+
+    enfermedad_auto = (
+        f"PACIENTE {(sexo or '').upper()} {grupo.upper() if grupo else ''} DE "
+        f"{f'{años} AÑOS' if años > 0 else f'{meses} MESES' if fecha_nacimiento else ''}, "
+        f"QUIEN CONSULTA POR {str(enfermedad_actual).upper()}"
+    ).replace("  ", " ").strip(" ,")
+    resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
+    resumen_signos_analisis = construir_resumen_signos_para_analisis(
+        fc_num,
+        fr_num,
+        sat_num,
+        temp_num,
+        glucometria_num,
+        peso_num,
+        grupo,
+    )
+    resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos_texto)
+    analisis_default = generar_analisis_asistido_urgencias(
+        enfermedad_auto,
+        resumen_examen_analisis,
+        resumen_signos_analisis,
+        resumen_paraclinicos_analisis,
+    )
+    contexto_analisis_ia = {
+        "titulo": TITULO,
+        "modalidad_consulta": modalidad,
+        "motivo_consulta": motivo,
+        "enfermedad_actual": enfermedad_actual,
+        "antecedentes": antecedentes,
+        "alimentacion": alimentacion,
+        "sueno_y_eliminacion": sueno_eliminacion,
+        "vacunacion": vacunas,
+        "entorno_habitos": entorno,
+        "neurodesarrollo": neuro,
+        "revision_por_sistemas": revision,
+        "signos_vitales": {
+            "ta": ta,
+            "fc": fc,
+            "fr": fr,
+            "spo2": sat,
+            "glucometria": glucometria,
+            "temperatura": temp,
+            "peso": peso,
+            "talla": talla,
+            "pc": pc,
+            "pb": pb,
+        },
+        "examen_fisico": examen,
+        "paraclinicos": paraclinicos_texto,
+        "imagenes": imagenes_texto,
+        "diagnosticos": st.session_state.get(f"{PREFIX}_diagnosticos", ""),
+    }
+    fingerprint_analisis_ia = hashlib.md5(
+        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    analisis_default = complementar_analisis_con_ia(
+        analisis_default,
+        contexto_analisis_ia,
+        fingerprint_analisis_ia,
+        instrucciones=(
+            "Eres un asistente clínico que redacta análisis médicos pediátricos y de puericultura en español. "
+            "Usa únicamente la información entregada. No inventes diagnósticos ni tratamientos. "
+            "Redacta un solo párrafo en MAYÚSCULAS, claro, coherente y profesional, integrando motivo de consulta, "
+            "enfermedad actual, estado general, crecimiento, desarrollo, hábitos y paraclínicos cuando existan."
+        ),
+    )
+
     st.subheader("Análisis")
+    if st.session_state.get(f"{PREFIX}_analisis_base") != analisis_default:
+        if st.session_state.get(f"{PREFIX}_analisis") == st.session_state.get(f"{PREFIX}_analisis_base", ""):
+            st.session_state[f"{PREFIX}_analisis"] = analisis_default
+        st.session_state[f"{PREFIX}_analisis_base"] = analisis_default
     analisis = st.text_area("", key=f"{PREFIX}_analisis", height=180, label_visibility="collapsed")
 
     st.subheader("Diagnósticos")
@@ -448,6 +576,12 @@ PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm PB: {pb} cm
 EXAMEN FÍSICO:
 {examen}
 
+PARACLÍNICOS:
+{paraclinicos_texto}
+
+IMÁGENES:
+{imagenes_texto}
+
 ANÁLISIS:
 {analisis}
 
@@ -476,6 +610,8 @@ PLAN:
             ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C"),
             ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm PB: {pb} cm"),
             ("EXAMEN FÍSICO", examen),
+            ("PARACLÍNICOS", paraclinicos_texto),
+            ("IMÁGENES", imagenes_texto),
             ("ANÁLISIS", analisis),
             ("DIAGNÓSTICOS", diagnosticos),
             ("OBSERVACIÓN DIAGNÓSTICA", observacion_dx),

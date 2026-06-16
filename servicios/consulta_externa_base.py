@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import date, datetime
 from pathlib import Path
@@ -13,14 +14,20 @@ from servicios.pediatria_urgencias import (
     EXAMEN_DEFAULT as EXAMEN_URGENCIAS_DEFAULT,
     PLAN_DEFAULT as PLAN_URGENCIAS_DEFAULT,
     REVISION_DEFAULT as REVISION_URGENCIAS_DEFAULT,
+    actualizar_texto_extraido,
     aplanar_grupos_busqueda,
     cargar_cie10,
     coincide_grupos,
+    complementar_analisis_con_ia,
+    construir_resumen_paraclinicos_para_analisis,
+    construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
     construir_grupos_busqueda,
     eliminar_historia_guardada,
     expandir_terminos_busqueda,
+    extraer_resumen_examen_para_analisis,
     generar_docx_informe,
+    generar_analisis_asistido_urgencias,
     guardar_docx_exportado,
     puntuar_diagnostico,
     subir_docx_a_google_drive,
@@ -217,6 +224,12 @@ def render_consulta_externa(
         f"{prefix}_imc_adulto": "",
         f"{prefix}_neuro": "",
         f"{prefix}_examen": EXAMEN_DEFAULT,
+        f"{prefix}_paraclinicos_texto": "",
+        f"{prefix}_paraclinicos_auto": "",
+        f"{prefix}_paraclinicos_pdf_sig": "",
+        f"{prefix}_imagenes_texto": "",
+        f"{prefix}_imagenes_auto": "",
+        f"{prefix}_imagenes_pdf_sig": "",
         f"{prefix}_analisis": "",
         f"{prefix}_analisis_base": "",
         f"{prefix}_diagnosticos": "",
@@ -389,23 +402,98 @@ def render_consulta_externa(
         st.session_state[f"{prefix}_examen"] = EXAMEN_URGENCIAS_DEFAULT
     examen = st.text_area("Examen físico", key=f"{prefix}_examen", height=300 if usar_modo_urgencias else 260)
 
+    st.subheader("Paraclínicos")
+    col_pdf_1, col_pdf_2 = st.columns(2)
+    with col_pdf_1:
+        pdf_labs = st.file_uploader(
+            "Subir PDF de laboratorios",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key=f"{prefix}_paraclinicos_pdf_v1",
+        )
+    with col_pdf_2:
+        pdf_imgs = st.file_uploader(
+            "Subir PDF de imágenes",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key=f"{prefix}_imagenes_pdf_v1",
+        )
+
+    if pdf_labs:
+        actualizar_texto_extraido(
+            f"{prefix}_paraclinicos_texto",
+            f"{prefix}_paraclinicos_auto",
+            f"{prefix}_paraclinicos_pdf_sig",
+            pdf_labs,
+            "laboratorios",
+        )
+    if pdf_imgs:
+        actualizar_texto_extraido(
+            f"{prefix}_imagenes_texto",
+            f"{prefix}_imagenes_auto",
+            f"{prefix}_imagenes_pdf_sig",
+            pdf_imgs,
+            "imagenes",
+        )
+
+    paraclinicos_texto = st.text_area("Laboratorios", key=f"{prefix}_paraclinicos_texto", height=160)
+    imagenes_texto = st.text_area("Imágenes", key=f"{prefix}_imagenes_texto", height=120)
+
     sexo_txt = (sexo or "").upper()
     grupo_txt = f" {grupo.upper()}" if grupo else ""
     edad_resumen = f"{años} AÑOS" if años > 0 else (f"{meses} MESES" if fecha_nacimiento else "")
-    if usar_modo_urgencias:
-        analisis_default = (
-            f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}. "
-            f"AL INGRESO PACIENTE QUE LUCE EN ACEPTABLES CONDICIONES GENERALES, BUEN ESTADO DE HIDRATACIÓN, "
-            f"HEMODINÁMICAMENTE ESTABLE, BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO, "
-            f"SIN SIGNOS DE ALARMA ABDOMINAL, SIN DISTERMIAS, NO ASPECTO TÓXICO, SIN EDEMAS, SIN DÉFICIT NEUROLÓGICO, "
-            f"PIEL BIEN PERFUNDIDA SIN LESIONES. SE INDICA MANEJO... SE BRINDA INFORMACIÓN A FAMILIARES, SE ACLARAN DUDAS."
-        ).strip()
-    else:
-        analisis_default = (
-            f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}. "
-            f"AL MOMENTO DE LA VALORACIÓN SE ENCUENTRA EN CONDICIONES GENERALES ESTABLES. "
-            f"SE CORRELACIONA CLÍNICA Y PARACLÍNICAMENTE PARA DEFINIR CONDUCTA."
-        ).strip()
+
+    enfermedad_auto = f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}".strip()
+    resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
+    resumen_signos_analisis = construir_resumen_signos_para_analisis(
+        fc_num,
+        fr_num,
+        sat_num,
+        temp_num,
+        glucometria_num,
+        peso_num,
+        grupo,
+    )
+    resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos_texto)
+    analisis_default = generar_analisis_asistido_urgencias(
+        enfermedad_auto,
+        resumen_examen_analisis,
+        resumen_signos_analisis,
+        resumen_paraclinicos_analisis,
+    )
+    contexto_analisis_ia = {
+        "titulo": titulo,
+        "modalidad_consulta": modalidad_consulta or "",
+        "motivo_consulta": motivo,
+        "enfermedad_actual": enfermedad_actual,
+        "antecedentes": antecedentes,
+        "revision_por_sistemas": revision,
+        "signos_vitales": {
+            "ta": ta,
+            "fc": fc,
+            "fr": fr,
+            "spo2": sat,
+            "glucometria": glucometria,
+            "temperatura": temp,
+            "peso": peso,
+            "talla": talla,
+            "pc": pc,
+            "pb": pb,
+            "imc": imc_adulto if not es_pediatrica else "",
+        },
+        "examen_fisico": examen,
+        "paraclinicos": paraclinicos_texto,
+        "imagenes": imagenes_texto,
+        "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
+    }
+    fingerprint_analisis_ia = hashlib.md5(
+        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    analisis_default = complementar_analisis_con_ia(
+        analisis_default,
+        contexto_analisis_ia,
+        fingerprint_analisis_ia,
+    )
 
     st.subheader("Análisis")
     if st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
@@ -487,6 +575,12 @@ PESO: {peso} kg TALLA: {talla} cm"""
 EXAMEN FÍSICO:
 {examen}
 
+PARACLÍNICOS:
+{paraclinicos_texto}
+
+IMÁGENES:
+{imagenes_texto}
+
 ANÁLISIS:
 {analisis}
 
@@ -515,6 +609,8 @@ PLAN:
                 ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C" + (f" PB: {pb} cm" if mostrar_pb else "")),
                 ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm" + (f" PC: {pc} cm" if es_pediatrica else (f" IMC: {imc_adulto} kg/m²" if imc_adulto else ""))),
                 ("EXAMEN FÍSICO", examen),
+                ("PARACLÍNICOS", paraclinicos_texto),
+                ("IMÁGENES", imagenes_texto),
                 ("ANÁLISIS", analisis),
                 ("DIAGNÓSTICOS", diagnosticos),
                 ("OBSERVACIÓN DIAGNÓSTICA", observacion_dx),

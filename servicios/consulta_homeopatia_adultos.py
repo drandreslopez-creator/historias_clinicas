@@ -1,3 +1,4 @@
+import hashlib
 import json
 from datetime import date, datetime
 from pathlib import Path
@@ -7,9 +8,15 @@ import streamlit as st
 
 from core.calculos import calcular_edad
 from servicios.pediatria_urgencias import (
+    actualizar_texto_extraido,
+    complementar_analisis_con_ia,
+    construir_resumen_paraclinicos_para_analisis,
+    construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
     eliminar_historia_guardada,
+    extraer_resumen_examen_para_analisis,
     generar_docx_informe,
+    generar_analisis_asistido_urgencias,
     guardar_docx_exportado,
     render_informe_html,
     subir_docx_a_google_drive,
@@ -210,7 +217,13 @@ def render():
         f"{prefix}_examen": EXAMEN_HOMEO_ADULTOS_DEFAULT,
         f"{prefix}_diagnosticos": "",
         f"{prefix}_paraclinicos": PARACLINICOS_DEFAULT,
+        f"{prefix}_paraclinicos_auto": "",
+        f"{prefix}_paraclinicos_pdf_sig": "",
+        f"{prefix}_imagenes_texto": "",
+        f"{prefix}_imagenes_auto": "",
+        f"{prefix}_imagenes_pdf_sig": "",
         f"{prefix}_analisis_homeopatico": ANALISIS_HOMEOPATICO_DEFAULT,
+        f"{prefix}_analisis_homeopatico_base": "",
         f"{prefix}_rubros": RUBROS_DEFAULT,
         f"{prefix}_tratamiento": TRATAMIENTO_DEFAULT,
         f"{prefix}_historia_consulta_id": None,
@@ -343,9 +356,113 @@ def render():
     diagnosticos = st.text_area("", key=f"{prefix}_diagnosticos", height=120, label_visibility="collapsed")
 
     st.subheader("Exámenes paraclínicos")
-    paraclinicos = st.text_area("", key=f"{prefix}_paraclinicos", height=110, label_visibility="collapsed")
+    col_pdf_1, col_pdf_2 = st.columns(2)
+    with col_pdf_1:
+        pdf_labs = st.file_uploader(
+            "Subir PDF de laboratorios",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key=f"{prefix}_paraclinicos_pdf_v1",
+        )
+    with col_pdf_2:
+        pdf_imgs = st.file_uploader(
+            "Subir PDF de imágenes",
+            type=["pdf"],
+            accept_multiple_files=True,
+            key=f"{prefix}_imagenes_pdf_v1",
+        )
+
+    if pdf_labs:
+        actualizar_texto_extraido(
+            f"{prefix}_paraclinicos",
+            f"{prefix}_paraclinicos_auto",
+            f"{prefix}_paraclinicos_pdf_sig",
+            pdf_labs,
+            "laboratorios",
+        )
+    if pdf_imgs:
+        actualizar_texto_extraido(
+            f"{prefix}_imagenes_texto",
+            f"{prefix}_imagenes_auto",
+            f"{prefix}_imagenes_pdf_sig",
+            pdf_imgs,
+            "imagenes",
+        )
+
+    paraclinicos = st.text_area("", key=f"{prefix}_paraclinicos", height=140, label_visibility="collapsed")
+    imagenes_texto = st.text_area("Imágenes", key=f"{prefix}_imagenes_texto", height=120)
+
+    resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
+    resumen_signos_analisis = construir_resumen_signos_para_analisis(
+        _float_or_none(fc),
+        _float_or_none(fr),
+        _float_or_none(sat),
+        _float_or_none(temp),
+        _float_or_none(glucometria),
+        _float_or_none(peso),
+        "",
+    )
+    resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos)
+    enfermedad_auto = (
+        f"PACIENTE {(sexo or '').upper()} DE "
+        f"{f'{años} AÑOS' if fecha_nacimiento and años > 0 else ''}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}"
+    ).replace("  ", " ").strip(" ,")
+    analisis_homeopatico_default = generar_analisis_asistido_urgencias(
+        enfermedad_auto,
+        resumen_examen_analisis,
+        resumen_signos_analisis,
+        resumen_paraclinicos_analisis,
+    )
+    contexto_analisis_ia = {
+        "titulo": titulo,
+        "modalidad_consulta": modalidad,
+        "motivo_consulta": motivo,
+        "enfermedad_actual": enfermedad_actual,
+        "antecedentes": antecedentes,
+        "revision_por_sistemas": revision,
+        "biopatografia": biopatografia,
+        "sintomas_generales": sintomas_generales,
+        "sintomas_mentales": sintomas_mentales,
+        "signos_vitales": {
+            "ta": ta,
+            "fc": fc,
+            "fr": fr,
+            "spo2": sat,
+            "glucometria": glucometria,
+            "temperatura": temp,
+            "peso": peso,
+            "talla": talla,
+            "imc": imc_manual,
+        },
+        "examen_fisico": examen,
+        "diagnosticos": diagnosticos,
+        "paraclinicos": paraclinicos,
+        "imagenes": imagenes_texto,
+        "rubros": rubros if 'rubros' in locals() else "",
+    }
+    fingerprint_analisis_ia = hashlib.md5(
+        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    analisis_homeopatico_default = complementar_analisis_con_ia(
+        analisis_homeopatico_default,
+        contexto_analisis_ia,
+        fingerprint_analisis_ia,
+        instrucciones=(
+            "Eres un asistente clínico que redacta análisis clínico-homeopáticos en español. "
+            "Usa únicamente la información entregada. No inventes diagnósticos, remedios ni hallazgos. "
+            "Redacta un solo párrafo en MAYÚSCULAS, profesional y coherente, integrando motivo de consulta, "
+            "evolución, biopatografía, síntomas generales, síntomas mentales, examen físico y paraclínicos."
+        ),
+    )
 
     st.subheader("Análisis homeopático")
+    if st.session_state.get(f"{prefix}_analisis_homeopatico_base") != analisis_homeopatico_default:
+        if st.session_state.get(f"{prefix}_analisis_homeopatico") == st.session_state.get(
+            f"{prefix}_analisis_homeopatico_base",
+            "",
+        ):
+            st.session_state[f"{prefix}_analisis_homeopatico"] = analisis_homeopatico_default
+        st.session_state[f"{prefix}_analisis_homeopatico_base"] = analisis_homeopatico_default
     analisis_homeopatico = st.text_area(
         "",
         key=f"{prefix}_analisis_homeopatico",
@@ -417,6 +534,9 @@ DIAGNÓSTICOS MÉDICOS:
 EXÁMENES PARACLÍNICOS:
 {paraclinicos}
 
+IMÁGENES:
+{imagenes_texto}
+
 ANÁLISIS HOMEOPÁTICO:
 {analisis_homeopatico}
 
@@ -446,6 +566,7 @@ ANÁLISIS Y TRATAMIENTO:
             ),
             ("DIAGNÓSTICOS MÉDICOS", diagnosticos),
             ("EXÁMENES PARACLÍNICOS", paraclinicos),
+            ("IMÁGENES", imagenes_texto),
             ("ANÁLISIS HOMEOPÁTICO", analisis_homeopatico),
             ("RUBROS IMPORTANTES", rubros),
             ("ANÁLISIS Y TRATAMIENTO", tratamiento),

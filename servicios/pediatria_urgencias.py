@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 import unicodedata
 import json
 import re
+import requests
 from io import BytesIO
 from html import escape
 from pathlib import Path
@@ -2549,6 +2550,7 @@ def extraer_resumen_examen_para_analisis(examen):
         secciones[encabezado.strip()] = contenido.strip()
 
     ojos = secciones.get("OJOS", "")
+    oidos = secciones.get("OÍDOS", "") or secciones.get("OIDOS", "")
     nariz = secciones.get("NARIZ", "")
     orofaringe = secciones.get("OROFARINGE", "")
     torax = secciones.get("TÓRAX", "") or secciones.get("TORAX", "")
@@ -2567,6 +2569,8 @@ def extraer_resumen_examen_para_analisis(examen):
         signos_deshidratacion.append("LLANTO SIN LÁGRIMAS")
     if signos_deshidratacion:
         resumen.append(", ".join(dict.fromkeys(signos_deshidratacion)))
+        if "DESHIDRAT" in primera:
+            resumen.append("SIGNOS DE DESHIDRATACIÓN YA MENCIONADOS")
 
     if "RINORREA" in nariz:
         match = re.search(r"(RINORREA[^.,;]*)", nariz)
@@ -2577,20 +2581,57 @@ def extraer_resumen_examen_para_analisis(examen):
         and "SIN AGREGADOS PULMONARES" in cardio
         and ("OXIMETRIAS ADECUADAS" in cardio or "OXIMETRÍAS ADECUADAS" in cardio)
     )
+    hemodinamica_estable = (
+        "RUIDOS CARDIACOS RÍTMICOS" in cardio or "RUIDOS CARDIACOS RITMICOS" in cardio
+    ) and ("BIEN PERFUNDIDA" in piel or "ROSADA" in piel)
+    if hemodinamica_estable:
+        resumen.append("HEMODINÁMICAMENTE ESTABLE")
+
     if cardio_normal and "SIN TIRAJES" in torax:
         resumen.append("BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO")
+    else:
+        if any(x in torax for x in ["TIRAJES", "RETRACCIONES", "ALETEO"]):
+            resumen.append("CON DIFICULTAD RESPIRATORIA")
+        if any(x in cardio for x in ["AGREGADOS PULMONARES", "CREPITANTES", "SIBILANCIAS", "RONCUS"]):
+            resumen.append("CON HALLAZGOS RESPIRATORIOS AL EXAMEN")
 
     if "SIN SIGNOS DE IRRITACIÓN PERITONEAL" in abdomen or "SIN SIGNOS DE IRRITACION PERITONEAL" in abdomen:
         resumen.append("SIN SIGNOS DE ALARMA ABDOMINAL")
+    else:
+        if "DISTENDIDO" in abdomen and "NO DISTENDIDO" not in abdomen:
+            resumen.append("DISTENSIÓN ABDOMINAL")
+        if any(x in abdomen for x in ["DOLOR", "DOLOROSO", "DOLOR A LA PALPACIÓN", "DOLOR A LA PALPACION"]) and "NO DOLOROSO" not in abdomen:
+            resumen.append("DOLOR ABDOMINAL")
+        if any(x in abdomen for x in ["IRRITACIÓN PERITONEAL", "IRRITACION PERITONEAL", "DEFENSA", "REBOTE"]):
+            resumen.append("CON SIGNOS DE ALARMA ABDOMINAL")
 
     if "SIN EDEMAS" in extremidades:
         resumen.append("SIN EDEMAS")
 
     if ("SIN DÉFICIT" in neuro or "SIN DEFICIT" in neuro) and "NO FOCALIZACIONES" in neuro:
-        resumen.append("SIN DÉFICIT NEUROLÓGICO")
+        if "IRRITABLE" in primera:
+            resumen.append("IRRITABLE PERO SIN DÉFICIT NEUROLÓGICO")
+        else:
+            resumen.append("SIN DÉFICIT NEUROLÓGICO")
+    elif any(x in neuro for x in ["MENINGISMO", "FOCALIZACIONES", "CONVULS", "LETARGO", "SOMNOLIENT", "HIPOACTIVO"]):
+        resumen.append("CON HALLAZGOS NEUROLÓGICOS A CORRELACIONAR")
 
     if "BIEN PERFUNDIDA" in piel and "SIN LESIONES" in piel:
         resumen.append("PIEL BIEN PERFUNDIDA SIN LESIONES")
+    elif any(x in piel for x in ["EXANTEMA", "PETEQUI", "PURPURA", "PÚRPURA", "ERITEMA", "LESIONES"]):
+        match_piel = re.search(r"(EXANTEMA[^.,;]*|PETEQUI[^.,;]*|P[ÚU]RPURA[^.,;]*|ERITEMA[^.,;]*|LESIONES[^.,;]*)", piel)
+        if match_piel:
+            resumen.append(match_piel.group(1).strip())
+
+    if any(x in orofaringe for x in ["ERITEMA", "HIPEREMIA", "EXUDADO", "PLACAS", "VESICULAS", "VESÍCULAS"]):
+        match_oro = re.search(r"(ERITEMA[^.,;]*|HIPEREMIA[^.,;]*|EXUDADO[^.,;]*|PLACAS[^.,;]*|VES[IÍ]CULAS?[^.,;]*)", orofaringe)
+        if match_oro:
+            resumen.append(match_oro.group(1).strip())
+
+    if any(x in oidos for x in ["OTORREA", "HIPEREMIA", "ABOMBAMIENTO", "ERITEMA"]):
+        match_oido = re.search(r"(OTORREA[^.,;]*|HIPEREMIA[^.,;]*|ABOMBAMIENTO[^.,;]*|ERITEMA[^.,;]*)", oidos)
+        if match_oido:
+            resumen.append(match_oido.group(1).strip())
 
     resumen_limpio = []
     vistos = set()
@@ -2601,6 +2642,232 @@ def extraer_resumen_examen_para_analisis(examen):
             resumen_limpio.append(item)
 
     return ", ".join(resumen_limpio)
+
+
+def construir_resumen_signos_para_analisis(fc_num, fr_num, sat_num, temp_num, glucometria_num, peso_num, grupo):
+    hallazgos = []
+
+    if temp_num is not None:
+        if temp_num >= 38:
+            hallazgos.append("CON FIEBRE")
+        elif temp_num < 36:
+            hallazgos.append("CON HIPOTERMIA")
+        else:
+            hallazgos.append("SIN DISTERMIAS")
+
+    if sat_num is not None and sat_num < 92:
+        hallazgos.append("CON HIPOXEMIA")
+
+    grupo_upper = (grupo or "").upper()
+    if fc_num is not None:
+        if ("LACTANTE" in grupo_upper and fc_num > 160) or ("ESCOLAR" in grupo_upper and fc_num > 130) or ("ADOLESCENTE" in grupo_upper and fc_num > 120):
+            hallazgos.append("TAQUICÁRDICA")
+
+    if fr_num is not None:
+        if ("LACTANTE" in grupo_upper and fr_num > 50) or ("PREESCOLAR" in grupo_upper and fr_num > 40) or ("ESCOLAR" in grupo_upper and fr_num > 30):
+            hallazgos.append("TAQUIPNEICA")
+
+    if glucometria_num is not None:
+        if glucometria_num < 70:
+            hallazgos.append("CON GLUCOMETRÍA BAJA")
+        elif glucometria_num > 180:
+            hallazgos.append("CON HIPERGLUCEMIA")
+
+    if peso_num is not None and peso_num <= 0:
+        hallazgos.append("PESO NO INTERPRETABLE")
+
+    hallazgos_limpios = []
+    vistos = set()
+    for item in hallazgos:
+        item = limpiar_fragmento_analisis(item)
+        if item and item not in vistos:
+            vistos.add(item)
+            hallazgos_limpios.append(item)
+    return ", ".join(hallazgos_limpios)
+
+
+def construir_resumen_paraclinicos_para_analisis(paraclinicos_texto):
+    if not paraclinicos_texto:
+        return ""
+
+    texto = limpiar_fragmento_analisis(paraclinicos_texto)
+    hallazgos = []
+
+    if "PCR" in texto:
+        match = re.search(r"\bPCR\s+([<>]?\d+(?:[.,]\d+)?)", texto)
+        if match:
+            valor = float(match.group(1).replace(",", ".").replace("<", "").replace(">", ""))
+            if valor >= 5:
+                hallazgos.append(f"PCR ELEVADA ({match.group(1)})")
+
+    if "LEUCOCITOS" in texto:
+        match = re.search(r"\bLEUCOCITOS\s+([<>]?\d+(?:[.,]\d+)?)", texto)
+        if match:
+            valor = float(match.group(1).replace(",", "."))
+            if valor > 15:
+                hallazgos.append(f"LEUCOCITOSIS ({match.group(1)})")
+            elif valor < 5:
+                hallazgos.append(f"LEUCOPENIA ({match.group(1)})")
+
+    if "NEUTRÓFILOS" in texto or "NEUTROFILOS" in texto:
+        match = re.search(r"\bNEUTR[ÓO]FILOS\s+([<>]?\d+(?:[.,]\d+)?)%", texto)
+        if match:
+            valor = float(match.group(1).replace(",", "."))
+            if valor >= 60:
+                hallazgos.append(f"NEUTROFILIA RELATIVA ({match.group(1)}%)")
+
+    if "LINFOCITOS" in texto:
+        match = re.search(r"\bLINFOCITOS\s+([<>]?\d+(?:[.,]\d+)?)%", texto)
+        if match:
+            valor = float(match.group(1).replace(",", "."))
+            if valor >= 50:
+                hallazgos.append(f"LINFOCITOSIS RELATIVA ({match.group(1)}%)")
+
+    if "PLAQUETAS" in texto:
+        match = re.search(r"\bPLAQUETAS\s+([<>]?\d+(?:[.,]\d+)?)", texto)
+        if match:
+            valor = float(match.group(1).replace(",", "."))
+            if valor > 450:
+                hallazgos.append(f"TROMBOCITOSIS ({match.group(1)})")
+            elif valor < 150:
+                hallazgos.append(f"TROMBOCITOPENIA ({match.group(1)})")
+
+    if "SODIO" in texto:
+        match = re.search(r"\bSODIO\s+([<>]?\d+(?:[.,]\d+)?)", texto)
+        if match:
+            valor = float(match.group(1).replace(",", "."))
+            if valor < 135:
+                hallazgos.append(f"HIPONATREMIA ({match.group(1)})")
+            elif valor > 145:
+                hallazgos.append(f"HIPERNATREMIA ({match.group(1)})")
+
+    if "POTASIO" in texto:
+        match = re.search(r"\bPOTASIO\s+([<>]?\d+(?:[.,]\d+)?)", texto)
+        if match:
+            valor = float(match.group(1).replace(",", "."))
+            if valor < 3.5:
+                hallazgos.append(f"HIPOPOTASEMIA ({match.group(1)})")
+            elif valor > 5.5:
+                hallazgos.append(f"HIPERPOTASEMIA ({match.group(1)})")
+
+    hallazgos_limpios = []
+    vistos = set()
+    for item in hallazgos:
+        item = limpiar_fragmento_analisis(item)
+        if item and item not in vistos:
+            vistos.add(item)
+            hallazgos_limpios.append(item)
+    return ", ".join(hallazgos_limpios)
+
+
+def generar_analisis_asistido_urgencias(
+    enfermedad_auto,
+    resumen_examen_analisis,
+    resumen_signos_analisis,
+    resumen_paraclinicos_analisis,
+):
+    partes = []
+    if enfermedad_auto:
+        partes.append(f"{limpiar_fragmento_analisis(enfermedad_auto)}.")
+
+    cuerpo = []
+    if resumen_examen_analisis:
+        cuerpo.append(resumen_examen_analisis)
+    if resumen_signos_analisis:
+        cuerpo.append(resumen_signos_analisis)
+    if resumen_paraclinicos_analisis:
+        cuerpo.append(f"PARACLÍNICOS CON {resumen_paraclinicos_analisis}")
+
+    cuerpo_texto = ", ".join(
+        item.strip(" ,.;") for item in cuerpo if item and item.strip(" ,.;")
+    )
+    if cuerpo_texto:
+        partes.append(f"AL INGRESO {cuerpo_texto}.")
+
+    partes.append("SE INDICA MANEJO... SE BRINDA INFORMACIÓN A FAMILIARES, SE ACLARAN DUDAS.")
+    return " ".join(partes)
+
+
+def obtener_secret_app(key, default=None):
+    try:
+        return st.secrets.get(key, default)
+    except Exception:
+        return os.environ.get(key, default)
+
+
+def ia_analisis_configurada():
+    return bool(obtener_secret_app("openai_api_key"))
+
+
+def extraer_texto_respuesta_openai(data):
+    if not isinstance(data, dict):
+        return ""
+    if isinstance(data.get("output_text"), str) and data.get("output_text").strip():
+        return data.get("output_text").strip()
+
+    partes = []
+    for item in data.get("output", []) or []:
+        if item.get("type") != "message":
+            continue
+        for content in item.get("content", []) or []:
+            if content.get("type") == "output_text" and content.get("text"):
+                partes.append(content["text"].strip())
+    return "\n".join(p for p in partes if p).strip()
+
+
+def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucciones=None):
+    if not ia_analisis_configurada():
+        return base_analisis
+
+    cache_key = "analisis_ia_cache"
+    cache = st.session_state.get(cache_key, {})
+    if cache.get("fingerprint") == fingerprint and cache.get("texto"):
+        return cache["texto"]
+
+    api_key = obtener_secret_app("openai_api_key")
+    model = obtener_secret_app("openai_model", "gpt-4o-mini")
+
+    instrucciones = instrucciones or (
+        "Eres un asistente clínico que redacta análisis médicos en español. "
+        "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+        "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+        "Mantén un estilo médico parecido al de una historia clínica colombiana. "
+        "Conserva el sentido clínico del borrador base, pero mejora coherencia, orden y conexión entre enfermedad actual, "
+        "signos vitales, examen físico y paraclínicos. "
+        "Si algún dato no está presente, simplemente no lo menciones."
+    )
+
+    prompt = {
+        "borrador_base": base_analisis,
+        "contexto_clinico": contexto,
+    }
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "input": json.dumps(prompt, ensure_ascii=False),
+                "instructions": instrucciones,
+                "temperature": 0.2,
+                "max_output_tokens": 500,
+            },
+            timeout=25,
+        )
+        response.raise_for_status()
+        texto = extraer_texto_respuesta_openai(response.json())
+        if texto:
+            cache = {"fingerprint": fingerprint, "texto": texto.strip()}
+            st.session_state[cache_key] = cache
+            return texto.strip()
+    except Exception:
+        return base_analisis
+
+    return base_analisis
 
 
 def contenido_seccion_html(texto, color):
@@ -3779,8 +4046,61 @@ def render():
     sexo_texto_analisis = sexo.upper() if sexo else ""
 
     enfermedad_auto = f"PACIENTE {sexo_texto_analisis} {grupo.upper()} DE {edad_texto}, QUIEN CONSULTA POR {texto_enfermedad}"
+    resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
+    resumen_signos_analisis = construir_resumen_signos_para_analisis(
+        fc_num,
+        fr_num,
+        sat_num,
+        temp_num,
+        glucometria_num,
+        peso_num,
+        grupo,
+    )
+    resumen_paraclinicos_analisis = construir_resumen_paraclinicos_para_analisis(paraclinicos_texto)
+    if not resumen_examen_analisis:
+        resumen_examen_analisis = (
+            "PACIENTE QUE LUCE EN ACEPTABLES CONDICIONES GENERALES, BUEN ESTADO DE HIDRATACIÓN, "
+            "HEMODINÁMICAMENTE ESTABLE, BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO, "
+            "SIN SIGNOS DE ALARMA ABDOMINAL, SIN DISTERMIAS, NO ASPECTO TÓXICO, SIN EDEMAS, "
+            "SIN DÉFICIT NEUROLÓGICO, PIEL BIEN PERFUNDIDA SIN LESIONES"
+        )
 
-    analisis_default = f"""{enfermedad_auto}. AL INGRESO PACIENTE QUE LUCE EN ACEPTABLES CONDICIONES GENERALES, BUEN ESTADO DE HIDRATACIÓN, HEMODINÁMICAMENTE ESTABLE, BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO, SIN SIGNOS DE ALARMA ABDOMINAL, SIN DISTERMIAS, NO ASPECTO TÓXICO, SIN EDEMAS, SIN DÉFICIT NEUROLÓGICO, PIEL BIEN PERFUNDIDA SIN LESIONES. SE INDICA MANEJO... SE BRINDA INFORMACIÓN A FAMILIARES, SE ACLARAN DUDAS."""
+    analisis_default = generar_analisis_asistido_urgencias(
+        enfermedad_auto,
+        resumen_examen_analisis,
+        resumen_signos_analisis,
+        resumen_paraclinicos_analisis,
+    )
+
+    contexto_analisis_ia = {
+        "sexo": sexo_texto_analisis,
+        "grupo_etario": grupo.upper() if grupo else "",
+        "edad": edad_texto,
+        "motivo_consulta": motivo,
+        "enfermedad_actual": enfermedad_input,
+        "antecedentes": antecedentes,
+        "revision_por_sistemas": revision,
+        "signos_vitales": {
+            "ta": ta,
+            "fc": fc,
+            "fr": fr,
+            "spo2": sat,
+            "temperatura": temp,
+            "glucometria": glucometria,
+            "peso": peso,
+            "talla": talla,
+        },
+        "examen_fisico": examen,
+        "paraclinicos": paraclinicos_texto,
+    }
+    fingerprint_analisis_ia = hashlib.md5(
+        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    analisis_default = complementar_analisis_con_ia(
+        analisis_default,
+        contexto_analisis_ia,
+        fingerprint_analisis_ia,
+    )
 
     st.subheader("Análisis")
 
