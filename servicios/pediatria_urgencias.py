@@ -1931,14 +1931,14 @@ def formatear_resumen_paraclinico_sogamoso(texto):
 
         hemograma_items = []
         for nombre, valor, sufijo in [
-            ("LEUCOS", leucos, ""),
-            ("NEU", neu, "%"),
-            ("LINF", linf, "%"),
-            ("MONO", mono, "%"),
-            ("EOS", eos, "%"),
-            ("HB", hb, ""),
-            ("HTO", hto, ""),
-            ("PLAQ", plaq, ""),
+            ("LEUCOCITOS", leucos, ""),
+            ("NEUTRÓFILOS", neu, "%"),
+            ("LINFOCITOS", linf, "%"),
+            ("MONOCITOS", mono, "%"),
+            ("EOSINÓFILOS", eos, "%"),
+            ("HEMOGLOBINA", hb, ""),
+            ("HEMATOCRITO", hto, ""),
+            ("PLAQUETAS", plaq, ""),
         ]:
             if valor:
                 hemograma_items.append(f"{nombre} {valor}{sufijo}")
