@@ -7,7 +7,6 @@ import streamlit as st
 from core.calculos import calcular_edad
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
 from servicios.consulta_externa_base import (
-    _float_or_none,
     _clear_state,
     _construir_diagnostico_cie10,
     _historia_path,
@@ -120,6 +119,16 @@ PLAN_PUERICULTURA_DEFAULT = """- EDUCACIÓN A CUIDADORES SEGÚN EDAD
 - FORTALECER ESTIMULACIÓN DEL DESARROLLO
 - VIGILAR SIGNOS DE ALARMA
 - CONTROL SEGÚN HALLAZGOS Y EDAD"""
+
+
+def _float_or_none_local(valor):
+    texto = str(valor or "").strip().replace(",", ".")
+    if not texto:
+        return None
+    try:
+        return float(texto)
+    except Exception:
+        return None
 
 TAMIZAJES_LACTANTE_DEFAULT = """TAMIZ VISUAL:
 TAMIZ AUDITIVO:
@@ -444,12 +453,12 @@ def render():
     grupo = grupo_etario(años) if fecha_nacimiento else ""
     resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
     destinatario_informacion = extraer_destinatario_informacion(informante)
-    fc_num = _float_or_none(fc)
-    fr_num = _float_or_none(fr)
-    sat_num = _float_or_none(sat)
-    glucometria_num = _float_or_none(glucometria)
-    temp_num = _float_or_none(temp)
-    peso_num = _float_or_none(peso)
+    fc_num = _float_or_none_local(fc)
+    fr_num = _float_or_none_local(fr)
+    sat_num = _float_or_none_local(sat)
+    glucometria_num = _float_or_none_local(glucometria)
+    temp_num = _float_or_none_local(temp)
+    peso_num = _float_or_none_local(peso)
 
     enfermedad_auto = (
         f"PACIENTE {(sexo or '').upper()} {grupo.upper() if grupo else ''} DE "
