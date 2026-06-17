@@ -19,7 +19,9 @@ from servicios.pediatria_urgencias import (
     cargar_cie10,
     coincide_grupos,
     complementar_analisis_con_ia,
+    complementar_plan_con_ia,
     construir_conducta_final_analisis,
+    construir_observacion_diagnostica_base,
     construir_conducta_sugerida_analisis,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
@@ -31,6 +33,7 @@ from servicios.pediatria_urgencias import (
     extraer_resumen_antecedentes_para_analisis,
     extraer_resumen_examen_para_analisis,
     fusionar_analisis_editado_con_base_nueva,
+    complementar_observacion_diagnostica_con_ia,
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
     guardar_docx_exportado,
@@ -528,7 +531,8 @@ def render_consulta_externa(
             "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
             "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
             "Integra antecedentes relevantes cuando aporten al caso clínico. "
-            "Formula una conducta coherente con la historia, el examen físico, los signos vitales y los paraclínicos. "
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con la historia, "
+            "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
             "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
         ),
     )
@@ -564,11 +568,82 @@ def render_consulta_externa(
         diagnosticos = _construir_diagnostico_cie10(prefix)
     else:
         diagnosticos = st.text_area("Diagnósticos", key=f"{prefix}_diagnosticos", height=120)
+    obs_dx_default = construir_observacion_diagnostica_base(
+        diagnosticos,
+        analisis_default,
+        antecedentes,
+        "",
+    )
+    contexto_obs_dx_ia = {
+        "diagnostico_cie10_principal": diagnosticos,
+        "analisis": analisis_default,
+        "antecedentes": antecedentes,
+        "enfermedad_actual": enfermedad_actual,
+        "paraclinicos": paraclinicos_texto,
+        "diagnostico_nutricional": "",
+        "titulo": titulo,
+    }
+    fingerprint_obs_dx_ia = hashlib.md5(
+        json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    obs_dx_default = complementar_observacion_diagnostica_con_ia(
+        obs_dx_default,
+        contexto_obs_dx_ia,
+        fingerprint_obs_dx_ia,
+    )
+    if st.session_state.get(f"{prefix}_obs_dx_base") != obs_dx_default:
+        if st.session_state.get(f"{prefix}_obs_dx", "") == st.session_state.get(f"{prefix}_obs_dx_base", ""):
+            st.session_state[f"{prefix}_obs_dx"] = obs_dx_default
+        elif f"{prefix}_obs_dx_base" not in st.session_state:
+            st.session_state[f"{prefix}_obs_dx"] = obs_dx_default
+        st.session_state[f"{prefix}_obs_dx_base"] = obs_dx_default
     observacion_dx = st.text_area("Observación diagnóstica", key=f"{prefix}_obs_dx", height=100)
 
     st.subheader("Plan")
     if usar_modo_urgencias and st.session_state.get(f"{prefix}_plan") == plan_default:
         st.session_state[f"{prefix}_plan"] = PLAN_URGENCIAS_DEFAULT
+    plan_base_local = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
+    contexto_plan_ia = {
+        "titulo": titulo,
+        "modalidad_consulta": modalidad_consulta or "",
+        "diagnostico_cie10_principal": diagnosticos,
+        "observacion_diagnostica": observacion_dx,
+        "conducta_final_definida": conducta_final_analisis,
+        "conducta_final_texto": conducta_final_texto,
+        "analisis": analisis_default,
+        "enfermedad_actual": enfermedad_actual,
+        "antecedentes": antecedentes,
+        "signos_vitales": {
+            "ta": ta,
+            "fc": fc,
+            "fr": fr,
+            "spo2": sat,
+            "glucometria": glucometria,
+            "temperatura": temp,
+            "peso": peso,
+            "talla": talla,
+            "pc": pc,
+            "pb": pb,
+            "imc": imc_adulto if not es_pediatrica else "",
+        },
+        "examen_fisico": examen,
+        "paraclinicos": paraclinicos_texto,
+        "imagenes": imagenes_texto,
+    }
+    fingerprint_plan_ia = hashlib.md5(
+        json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    plan_sugerido = complementar_plan_con_ia(
+        plan_base_local,
+        contexto_plan_ia,
+        fingerprint_plan_ia,
+    )
+    if st.session_state.get(f"{prefix}_plan_base") != plan_sugerido:
+        if st.session_state.get(f"{prefix}_plan", "") == st.session_state.get(f"{prefix}_plan_base", ""):
+            st.session_state[f"{prefix}_plan"] = plan_sugerido
+        elif f"{prefix}_plan_base" not in st.session_state:
+            st.session_state[f"{prefix}_plan"] = plan_sugerido
+        st.session_state[f"{prefix}_plan_base"] = plan_sugerido
     plan = st.text_area("Plan", key=f"{prefix}_plan", height=220)
 
     col_btn_1, col_btn_2 = st.columns(2)

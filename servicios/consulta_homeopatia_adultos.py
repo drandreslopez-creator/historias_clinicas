@@ -482,7 +482,8 @@ def render():
             "Usa únicamente la información entregada. No inventes diagnósticos, remedios ni hallazgos. "
             "Redacta un solo párrafo en MAYÚSCULAS, profesional y coherente, integrando motivo de consulta, "
             "antecedentes relevantes, evolución, biopatografía, síntomas generales, síntomas mentales, examen físico y paraclínicos. "
-            "Propón una conducta coherente y usa el parentesco del acompañante en el cierre si está disponible."
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con el resto de la historia, "
+            "sin contradecirla ni duplicar frases genéricas. Usa el parentesco del acompañante en el cierre si está disponible."
         ),
     )
 

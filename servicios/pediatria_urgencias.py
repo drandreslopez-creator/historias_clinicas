@@ -2762,20 +2762,35 @@ def construir_conducta_final_analisis(conducta_final, conducta_sugerida):
     conducta_final = limpiar_fragmento_analisis(conducta_final)
     sugerida = limpiar_fragmento_analisis(conducta_sugerida).rstrip(".")
 
-    prefijos = {
-        "OBSERVACIÓN": "SE DEFINE OBSERVACIÓN CLÍNICA PARA VIGILANCIA Y REVALORACIÓN SEGÚN EVOLUCIÓN",
-        "HOSPITALIZACIÓN": "SE DEFINE HOSPITALIZACIÓN PARA MANEJO INTRAHOSPITALARIO Y VIGILANCIA CLÍNICA",
-        "EGRESO": "SE DEFINE EGRESO CON MANEJO AMBULATORIO, RECOMENDACIONES Y SIGNOS DE ALARMA",
-        "REMISIÓN": "SE DEFINE REMISIÓN A MAYOR NIVEL DE COMPLEJIDAD SEGÚN HALLAZGOS Y REQUERIMIENTOS DE MANEJO",
-    }
+    if conducta_final == "OBSERVACIÓN":
+        return (
+            "SE DECIDE DEJAR PACIENTE EN OBSERVACIÓN PEDIÁTRICA, "
+            "SE INDICA MANEJO SINTOMÁTICO Y REALIZACIÓN DE EXÁMENES COMPLEMENTARIOS."
+        )
 
-    if conducta_final in prefijos:
-        base = prefijos[conducta_final]
-        if sugerida:
-            return f"{base}. {sugerida}."
-        return f"{base}."
+    if conducta_final == "HOSPITALIZACIÓN":
+        return (
+            "SE DECIDE DEJAR PACIENTE EN HOSPITALIZACIÓN PEDIÁTRICA, "
+            "SE INDICA MANEJO DIRIGIDO Y SE SOLICITAN PARACLÍNICOS DE EXTENSIÓN."
+        )
 
-    return f"{sugerida}." if sugerida else "SE INDICA MANEJO SEGÚN HALLAZGOS CLÍNICOS."
+    if conducta_final == "EGRESO":
+        return (
+            "PACIENTE CON BUEN ESTADO GENERAL, SIGNOS VITALES DENTRO DE LÍMITES ACEPTABLES "
+            "Y AL EXAMEN FÍSICO SIN SIGNOS DE ALARMA NI CRITERIOS DE HOSPITALIZACIÓN, "
+            "POR LO QUE SE DECIDE ALTA MÉDICA CON RECOMENDACIONES E INDICACIONES MÉDICAS, "
+            "SE INFORMAN SIGNOS DE ALARMA PARA RECONSULTAR POR URGENCIAS, "
+            "SE INDICA MANEJO SINTOMÁTICO AMBULATORIO Y SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA."
+        )
+
+    if conducta_final == "REMISIÓN":
+        return (
+            "PACIENTE QUIEN REQUIERE MANEJO Y VIGILANCIA EN MAYOR COMPLEJIDAD, "
+            "POR LO QUE SE DECIDE INICIO DE TRÁMITE DE REMISIÓN, "
+            "MANTENIENDO SEGUIMIENTO Y MANEJO POR NUESTRO SERVICIO HASTA DEFINIR TRASLADO."
+        )
+
+    return ""
 
 
 def construir_resumen_signos_para_analisis(fc_num, fr_num, sat_num, temp_num, glucometria_num, peso_num, grupo):
@@ -2926,9 +2941,14 @@ def generar_analisis_asistido_urgencias(
 
     conducta_limpia = limpiar_fragmento_analisis(conducta_sugerida).rstrip(".")
     destinatario_limpio = limpiar_fragmento_analisis(destinatario_informacion) or "FAMILIAR"
-    partes.append(
-        f"{conducta_limpia}. SE BRINDA INFORMACIÓN A {destinatario_limpio}, SE ACLARAN DUDAS (REFIERE ENTENDER Y ACEPTAR)."
-    )
+    if conducta_limpia:
+        partes.append(
+            f"{conducta_limpia}. SE BRINDA INFORMACIÓN A {destinatario_limpio}, SE ACLARAN DUDAS (REFIERE ENTENDER Y ACEPTAR)."
+        )
+    else:
+        partes.append(
+            f"SE BRINDA INFORMACIÓN A {destinatario_limpio}, SE ACLARAN DUDAS (REFIERE ENTENDER Y ACEPTAR)."
+        )
     return " ".join(partes)
 
 
@@ -2957,6 +2977,220 @@ def extraer_texto_respuesta_openai(data):
             if content.get("type") == "output_text" and content.get("text"):
                 partes.append(content["text"].strip())
     return "\n".join(p for p in partes if p).strip()
+
+
+def extraer_descripcion_principal_diagnostico(diagnostico):
+    texto = str(diagnostico or "").strip()
+    if not texto:
+        return ""
+    if " - " in texto:
+        return limpiar_fragmento_analisis(texto.split(" - ", 1)[1])
+    return limpiar_fragmento_analisis(texto)
+
+
+def construir_observacion_diagnostica_base(
+    diagnostico_principal="",
+    analisis="",
+    antecedentes="",
+    dx_nutricional="",
+):
+    items = []
+
+    principal = extraer_descripcion_principal_diagnostico(diagnostico_principal)
+    if principal:
+        items.append(principal)
+
+    analisis_up = limpiar_fragmento_analisis(analisis)
+    antecedentes_up = limpiar_fragmento_analisis(antecedentes)
+
+    if "SÍNDROME FEBRIL" in analisis_up or "SINDROME FEBRIL" in analisis_up or "FIEBRE" in analisis_up:
+        items.append("SÍNDROME FEBRIL AGUDO")
+
+    if "ASMA" in antecedentes_up:
+        items.append("ANTECEDENTE DE ASMA")
+
+    dx_nutri = limpiar_fragmento_analisis(dx_nutricional)
+    if dx_nutri and dx_nutri not in {"NO EVALUADO", "NO APLICA"}:
+        items.append(f"DIAGNÓSTICO NUTRICIONAL: {dx_nutri}")
+
+    items_limpios = []
+    vistos = set()
+    for item in items:
+        limpio = limpiar_fragmento_analisis(item)
+        if limpio and limpio not in vistos:
+            vistos.add(limpio)
+            items_limpios.append(limpio)
+
+    if not items_limpios:
+        return ""
+
+    lineas = ["IMPRESIÓN DIAGNÓSTICA:"]
+    for idx, item in enumerate(items_limpios, start=1):
+        lineas.append(f"{idx}. {item}")
+    return "\n".join(lineas)
+
+
+def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fingerprint):
+    if not ia_analisis_configurada():
+        return base_observacion
+
+    cache_key = "obs_dx_ia_cache"
+    cache = st.session_state.get(cache_key, {})
+    if cache.get("fingerprint") == fingerprint and cache.get("texto"):
+        return cache["texto"]
+
+    api_key = obtener_secret_app("openai_api_key")
+    model = obtener_secret_app("openai_model", "gpt-4o-mini")
+
+    instrucciones = (
+        "Eres un asistente clínico que redacta la IMPRESIÓN DIAGNÓSTICA de una historia médica en español. "
+        "Usa únicamente la información entregada. No inventes diagnósticos ni hallazgos. "
+        "Debes responder en MAYÚSCULAS y en formato de lista numerada precedida por el título IMPRESIÓN DIAGNÓSTICA:. "
+        "El diagnóstico CIE-10 principal, si existe, debe quedar en el punto 1 y ser el más importante. "
+        "Luego ordena diagnósticos sindromáticos, antecedentes clínicos relevantes y diagnóstico nutricional si aporta al caso. "
+        "Máximo 4 ítems. No agregues explicaciones extras."
+    )
+
+    prompt = {
+        "borrador_base": base_observacion,
+        "contexto_clinico": contexto,
+    }
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "input": json.dumps(prompt, ensure_ascii=False),
+                "instructions": instrucciones,
+                "temperature": 0.1,
+                "max_output_tokens": 250,
+            },
+            timeout=25,
+        )
+        response.raise_for_status()
+        texto = extraer_texto_respuesta_openai(response.json())
+        if texto:
+            texto = texto.strip()
+            cache = {"fingerprint": fingerprint, "texto": texto}
+            st.session_state[cache_key] = cache
+            return texto
+    except Exception:
+        return base_observacion
+
+    return base_observacion
+
+
+def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=None):
+    if not ia_analisis_configurada():
+        return base_plan
+
+    cache_key = "plan_ia_cache"
+    cache = st.session_state.get(cache_key, {})
+    if cache.get("fingerprint") == fingerprint and cache.get("texto"):
+        return cache["texto"]
+
+    api_key = obtener_secret_app("openai_api_key")
+    model = obtener_secret_app("openai_model", "gpt-4o-mini")
+
+    instrucciones = instrucciones or (
+        "Eres un asistente clínico que redacta planes médicos en español para historias clínicas. "
+        "Usa únicamente la información entregada. No inventes diagnósticos, paraclínicos, fármacos ni dosis que no estén presentes en el contexto o en el plan base. "
+        "Puedes reorganizar y complementar el plan con medidas generales coherentes según el estado del paciente, la conducta final y los hallazgos clínicos. "
+        "Responde en MAYÚSCULAS, una indicación por línea, sin numeración y sin comentarios adicionales. "
+        "Si la conducta final es observación, hospitalización, egreso o remisión, el plan debe ser coherente con esa decisión."
+    )
+
+    prompt = {
+        "plan_base": base_plan,
+        "contexto_clinico": contexto,
+    }
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "input": json.dumps(prompt, ensure_ascii=False),
+                "instructions": instrucciones,
+                "temperature": 0.1,
+                "max_output_tokens": 450,
+            },
+            timeout=25,
+        )
+        response.raise_for_status()
+        texto = extraer_texto_respuesta_openai(response.json())
+        if texto:
+            texto = texto.strip()
+            cache = {"fingerprint": fingerprint, "texto": texto}
+            st.session_state[cache_key] = cache
+            return texto
+    except Exception:
+        return base_plan
+
+    return base_plan
+
+
+def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instrucciones=None):
+    if not ia_analisis_configurada():
+        return base_texto
+
+    cache_key = "codigo_trauma_ia_cache"
+    cache = st.session_state.get(cache_key, {})
+    if cache.get("fingerprint") == fingerprint and cache.get("texto"):
+        return cache["texto"]
+
+    api_key = obtener_secret_app("openai_api_key")
+    model = obtener_secret_app("openai_model", "gpt-4o-mini")
+
+    instrucciones = instrucciones or (
+        "Eres un asistente clínico que redacta reportes breves de ACTIVACIÓN CÓDIGO TRAUMA en español. "
+        "Usa únicamente la información entregada. No inventes datos, lesiones, laboratorios ni especialidades. "
+        "Debes conservar el NIVEL calculado y no cambiarlo. "
+        "Responde en MAYÚSCULAS, con formato breve y operativo para enviar a un grupo clínico. "
+        "Mantén la estructura de ACTIVACION CODIGO TRAUMA y ordena el texto para que quede claro, coherente y útil."
+    )
+
+    prompt = {
+        "borrador_base": base_texto,
+        "contexto_clinico": contexto,
+    }
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "input": json.dumps(prompt, ensure_ascii=False),
+                "instructions": instrucciones,
+                "temperature": 0.1,
+                "max_output_tokens": 350,
+            },
+            timeout=25,
+        )
+        response.raise_for_status()
+        texto = extraer_texto_respuesta_openai(response.json())
+        if texto:
+            texto = texto.strip()
+            cache = {"fingerprint": fingerprint, "texto": texto}
+            st.session_state[cache_key] = cache
+            return texto
+    except Exception:
+        return base_texto
+
+    return base_texto
 
 
 def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucciones=None):
@@ -4345,7 +4579,8 @@ def render():
             "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
             "Mantén un estilo médico parecido al de una historia clínica colombiana. "
             "Integra antecedentes relevantes cuando aporten al caso clínico. "
-            "Formula una conducta coherente con la historia, el examen físico, los signos vitales y los paraclínicos. "
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con la historia, "
+            "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
             "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
             "Conserva el sentido clínico del borrador base, pero mejora coherencia, orden y conexión entre enfermedad actual, "
             "signos vitales, examen físico, paraclínicos y conducta."
@@ -4438,6 +4673,36 @@ def render():
                 key="dx_cie10"
             )
 
+    obs_dx_default = construir_observacion_diagnostica_base(
+        diagnostico_seleccionado,
+        analisis_default,
+        antecedentes,
+        dx_nutricional,
+    )
+    contexto_obs_dx_ia = {
+        "diagnostico_cie10_principal": diagnostico_seleccionado,
+        "analisis": analisis_default,
+        "antecedentes": antecedentes,
+        "enfermedad_actual": enfermedad_input,
+        "paraclinicos": paraclinicos_texto,
+        "diagnostico_nutricional": dx_nutricional,
+    }
+    fingerprint_obs_dx_ia = hashlib.md5(
+        json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    obs_dx_default = complementar_observacion_diagnostica_con_ia(
+        obs_dx_default,
+        contexto_obs_dx_ia,
+        fingerprint_obs_dx_ia,
+    )
+    if "obs_dx_base" not in st.session_state:
+        st.session_state["obs_dx"] = obs_dx_default
+        st.session_state["obs_dx_base"] = obs_dx_default
+    elif st.session_state.get("obs_dx_base") != obs_dx_default:
+        if st.session_state.get("obs_dx") == st.session_state.get("obs_dx_base", ""):
+            st.session_state["obs_dx"] = obs_dx_default
+        st.session_state["obs_dx_base"] = obs_dx_default
+
     observacion_diagnostico = st.text_area(
         "Observación diagnóstica",
         key="obs_dx",
@@ -4446,7 +4711,37 @@ def render():
 
     edad_meses_actual = edad_en_meses(fecha_nacimiento) if fecha_nacimiento else None
     diagnostico_plan = diagnostico_seleccionado or ""
-    plan_sugerido = generar_plan_sugerido(diagnostico_plan, peso_num, edad_meses_actual)
+    plan_base_local = generar_plan_sugerido(diagnostico_plan, peso_num, edad_meses_actual)
+    contexto_plan_ia = {
+        "diagnostico_cie10_principal": diagnostico_seleccionado,
+        "observacion_diagnostica": obs_dx_default,
+        "conducta_final_definida": conducta_final_analisis,
+        "conducta_final_texto": conducta_final_texto,
+        "analisis": analisis_default,
+        "enfermedad_actual": enfermedad_input,
+        "antecedentes": antecedentes,
+        "signos_vitales": {
+            "ta": ta,
+            "fc": fc,
+            "fr": fr,
+            "spo2": sat,
+            "temperatura": temp,
+            "glucometria": glucometria,
+            "peso": peso,
+            "talla": talla,
+        },
+        "examen_fisico": examen,
+        "paraclinicos": paraclinicos_texto,
+        "imagenes": imagenes_texto,
+    }
+    fingerprint_plan_ia = hashlib.md5(
+        json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    plan_sugerido = complementar_plan_con_ia(
+        plan_base_local,
+        contexto_plan_ia,
+        fingerprint_plan_ia,
+    )
 
     if "plan" not in st.session_state:
         st.session_state["plan"] = plan_sugerido
@@ -4636,6 +4931,35 @@ def render():
             fast_codigo_trauma,
             lactato_codigo_trauma or "NO REPORTADO",
             especialidades_codigo_trauma or "SIN ESPECIALIDADES DEFINIDAS",
+        )
+
+        contexto_codigo_trauma_ia = {
+            "nivel_calculado": nivel_sugerido_codigo_trauma,
+            "criterios_activacion": criterios_codigo_trauma,
+            "procedencia": procedencia_trauma,
+            "edad_y_genero": edad_genero_codigo,
+            "tiempo_evolucion": tiempo_codigo_trauma,
+            "mecanismo_lesion": mecanismo_codigo_trauma,
+            "supuestas_lesiones": lesiones_codigo_trauma,
+            "fast": fast_codigo_trauma,
+            "lactato": lactato_codigo_trauma,
+            "gcs": gcs_codigo_trauma,
+            "especialidades": especialidades_codigo_trauma,
+            "compromiso_via_aerea": compromiso_via_aerea,
+            "compromiso_hemodinamico": compromiso_hemodinamico,
+            "trauma_penetrante_central": trauma_penetrante_central,
+            "pelvis_amputacion": pelvis_amputacion,
+            "fracturas_multiples": fracturas_multiples,
+            "trauma_toracoabdominal": trauma_toracoabdominal,
+            "tce_clinicamente_relevante": trauma_craneoencefalico,
+        }
+        fingerprint_codigo_trauma_ia = hashlib.md5(
+            json.dumps(contexto_codigo_trauma_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        texto_codigo_trauma = complementar_codigo_trauma_con_ia(
+            texto_codigo_trauma,
+            contexto_codigo_trauma_ia,
+            fingerprint_codigo_trauma_ia,
         )
 
         render_texto_copiable(

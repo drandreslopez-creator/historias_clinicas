@@ -22,7 +22,10 @@ from servicios.pediatria_urgencias import (
     BOGOTA_TZ,
     actualizar_texto_extraido,
     complementar_analisis_con_ia,
+    complementar_plan_con_ia,
+    complementar_observacion_diagnostica_con_ia,
     construir_conducta_final_analisis,
+    construir_observacion_diagnostica_base,
     construir_conducta_sugerida_analisis,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
@@ -540,7 +543,8 @@ def render():
             "Usa únicamente la información entregada. No inventes diagnósticos ni tratamientos. "
             "Redacta un solo párrafo en MAYÚSCULAS, claro, coherente y profesional, integrando motivo de consulta, "
             "enfermedad actual, antecedentes relevantes, estado general, crecimiento, desarrollo, hábitos y paraclínicos cuando existan. "
-            "Formula una conducta coherente con la historia y usa el parentesco del acompañante en el cierre si está disponible."
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con la historia, "
+            "sin contradecirla ni duplicar frases genéricas. Usa el parentesco del acompañante en el cierre si está disponible."
         ),
     )
 
@@ -571,9 +575,79 @@ def render():
 
     st.subheader("Diagnósticos")
     diagnosticos = _construir_diagnostico_cie10(PREFIX)
+    obs_dx_default = construir_observacion_diagnostica_base(
+        diagnosticos,
+        analisis_default,
+        antecedentes,
+        "",
+    )
+    contexto_obs_dx_ia = {
+        "diagnostico_cie10_principal": diagnosticos,
+        "analisis": analisis_default,
+        "antecedentes": antecedentes,
+        "enfermedad_actual": enfermedad_actual,
+        "paraclinicos": paraclinicos_texto,
+        "diagnostico_nutricional": "",
+        "titulo": TITULO,
+    }
+    fingerprint_obs_dx_ia = hashlib.md5(
+        json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    obs_dx_default = complementar_observacion_diagnostica_con_ia(
+        obs_dx_default,
+        contexto_obs_dx_ia,
+        fingerprint_obs_dx_ia,
+    )
+    if st.session_state.get(f"{PREFIX}_obs_dx_base") != obs_dx_default:
+        if st.session_state.get(f"{PREFIX}_obs_dx", "") == st.session_state.get(f"{PREFIX}_obs_dx_base", ""):
+            st.session_state[f"{PREFIX}_obs_dx"] = obs_dx_default
+        elif f"{PREFIX}_obs_dx_base" not in st.session_state:
+            st.session_state[f"{PREFIX}_obs_dx"] = obs_dx_default
+        st.session_state[f"{PREFIX}_obs_dx_base"] = obs_dx_default
     observacion_dx = st.text_area("Observación diagnóstica", key=f"{PREFIX}_obs_dx", height=110)
 
     st.subheader("Plan")
+    plan_base_local = st.session_state.get(f"{PREFIX}_plan_base", PLAN_PUERICULTURA_DEFAULT) or PLAN_PUERICULTURA_DEFAULT
+    contexto_plan_ia = {
+        "titulo": TITULO,
+        "modalidad_consulta": modalidad,
+        "diagnostico_cie10_principal": diagnosticos,
+        "observacion_diagnostica": observacion_dx,
+        "conducta_final_definida": conducta_final_analisis,
+        "conducta_final_texto": conducta_final_texto,
+        "analisis": analisis_default,
+        "enfermedad_actual": enfermedad_actual,
+        "antecedentes": antecedentes,
+        "signos_vitales": {
+            "ta": ta,
+            "fc": fc,
+            "fr": fr,
+            "spo2": sat,
+            "glucometria": glucometria,
+            "temperatura": temp,
+            "peso": peso,
+            "talla": talla,
+            "pc": pc,
+            "pb": pb,
+        },
+        "examen_fisico": examen,
+        "paraclinicos": paraclinicos_texto,
+        "imagenes": imagenes_texto,
+    }
+    fingerprint_plan_ia = hashlib.md5(
+        json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()
+    plan_sugerido = complementar_plan_con_ia(
+        plan_base_local,
+        contexto_plan_ia,
+        fingerprint_plan_ia,
+    )
+    if st.session_state.get(f"{PREFIX}_plan_base") != plan_sugerido:
+        if st.session_state.get(f"{PREFIX}_plan", "") == st.session_state.get(f"{PREFIX}_plan_base", ""):
+            st.session_state[f"{PREFIX}_plan"] = plan_sugerido
+        elif f"{PREFIX}_plan_base" not in st.session_state:
+            st.session_state[f"{PREFIX}_plan"] = plan_sugerido
+        st.session_state[f"{PREFIX}_plan_base"] = plan_sugerido
     plan = st.text_area("", key=f"{PREFIX}_plan", height=220, label_visibility="collapsed")
 
     col_btn_1, col_btn_2 = st.columns(2)
