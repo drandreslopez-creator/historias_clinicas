@@ -49,6 +49,7 @@ HISTORIAS_PATH = BASE_DIR / "data" / "historias_pediatria_urgencias.jsonl"
 PLANES_PATOLOGIA_PATH = BASE_DIR / "data" / "planes_manejo_pediatria_urgencias.json"
 DOSIS_MEDICACION_PATH = BASE_DIR / "data" / "dosis_medicacion_pediatria_urgencias.json"
 WORD_EXPORT_DIR_DEFAULT = BASE_DIR / "data" / "word_exports"
+DRAFT_URGENCIAS_PATH = BASE_DIR / "data" / "borrador_pediatria_urgencias.json"
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
 ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO XX GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO Y ECOGRAFÍAS ANTENATALES: NACE VÍA VAGINAL/ CESAREA A LAS XX SEM A TÉRMINO. EGRESO CONJUNTO, PESO XXXX GR - TALLA XX CM.
@@ -1100,6 +1101,7 @@ def limpiar_formulario():
     # Los file_uploader no se pueden resetear asignándoles valores directos.
     st.session_state.pop("pdf_paraclinicos_uploader", None)
     st.session_state.pop("pdf_imagenes_uploader", None)
+    borrar_borrador_urgencias()
 
 
 def solicitar_limpieza_formulario():
@@ -1110,6 +1112,90 @@ def guardar_historia(datos):
     HISTORIAS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with HISTORIAS_PATH.open("a", encoding="utf-8") as f:
         f.write(json.dumps(datos, ensure_ascii=False) + "\n")
+
+
+def cargar_borrador_urgencias():
+    if not DRAFT_URGENCIAS_PATH.exists():
+        return {}
+    try:
+        with DRAFT_URGENCIAS_PATH.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+        data = payload.get("data", {}) if isinstance(payload, dict) else {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def borrar_borrador_urgencias():
+    try:
+        if DRAFT_URGENCIAS_PATH.exists():
+            DRAFT_URGENCIAS_PATH.unlink()
+    except Exception:
+        pass
+
+
+def _snapshot_borrador_urgencias():
+    snapshot = {}
+    for key, default in FORM_DEFAULTS.items():
+        snapshot[key] = st.session_state.get(key, default)
+    return snapshot
+
+
+def _formulario_urgencias_vacio():
+    for key, default in FORM_DEFAULTS.items():
+        actual = st.session_state.get(key, default)
+        if actual != default:
+            return False
+    return True
+
+
+def restaurar_borrador_urgencias_si_aplica():
+    if st.session_state.get("_borrador_urgencias_restaurado"):
+        return
+
+    if not _formulario_urgencias_vacio():
+        st.session_state["_borrador_urgencias_restaurado"] = True
+        return
+
+    data = cargar_borrador_urgencias()
+    if not data:
+        st.session_state["_borrador_urgencias_restaurado"] = True
+        return
+
+    for key in FORM_DEFAULTS.keys():
+        if key in data:
+            st.session_state[key] = data[key]
+
+    st.session_state["_borrador_urgencias_restaurado"] = True
+    st.session_state["_borrador_urgencias_notice"] = "Borrador de urgencias restaurado automáticamente."
+
+
+def guardar_borrador_urgencias():
+    snapshot = _snapshot_borrador_urgencias()
+    tiene_contenido = any(
+        snapshot.get(key) != default
+        for key, default in FORM_DEFAULTS.items()
+    )
+    if not tiene_contenido:
+        return
+
+    fingerprint = hashlib.md5(
+        json.dumps(snapshot, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    if st.session_state.get("_borrador_urgencias_hash") == fingerprint:
+        return
+
+    payload = {
+        "updated_at": datetime.now(BOGOTA_TZ).isoformat(),
+        "data": snapshot,
+    }
+    try:
+        DRAFT_URGENCIAS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with DRAFT_URGENCIAS_PATH.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+        st.session_state["_borrador_urgencias_hash"] = fingerprint
+    except Exception:
+        pass
 
 
 def reescribir_historias(path, historias):
@@ -2963,6 +3049,21 @@ def ia_analisis_configurada():
     return bool(obtener_secret_app("openai_api_key"))
 
 
+def debe_refinar_con_ia(nombre, fingerprint):
+    pending_key = f"_{nombre}_ia_pending_fp"
+    last_key = f"_{nombre}_ia_last_fp"
+
+    if st.session_state.get(last_key) == fingerprint:
+        return True
+
+    if st.session_state.get(pending_key) != fingerprint:
+        st.session_state[pending_key] = fingerprint
+        return False
+
+    st.session_state[last_key] = fingerprint
+    return True
+
+
 def extraer_texto_respuesta_openai(data):
     if not isinstance(data, dict):
         return ""
@@ -3033,6 +3134,8 @@ def construir_observacion_diagnostica_base(
 def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fingerprint):
     if not ia_analisis_configurada():
         return base_observacion
+    if not debe_refinar_con_ia("obs_dx", fingerprint):
+        return base_observacion
 
     cache_key = "obs_dx_ia_cache"
     cache = st.session_state.get(cache_key, {})
@@ -3088,6 +3191,8 @@ def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fing
 def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=None):
     if not ia_analisis_configurada():
         return base_plan
+    if not debe_refinar_con_ia("plan", fingerprint):
+        return base_plan
 
     cache_key = "plan_ia_cache"
     cache = st.session_state.get(cache_key, {})
@@ -3142,6 +3247,8 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
 def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instrucciones=None):
     if not ia_analisis_configurada():
         return base_texto
+    if not debe_refinar_con_ia("codigo_trauma", fingerprint):
+        return base_texto
 
     cache_key = "codigo_trauma_ia_cache"
     cache = st.session_state.get(cache_key, {})
@@ -3195,6 +3302,8 @@ def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instruc
 
 def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucciones=None):
     if not ia_analisis_configurada():
+        return base_analisis
+    if not debe_refinar_con_ia("analisis", fingerprint):
         return base_analisis
 
     cache_key = "analisis_ia_cache"
@@ -4257,6 +4366,10 @@ def render():
         if key not in st.session_state:
             st.session_state[key] = value
 
+    restaurar_borrador_urgencias_si_aplica()
+    if st.session_state.pop("_borrador_urgencias_notice", ""):
+        st.caption("Borrador de urgencias restaurado automáticamente.")
+
     titulo_historia = st.session_state.get(
         "tipo_historia_clinica_ped_urg",
         "HISTORIA CLINICA DE INGRESO A URGENCIAS PEDIATRICAS"
@@ -5120,6 +5233,7 @@ PLAN:
             "drive_file_id": resultado_drive.get("file_id"),
             "drive_webview_link": resultado_drive.get("webViewLink"),
         })
+        borrar_borrador_urgencias()
         render_informe_html(titulo_historia.upper(), secciones_informe, historia.upper())
 
     st.divider()
@@ -5153,8 +5267,11 @@ PLAN:
                         st.rerun()
                     else:
                         st.warning(resultado_eliminacion.get("message", "No se pudo eliminar la historia."))
+
         else:
             st.info("Aún no hay historias guardadas.")
+
+    guardar_borrador_urgencias()
 
     with st.expander("Planes de manejo por patología", expanded=False):
         planes_patologia = cargar_planes_patologia()
