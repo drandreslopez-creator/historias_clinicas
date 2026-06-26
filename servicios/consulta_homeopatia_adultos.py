@@ -482,8 +482,10 @@ def render():
             "Usa únicamente la información entregada. No inventes diagnósticos, remedios ni hallazgos. "
             "Redacta un solo párrafo en MAYÚSCULAS, profesional y coherente, integrando motivo de consulta, "
             "antecedentes relevantes, evolución, biopatografía, síntomas generales, síntomas mentales, examen físico y paraclínicos. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con el resto de la historia, "
-            "sin contradecirla ni duplicar frases genéricas. Usa el parentesco del acompañante en el cierre si está disponible."
+            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con el resto de la historia, "
+            "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+            "Usa el parentesco del acompañante en el cierre si está disponible."
         ),
     )
 

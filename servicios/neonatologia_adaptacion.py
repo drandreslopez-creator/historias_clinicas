@@ -231,8 +231,9 @@ def render():
             "Usa únicamente la información entregada. No inventes diagnósticos ni conductas. "
             "Redacta un solo párrafo en MAYÚSCULAS, coherente y profesional, integrando datos perinatales, adaptación, "
             "examen físico, signos vitales y paraclínicos cuando existan. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con la información disponible, "
-            "sin contradecirla ni duplicar frases genéricas."
+            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la información disponible, "
+            "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final."
         ),
     )
 

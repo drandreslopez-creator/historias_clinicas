@@ -3319,9 +3319,11 @@ def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucci
         "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
         "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
         "Mantén un estilo médico parecido al de una historia clínica colombiana. "
-        "Conserva el sentido clínico del borrador base, pero mejora coherencia, orden y conexión entre enfermedad actual, "
-        "signos vitales, examen físico y paraclínicos. "
-        "Si algún dato no está presente, simplemente no lo menciones."
+        "Usa el CONTEXTO CLÍNICO como fuente principal del análisis; el borrador base solo sirve como apoyo si la información ya consignada es consistente. "
+        "Integra de forma natural motivo de consulta, enfermedad actual, antecedentes relevantes, signos vitales, examen físico, paraclínicos y conducta final si existe. "
+        "Si la conducta final está definida, debe orientar el cierre del análisis y la conducta descrita; si está como PENDIENTE DEFINIR, no inventes una decisión final. "
+        "Si algún dato no está presente, simplemente no lo menciones. "
+        "No listes ítems; redacta un solo párrafo clínico final, sólido y coherente."
     )
 
     prompt = {
@@ -4691,12 +4693,13 @@ def render():
             "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
             "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
             "Mantén un estilo médico parecido al de una historia clínica colombiana. "
+            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
             "Integra antecedentes relevantes cuando aporten al caso clínico. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con la historia, "
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de manera coherente con la historia, "
             "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+            "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
             "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
-            "Conserva el sentido clínico del borrador base, pero mejora coherencia, orden y conexión entre enfermedad actual, "
-            "signos vitales, examen físico, paraclínicos y conducta."
+            "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
         ),
     )
 

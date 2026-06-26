@@ -530,9 +530,11 @@ def render_consulta_externa(
             "Eres un asistente clínico que redacta análisis médicos en español. "
             "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
             "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
             "Integra antecedentes relevantes cuando aporten al caso clínico. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y solo compleméntala de forma coherente con la historia, "
+            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
             "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+            "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
             "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
         ),
     )
