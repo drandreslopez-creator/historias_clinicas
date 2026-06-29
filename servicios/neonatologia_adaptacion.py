@@ -164,6 +164,7 @@ def render():
         ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
         key=f"{PREFIX}_conducta_final_analisis",
     )
+    permitir_generacion_analisis = conducta_final_analisis != "PENDIENTE DEFINIR"
 
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
     resumen_signos_analisis = construir_resumen_signos_para_analisis(
@@ -189,56 +190,58 @@ def render():
     enfermedad_auto = (
         f"RECIÉN NACIDO DE {edad_gestacional} SEMANAS, QUIEN SE ENCUENTRA EN PROCESO DE ADAPTACIÓN NEONATAL"
     ).strip()
-    analisis_default = generar_analisis_asistido_urgencias(
-        enfermedad_auto,
-        "",
-        resumen_examen_analisis,
-        resumen_signos_analisis,
-        resumen_paraclinicos_analisis,
-        conducta_final_texto,
-        "FAMILIAR",
-    )
-    contexto_analisis_ia = {
-        "titulo": "HISTORIA CLÍNICA - ADAPTACIÓN NEONATAL",
-        "nacimiento": nacimiento_editable,
-        "edad_gestacional": edad_gestacional,
-        "apgar_1": apgar1,
-        "apgar_5": apgar5,
-        "conducta_final_definida": conducta_final_analisis,
-        "conducta_sugerida_local": conducta_sugerida_analisis,
-        "conducta_final_texto": conducta_final_texto,
-        "examen_fisico": examen,
-        "signos_vitales": {
-            "ta": ta,
-            "fc": fc,
-            "fr": fr,
-            "spo2": sat,
-            "glucometria": glucometria,
-            "temperatura": temp,
-        },
-        "paraclinicos": paraclinicos_texto,
-        "imagenes": imagenes_texto,
-    }
-    fingerprint_analisis_ia = hashlib.md5(
-        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    analisis_default = complementar_analisis_con_ia(
-        analisis_default,
-        contexto_analisis_ia,
-        fingerprint_analisis_ia,
-        instrucciones=(
-            "Eres un asistente clínico que redacta análisis neonatales en español. "
-            "Usa únicamente la información entregada. No inventes diagnósticos ni conductas. "
-            "Redacta un solo párrafo en MAYÚSCULAS, coherente y profesional, integrando datos perinatales, adaptación, "
-            "examen físico, signos vitales y paraclínicos cuando existan. "
-            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la información disponible, "
-            "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final."
-        ),
-    )
+    analisis_default = ""
+    if permitir_generacion_analisis:
+        analisis_default = generar_analisis_asistido_urgencias(
+            enfermedad_auto,
+            "",
+            resumen_examen_analisis,
+            resumen_signos_analisis,
+            resumen_paraclinicos_analisis,
+            conducta_final_texto,
+            "FAMILIAR",
+        )
+        contexto_analisis_ia = {
+            "titulo": "HISTORIA CLÍNICA - ADAPTACIÓN NEONATAL",
+            "nacimiento": nacimiento_editable,
+            "edad_gestacional": edad_gestacional,
+            "apgar_1": apgar1,
+            "apgar_5": apgar5,
+            "conducta_final_definida": conducta_final_analisis,
+            "conducta_sugerida_local": conducta_sugerida_analisis,
+            "conducta_final_texto": conducta_final_texto,
+            "examen_fisico": examen,
+            "signos_vitales": {
+                "ta": ta,
+                "fc": fc,
+                "fr": fr,
+                "spo2": sat,
+                "glucometria": glucometria,
+                "temperatura": temp,
+            },
+            "paraclinicos": paraclinicos_texto,
+            "imagenes": imagenes_texto,
+        }
+        fingerprint_analisis_ia = hashlib.md5(
+            json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        analisis_default = complementar_analisis_con_ia(
+            analisis_default,
+            contexto_analisis_ia,
+            fingerprint_analisis_ia,
+            instrucciones=(
+                "Eres un asistente clínico que redacta análisis neonatales en español. "
+                "Usa únicamente la información entregada. No inventes diagnósticos ni conductas. "
+                "Redacta un solo párrafo en MAYÚSCULAS, coherente y profesional, integrando datos perinatales, adaptación, "
+                "examen físico, signos vitales y paraclínicos cuando existan. "
+                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la información disponible, "
+                "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final."
+            ),
+        )
 
     st.subheader("Análisis")
-    if st.session_state.get(f"{PREFIX}_analisis_base") != analisis_default:
+    if permitir_generacion_analisis and st.session_state.get(f"{PREFIX}_analisis_base") != analisis_default:
         if st.session_state.get(f"{PREFIX}_analisis") == st.session_state.get(f"{PREFIX}_analisis_base", ""):
             st.session_state[f"{PREFIX}_analisis"] = analisis_default
         else:

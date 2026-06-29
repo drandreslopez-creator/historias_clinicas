@@ -452,6 +452,7 @@ def render():
         ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
         key=f"{PREFIX}_conducta_final_analisis",
     )
+    permitir_generacion_analisis = conducta_final_analisis != "PENDIENTE DEFINIR"
 
     grupo = grupo_etario(años) if fecha_nacimiento else ""
     resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
@@ -489,69 +490,71 @@ def render():
         conducta_final_analisis,
         conducta_sugerida_analisis,
     )
-    analisis_default = generar_analisis_asistido_urgencias(
-        enfermedad_auto,
-        resumen_antecedentes_analisis,
-        resumen_examen_analisis,
-        resumen_signos_analisis,
-        resumen_paraclinicos_analisis,
-        conducta_final_texto,
-        destinatario_informacion,
-    )
-    contexto_analisis_ia = {
-        "titulo": TITULO,
-        "modalidad_consulta": modalidad,
-        "motivo_consulta": motivo,
-        "enfermedad_actual": enfermedad_actual,
-        "antecedentes": antecedentes,
-        "parentesco_acompanante": destinatario_informacion,
-        "conducta_final_definida": conducta_final_analisis,
-        "conducta_sugerida_local": conducta_sugerida_analisis,
-        "conducta_final_texto": conducta_final_texto,
-        "alimentacion": alimentacion,
-        "sueno_y_eliminacion": sueno_eliminacion,
-        "vacunacion": vacunas,
-        "entorno_habitos": entorno,
-        "neurodesarrollo": neuro,
-        "revision_por_sistemas": revision,
-        "signos_vitales": {
-            "ta": ta,
-            "fc": fc,
-            "fr": fr,
-            "spo2": sat,
-            "glucometria": glucometria,
-            "temperatura": temp,
-            "peso": peso,
-            "talla": talla,
-            "pc": pc,
-            "pb": pb,
-        },
-        "examen_fisico": examen,
-        "paraclinicos": paraclinicos_texto,
-        "imagenes": imagenes_texto,
-        "diagnosticos": st.session_state.get(f"{PREFIX}_diagnosticos", ""),
-    }
-    fingerprint_analisis_ia = hashlib.md5(
-        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    analisis_default = complementar_analisis_con_ia(
-        analisis_default,
-        contexto_analisis_ia,
-        fingerprint_analisis_ia,
-        instrucciones=(
-            "Eres un asistente clínico que redacta análisis médicos pediátricos y de puericultura en español. "
-            "Usa únicamente la información entregada. No inventes diagnósticos ni tratamientos. "
-            "Redacta un solo párrafo en MAYÚSCULAS, claro, coherente y profesional, integrando motivo de consulta, "
-            "enfermedad actual, antecedentes relevantes, estado general, crecimiento, desarrollo, hábitos y paraclínicos cuando existan. "
-            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
-            "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-            "Usa el parentesco del acompañante en el cierre si está disponible."
-        ),
-    )
+    analisis_default = ""
+    if permitir_generacion_analisis:
+        analisis_default = generar_analisis_asistido_urgencias(
+            enfermedad_auto,
+            resumen_antecedentes_analisis,
+            resumen_examen_analisis,
+            resumen_signos_analisis,
+            resumen_paraclinicos_analisis,
+            conducta_final_texto,
+            destinatario_informacion,
+        )
+        contexto_analisis_ia = {
+            "titulo": TITULO,
+            "modalidad_consulta": modalidad,
+            "motivo_consulta": motivo,
+            "enfermedad_actual": enfermedad_actual,
+            "antecedentes": antecedentes,
+            "parentesco_acompanante": destinatario_informacion,
+            "conducta_final_definida": conducta_final_analisis,
+            "conducta_sugerida_local": conducta_sugerida_analisis,
+            "conducta_final_texto": conducta_final_texto,
+            "alimentacion": alimentacion,
+            "sueno_y_eliminacion": sueno_eliminacion,
+            "vacunacion": vacunas,
+            "entorno_habitos": entorno,
+            "neurodesarrollo": neuro,
+            "revision_por_sistemas": revision,
+            "signos_vitales": {
+                "ta": ta,
+                "fc": fc,
+                "fr": fr,
+                "spo2": sat,
+                "glucometria": glucometria,
+                "temperatura": temp,
+                "peso": peso,
+                "talla": talla,
+                "pc": pc,
+                "pb": pb,
+            },
+            "examen_fisico": examen,
+            "paraclinicos": paraclinicos_texto,
+            "imagenes": imagenes_texto,
+            "diagnosticos": st.session_state.get(f"{PREFIX}_diagnosticos", ""),
+        }
+        fingerprint_analisis_ia = hashlib.md5(
+            json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        analisis_default = complementar_analisis_con_ia(
+            analisis_default,
+            contexto_analisis_ia,
+            fingerprint_analisis_ia,
+            instrucciones=(
+                "Eres un asistente clínico que redacta análisis médicos pediátricos y de puericultura en español. "
+                "Usa únicamente la información entregada. No inventes diagnósticos ni tratamientos. "
+                "Redacta un solo párrafo en MAYÚSCULAS, claro, coherente y profesional, integrando motivo de consulta, "
+                "enfermedad actual, antecedentes relevantes, estado general, crecimiento, desarrollo, hábitos y paraclínicos cuando existan. "
+                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
+                "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                "Usa el parentesco del acompañante en el cierre si está disponible."
+            ),
+        )
 
     st.subheader("Análisis")
-    if st.session_state.get(f"{PREFIX}_analisis_base") != analisis_default:
+    if permitir_generacion_analisis and st.session_state.get(f"{PREFIX}_analisis_base") != analisis_default:
         if st.session_state.get(f"{PREFIX}_analisis") == st.session_state.get(f"{PREFIX}_analisis_base", ""):
             st.session_state[f"{PREFIX}_analisis"] = analisis_default
         else:

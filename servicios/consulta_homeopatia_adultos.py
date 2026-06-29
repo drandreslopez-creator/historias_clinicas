@@ -402,6 +402,7 @@ def render():
         ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
         key=f"{prefix}_conducta_final_analisis",
     )
+    permitir_generacion_analisis = conducta_final_analisis != "PENDIENTE DEFINIR"
 
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
     resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
@@ -430,67 +431,69 @@ def render():
         f"PACIENTE {(sexo or '').upper()} DE "
         f"{f'{años} AÑOS' if fecha_nacimiento and años > 0 else ''}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}"
     ).replace("  ", " ").strip(" ,")
-    analisis_homeopatico_default = generar_analisis_asistido_urgencias(
-        enfermedad_auto,
-        resumen_antecedentes_analisis,
-        resumen_examen_analisis,
-        resumen_signos_analisis,
-        resumen_paraclinicos_analisis,
-        conducta_final_texto,
-        destinatario_informacion,
-    )
-    contexto_analisis_ia = {
-        "titulo": titulo,
-        "modalidad_consulta": modalidad,
-        "motivo_consulta": motivo,
-        "enfermedad_actual": enfermedad_actual,
-        "antecedentes": antecedentes,
-        "parentesco_acompanante": destinatario_informacion,
-        "conducta_final_definida": conducta_final_analisis,
-        "conducta_sugerida_local": conducta_sugerida_analisis,
-        "conducta_final_texto": conducta_final_texto,
-        "revision_por_sistemas": revision,
-        "biopatografia": biopatografia,
-        "sintomas_generales": sintomas_generales,
-        "sintomas_mentales": sintomas_mentales,
-        "signos_vitales": {
-            "ta": ta,
-            "fc": fc,
-            "fr": fr,
-            "spo2": sat,
-            "glucometria": glucometria,
-            "temperatura": temp,
-            "peso": peso,
-            "talla": talla,
-            "imc": imc_manual,
-        },
-        "examen_fisico": examen,
-        "diagnosticos": diagnosticos,
-        "paraclinicos": paraclinicos,
-        "imagenes": imagenes_texto,
-        "rubros": rubros if 'rubros' in locals() else "",
-    }
-    fingerprint_analisis_ia = hashlib.md5(
-        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    analisis_homeopatico_default = complementar_analisis_con_ia(
-        analisis_homeopatico_default,
-        contexto_analisis_ia,
-        fingerprint_analisis_ia,
-        instrucciones=(
-            "Eres un asistente clínico que redacta análisis clínico-homeopáticos en español. "
-            "Usa únicamente la información entregada. No inventes diagnósticos, remedios ni hallazgos. "
-            "Redacta un solo párrafo en MAYÚSCULAS, profesional y coherente, integrando motivo de consulta, "
-            "antecedentes relevantes, evolución, biopatografía, síntomas generales, síntomas mentales, examen físico y paraclínicos. "
-            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con el resto de la historia, "
-            "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-            "Usa el parentesco del acompañante en el cierre si está disponible."
-        ),
-    )
+    analisis_homeopatico_default = ""
+    if permitir_generacion_analisis:
+        analisis_homeopatico_default = generar_analisis_asistido_urgencias(
+            enfermedad_auto,
+            resumen_antecedentes_analisis,
+            resumen_examen_analisis,
+            resumen_signos_analisis,
+            resumen_paraclinicos_analisis,
+            conducta_final_texto,
+            destinatario_informacion,
+        )
+        contexto_analisis_ia = {
+            "titulo": titulo,
+            "modalidad_consulta": modalidad,
+            "motivo_consulta": motivo,
+            "enfermedad_actual": enfermedad_actual,
+            "antecedentes": antecedentes,
+            "parentesco_acompanante": destinatario_informacion,
+            "conducta_final_definida": conducta_final_analisis,
+            "conducta_sugerida_local": conducta_sugerida_analisis,
+            "conducta_final_texto": conducta_final_texto,
+            "revision_por_sistemas": revision,
+            "biopatografia": biopatografia,
+            "sintomas_generales": sintomas_generales,
+            "sintomas_mentales": sintomas_mentales,
+            "signos_vitales": {
+                "ta": ta,
+                "fc": fc,
+                "fr": fr,
+                "spo2": sat,
+                "glucometria": glucometria,
+                "temperatura": temp,
+                "peso": peso,
+                "talla": talla,
+                "imc": imc_manual,
+            },
+            "examen_fisico": examen,
+            "diagnosticos": diagnosticos,
+            "paraclinicos": paraclinicos,
+            "imagenes": imagenes_texto,
+            "rubros": rubros if 'rubros' in locals() else "",
+        }
+        fingerprint_analisis_ia = hashlib.md5(
+            json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        analisis_homeopatico_default = complementar_analisis_con_ia(
+            analisis_homeopatico_default,
+            contexto_analisis_ia,
+            fingerprint_analisis_ia,
+            instrucciones=(
+                "Eres un asistente clínico que redacta análisis clínico-homeopáticos en español. "
+                "Usa únicamente la información entregada. No inventes diagnósticos, remedios ni hallazgos. "
+                "Redacta un solo párrafo en MAYÚSCULAS, profesional y coherente, integrando motivo de consulta, "
+                "antecedentes relevantes, evolución, biopatografía, síntomas generales, síntomas mentales, examen físico y paraclínicos. "
+                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con el resto de la historia, "
+                "sin contradecirla ni duplicar frases genéricas. Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                "Usa el parentesco del acompañante en el cierre si está disponible."
+            ),
+        )
 
     st.subheader("Análisis homeopático")
-    if st.session_state.get(f"{prefix}_analisis_homeopatico_base") != analisis_homeopatico_default:
+    if permitir_generacion_analisis and st.session_state.get(f"{prefix}_analisis_homeopatico_base") != analisis_homeopatico_default:
         if st.session_state.get(f"{prefix}_analisis_homeopatico") == st.session_state.get(
             f"{prefix}_analisis_homeopatico_base",
             "",

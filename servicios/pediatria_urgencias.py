@@ -4600,6 +4600,7 @@ def render():
         ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
         key="conducta_final_analisis",
     )
+    permitir_generacion_analisis = conducta_final_analisis != "PENDIENTE DEFINIR"
 
     # =========================
     # ANÁLISIS
@@ -4645,63 +4646,65 @@ def render():
         conducta_final_analisis,
         conducta_sugerida_analisis,
     )
+    analisis_default = ""
 
-    analisis_default = generar_analisis_asistido_urgencias(
-        enfermedad_auto,
-        resumen_antecedentes_analisis,
-        resumen_examen_analisis,
-        resumen_signos_analisis,
-        resumen_paraclinicos_analisis,
-        conducta_final_texto,
-        destinatario_informacion,
-    )
+    if permitir_generacion_analisis:
+        analisis_default = generar_analisis_asistido_urgencias(
+            enfermedad_auto,
+            resumen_antecedentes_analisis,
+            resumen_examen_analisis,
+            resumen_signos_analisis,
+            resumen_paraclinicos_analisis,
+            conducta_final_texto,
+            destinatario_informacion,
+        )
 
-    contexto_analisis_ia = {
-        "sexo": sexo_texto_analisis,
-        "grupo_etario": grupo.upper() if grupo else "",
-        "edad": edad_texto,
-        "motivo_consulta": motivo,
-        "enfermedad_actual": enfermedad_input,
-        "antecedentes": antecedentes,
-        "parentesco_acompanante": destinatario_informacion,
-        "conducta_final_definida": conducta_final_analisis,
-        "conducta_sugerida_local": conducta_sugerida_analisis,
-        "conducta_final_texto": conducta_final_texto,
-        "revision_por_sistemas": revision,
-        "signos_vitales": {
-            "ta": ta,
-            "fc": fc,
-            "fr": fr,
-            "spo2": sat,
-            "temperatura": temp,
-            "glucometria": glucometria,
-            "peso": peso,
-            "talla": talla,
-        },
-        "examen_fisico": examen,
-        "paraclinicos": paraclinicos_texto,
-    }
-    fingerprint_analisis_ia = hashlib.md5(
-        json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    analisis_default = complementar_analisis_con_ia(
-        analisis_default,
-        contexto_analisis_ia,
-        fingerprint_analisis_ia,
-        instrucciones=(
-            "Eres un asistente clínico que redacta análisis médicos en español. "
-            "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-            "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-            "Mantén un estilo médico parecido al de una historia clínica colombiana. "
-            "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-            "Integra antecedentes relevantes cuando aporten al caso clínico. "
-            "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de manera coherente con la historia, "
-            "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-            "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-            "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
-            "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
-        ),
-    )
+        contexto_analisis_ia = {
+            "sexo": sexo_texto_analisis,
+            "grupo_etario": grupo.upper() if grupo else "",
+            "edad": edad_texto,
+            "motivo_consulta": motivo,
+            "enfermedad_actual": enfermedad_input,
+            "antecedentes": antecedentes,
+            "parentesco_acompanante": destinatario_informacion,
+            "conducta_final_definida": conducta_final_analisis,
+            "conducta_sugerida_local": conducta_sugerida_analisis,
+            "conducta_final_texto": conducta_final_texto,
+            "revision_por_sistemas": revision,
+            "signos_vitales": {
+                "ta": ta,
+                "fc": fc,
+                "fr": fr,
+                "spo2": sat,
+                "temperatura": temp,
+                "glucometria": glucometria,
+                "peso": peso,
+                "talla": talla,
+            },
+            "examen_fisico": examen,
+            "paraclinicos": paraclinicos_texto,
+        }
+        fingerprint_analisis_ia = hashlib.md5(
+            json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        analisis_default = complementar_analisis_con_ia(
+            analisis_default,
+            contexto_analisis_ia,
+            fingerprint_analisis_ia,
+            instrucciones=(
+                "Eres un asistente clínico que redacta análisis médicos en español. "
+                "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                "Mantén un estilo médico parecido al de una historia clínica colombiana. "
+                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de manera coherente con la historia, "
+                "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
+                "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
+            ),
+        )
 
     st.subheader("Análisis")
 
@@ -4710,7 +4713,7 @@ def render():
     if "analisis" not in st.session_state:
         st.session_state["analisis"] = analisis_default
         st.session_state["analisis_base"] = analisis_default
-    elif st.session_state.get("analisis_base") != analisis_default:
+    elif permitir_generacion_analisis and st.session_state.get("analisis_base") != analisis_default:
         if st.session_state.get("analisis") == st.session_state.get("analisis_base"):
             st.session_state["analisis"] = analisis_default
         else:
