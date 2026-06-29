@@ -76,6 +76,10 @@ PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
 - SIGNOS DE ALARMA
 - CONTROL SEGUN EVOLUCIÓN"""
 
+REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT = """NIEGA FIEBRE, CEFALEA, SIGNOS RESPIRATORIOS, CIANOSIS, NAUSEA, DIARREA, COLURIA, HEMATURIA U OTROS SIGNOS.
+
+SÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 0/7, RINORREA: 0/7, CONGESTIÓN: 0/7, RONQUIDO EN LA NOCHE: 0/7, PRURITO NASAL 0/7, PRURITO OCULAR: 0/7, SÍNTOMAS RESPIRATORIOS BAJOS: TOS DIURNA 0/7, TOS NOCTURNA: 0/7, TOS CON EL FRIO: 0/7, TOS RISA: 0/7, TOS LLANTO: 0/7, TOS MIENTRAS COME: 0/7 TOS EJERCICIO: 0/7, SÍNTOMAS CARDIOVASCULARES: CANSANCIO NO, FATIGA AL COMER NO, CIANOSIS NO, URINARIO: HÁBITO NORMAL, 4 VECES AL DÍA, SIN SÍNTOMAS IRRITATIVOS URINARIO, DIGESTIVO: SIN EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3, ALIMENTARIOS: ADECUADA PARA LA EDAD."""
+
 
 def _float_or_none(valor):
     texto = str(valor or "").strip().replace(",", ".")
@@ -85,6 +89,71 @@ def _float_or_none(valor):
         return float(texto)
     except ValueError:
         return None
+
+
+def _normalizar_texto_simple(texto):
+    return (
+        str(texto or "")
+        .upper()
+        .replace("Á", "A")
+        .replace("É", "E")
+        .replace("Í", "I")
+        .replace("Ó", "O")
+        .replace("Ú", "U")
+    )
+
+
+def _revision_homeopatia_pediatrica_desde_enfermedad_actual(enfermedad_actual):
+    texto = _normalizar_texto_simple(enfermedad_actual)
+    categorias = [
+        ("FIEBRE", ("FIEBRE", "FEBRIL", "HIPERTERMIA", "TEMPERATURA")),
+        ("CEFALEA", ("CEFALEA",)),
+        (
+            "SIGNOS RESPIRATORIOS",
+            (
+                "TOS",
+                "RINORREA",
+                "CONGESTION",
+                "ESTORNUDO",
+                "DISNEA",
+                "ODINOFAGIA",
+                "FARINGITIS",
+                "RUIDOS RESPIRATORIOS",
+                "PRURITO NASAL",
+                "PRURITO OCULAR",
+                "RONQUIDO",
+            ),
+        ),
+        ("CIANOSIS", ("CIANOSIS",)),
+        ("NAUSEA", ("NAUSEA", "NAUSEAS", "EMESIS", "VOMITO", "VOMITOS")),
+        ("DIARREA", ("DIARREA", "DIARREICA", "DIARREICAS")),
+        ("COLURIA", ("COLURIA",)),
+        ("HEMATURIA", ("HEMATURIA",)),
+    ]
+    faltantes = [
+        etiqueta
+        for etiqueta, terminos in categorias
+        if not any(termino in texto for termino in terminos)
+    ]
+    if faltantes:
+        primera_linea = ", ".join(faltantes[:-1])
+        if primera_linea and len(faltantes) > 1:
+            primera_linea = f"{primera_linea}, {faltantes[-1]}"
+        else:
+            primera_linea = faltantes[0]
+        primera_linea = f"NIEGA {primera_linea} U OTROS SIGNOS."
+    else:
+        primera_linea = "NIEGA OTROS SIGNOS NO REFERIDOS PREVIAMENTE."
+    return (
+        primera_linea
+        + "\n\nSÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 0/7, RINORREA: 0/7, CONGESTIÓN: 0/7, "
+        "RONQUIDO EN LA NOCHE: 0/7, PRURITO NASAL 0/7, PRURITO OCULAR: 0/7, "
+        "SÍNTOMAS RESPIRATORIOS BAJOS: TOS DIURNA 0/7, TOS NOCTURNA: 0/7, TOS CON EL FRIO: 0/7, "
+        "TOS RISA: 0/7, TOS LLANTO: 0/7, TOS MIENTRAS COME: 0/7 TOS EJERCICIO: 0/7, "
+        "SÍNTOMAS CARDIOVASCULARES: CANSANCIO NO, FATIGA AL COMER NO, CIANOSIS NO, "
+        "URINARIO: HÁBITO NORMAL, 4 VECES AL DÍA, SIN SÍNTOMAS IRRITATIVOS URINARIO, "
+        "DIGESTIVO: SIN EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3, ALIMENTARIOS: ADECUADA PARA LA EDAD."
+    )
 
 
 def _construir_diagnostico_cie10(prefix):
@@ -196,12 +265,16 @@ def render_consulta_externa(
     mostrar_pb=None,
     modo_pediatrico_urgencias_primera_vez=False,
     modalidad_consulta_forzada=None,
+    revision_default=None,
+    revision_before_antecedentes=False,
+    revision_auto_depende_enfermedad=False,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
     else:
         antecedentes_default = antecedentes_default or (ANTECEDENTES_DEFAULT if es_pediatrica else ANTECEDENTES_ADULTO_DEFAULT)
     plan_default = plan_default or PLAN_DEFAULT
+    revision_default = revision_default or "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
     if mostrar_pb is None:
         mostrar_pb = es_pediatrica
     history_path = _historia_path(history_filename)
@@ -218,7 +291,8 @@ def render_consulta_externa(
         f"{prefix}_motivo": "",
         f"{prefix}_enfermedad_actual": "",
         f"{prefix}_antecedentes": antecedentes_default,
-        f"{prefix}_revision": "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS.",
+        f"{prefix}_revision": revision_default,
+        f"{prefix}_revision_auto_base": revision_default,
         f"{prefix}_fc": "",
         f"{prefix}_fr": "",
         f"{prefix}_ta": "",
@@ -334,6 +408,20 @@ def render_consulta_externa(
     motivo = st.text_area("Motivo de consulta", key=f"{prefix}_motivo")
     enfermedad_actual = st.text_area("Enfermedad actual", key=f"{prefix}_enfermedad_actual")
 
+    if revision_auto_depende_enfermedad:
+        revision_auto = _revision_homeopatia_pediatrica_desde_enfermedad_actual(enfermedad_actual)
+        revision_actual = st.session_state.get(f"{prefix}_revision", "")
+        revision_auto_base_previa = st.session_state.get(f"{prefix}_revision_auto_base", revision_default)
+        if revision_actual in ("", revision_default, revision_auto_base_previa):
+            st.session_state[f"{prefix}_revision"] = revision_auto
+        st.session_state[f"{prefix}_revision_auto_base"] = revision_auto
+
+    if revision_before_antecedentes:
+        st.subheader("Revisión por sistemas")
+        if usar_modo_urgencias and st.session_state.get(f"{prefix}_revision") == revision_default:
+            st.session_state[f"{prefix}_revision"] = REVISION_URGENCIAS_DEFAULT
+        revision = st.text_area("Revisión", key=f"{prefix}_revision")
+
     st.subheader("Antecedentes")
     antecedentes = st.text_area("Antecedentes", key=f"{prefix}_antecedentes", height=220)
 
@@ -345,10 +433,11 @@ def render_consulta_externa(
         st.subheader("Neurodesarrollo")
         neuro = st.text_area("Neurodesarrollo", key=f"{prefix}_neuro", height=160)
 
-    st.subheader("Revisión por sistemas")
-    if usar_modo_urgencias and st.session_state.get(f"{prefix}_revision") == "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS.":
-        st.session_state[f"{prefix}_revision"] = REVISION_URGENCIAS_DEFAULT
-    revision = st.text_area("Revisión", key=f"{prefix}_revision")
+    if not revision_before_antecedentes:
+        st.subheader("Revisión por sistemas")
+        if usar_modo_urgencias and st.session_state.get(f"{prefix}_revision") == revision_default:
+            st.session_state[f"{prefix}_revision"] = REVISION_URGENCIAS_DEFAULT
+        revision = st.text_area("Revisión", key=f"{prefix}_revision")
 
     st.subheader("Signos vitales")
     col_sv_1, col_sv_2, col_sv_3 = st.columns(3)
@@ -659,6 +748,14 @@ def render_consulta_externa(
 
     if generar:
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
+        bloque_revision = f"""
+REVISIÓN POR SISTEMAS:
+{revision}
+"""
+        bloque_antecedentes = f"""
+ANTECEDENTES:
+{antecedentes}
+"""
         historia = f"""
 {titulo.upper()}
 
@@ -679,21 +776,18 @@ MOTIVO DE CONSULTA:
 
 ENFERMEDAD ACTUAL:
 {enfermedad_actual}
-
-ANTECEDENTES:
-{antecedentes}
 """
+        if revision_before_antecedentes:
+            historia += bloque_revision + bloque_antecedentes
+        else:
+            historia += bloque_antecedentes + bloque_revision
         if mostrar_neurodesarrollo:
             historia += f"""
 
 NEURODESARROLLO:
 {neuro}
 """
-
         historia += f"""
-
-REVISIÓN POR SISTEMAS:
-{revision}
 
 SIGNOS VITALES:
 TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C{f" PB: {pb} cm" if mostrar_pb else ""}
@@ -735,13 +829,25 @@ PLAN:
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
             ("MOTIVO DE CONSULTA", motivo),
             ("ENFERMEDAD ACTUAL", enfermedad_actual),
-            ("ANTECEDENTES", antecedentes),
         ]
+        if revision_before_antecedentes:
+            secciones.extend(
+                [
+                    ("REVISIÓN POR SISTEMAS", revision),
+                    ("ANTECEDENTES", antecedentes),
+                ]
+            )
+        else:
+            secciones.extend(
+                [
+                    ("ANTECEDENTES", antecedentes),
+                    ("REVISIÓN POR SISTEMAS", revision),
+                ]
+            )
         if mostrar_neurodesarrollo:
             secciones.append(("NEURODESARROLLO", neuro))
         secciones.extend(
             [
-                ("REVISIÓN POR SISTEMAS", revision),
                 ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C" + (f" PB: {pb} cm" if mostrar_pb else "")),
                 ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm" + (f" PC: {pc} cm" if es_pediatrica else (f" IMC: {imc_adulto} kg/m²" if imc_adulto else ""))),
                 ("EXAMEN FÍSICO", examen),
