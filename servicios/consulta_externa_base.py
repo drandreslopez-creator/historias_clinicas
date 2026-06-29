@@ -76,9 +76,12 @@ PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
 - SIGNOS DE ALARMA
 - CONTROL SEGUN EVOLUCIÓN"""
 
-REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT = """NIEGA FIEBRE, CEFALEA, SIGNOS RESPIRATORIOS, CIANOSIS, NAUSEA, DIARREA, COLURIA, HEMATURIA U OTROS SIGNOS.
-
-SÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 0/7, RINORREA: 0/7, CONGESTIÓN: 0/7, RONQUIDO EN LA NOCHE: 0/7, PRURITO NASAL 0/7, PRURITO OCULAR: 0/7, SÍNTOMAS RESPIRATORIOS BAJOS: TOS DIURNA 0/7, TOS NOCTURNA: 0/7, TOS CON EL FRIO: 0/7, TOS RISA: 0/7, TOS LLANTO: 0/7, TOS MIENTRAS COME: 0/7 TOS EJERCICIO: 0/7, SÍNTOMAS CARDIOVASCULARES: CANSANCIO NO, FATIGA AL COMER NO, CIANOSIS NO, URINARIO: HÁBITO NORMAL, 4 VECES AL DÍA, SIN SÍNTOMAS IRRITATIVOS URINARIO, DIGESTIVO: SIN EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3, ALIMENTARIOS: ADECUADA PARA LA EDAD."""
+REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT = """-SÍNTOMAS CARDIOVASCULARES: NIEGA CANSANCIO, NO FATIGA AL COMER, NO CIANOSIS.
+-DIGESTIVO: SIN NAUSEA NI EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3.
+-ALIMENTARIOS: ADECUADA PARA LA EDAD.
+-URINARIO: HÁBITO NORMAL, 4 VECES AL DÍA, SIN SÍNTOMAS IRRITATIVOS URINARIO, NO COLURIA, SIN HEMATURIA.
+-SÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 0/7, RINORREA: 0/7, CONGESTIÓN: 0/7, RONQUIDO EN LA NOCHE: 0/7, PRURITO NASAL 0/7, PRURITO OCULAR: 0/7.
+-SÍNTOMAS RESPIRATORIOS BAJOS: TOS DIURNA 0/7, TOS NOCTURNA: 0/7, TOS CON EL FRIO: 0/7, TOS RISA: 0/7, TOS LLANTO: 0/7, TOS MIENTRAS COME: 0/7 TOS EJERCICIO: 0/7."""
 
 
 def _float_or_none(valor):
@@ -105,55 +108,137 @@ def _normalizar_texto_simple(texto):
 
 def _revision_homeopatia_pediatrica_desde_enfermedad_actual(enfermedad_actual):
     texto = _normalizar_texto_simple(enfermedad_actual)
-    categorias = [
-        ("FIEBRE", ("FIEBRE", "FEBRIL", "HIPERTERMIA", "TEMPERATURA")),
-        ("CEFALEA", ("CEFALEA",)),
-        (
-            "SIGNOS RESPIRATORIOS",
-            (
-                "TOS",
-                "RINORREA",
-                "CONGESTION",
-                "ESTORNUDO",
-                "DISNEA",
-                "ODINOFAGIA",
-                "FARINGITIS",
-                "RUIDOS RESPIRATORIOS",
-                "PRURITO NASAL",
-                "PRURITO OCULAR",
-                "RONQUIDO",
-            ),
-        ),
-        ("CIANOSIS", ("CIANOSIS",)),
-        ("NAUSEA", ("NAUSEA", "NAUSEAS", "EMESIS", "VOMITO", "VOMITOS")),
-        ("DIARREA", ("DIARREA", "DIARREICA", "DIARREICAS")),
-        ("COLURIA", ("COLURIA",)),
-        ("HEMATURIA", ("HEMATURIA",)),
+    def mencionado(*terminos):
+        return any(termino in texto for termino in terminos)
+
+    cardiovascular = ["NIEGA CANSANCIO", "NO FATIGA AL COMER", "NO CIANOSIS"]
+    if mencionado("CIANOSIS"):
+        cardiovascular = [item for item in cardiovascular if "CIANOSIS" not in item]
+
+    digestivo = ["SIN NAUSEA NI EMESIS", "DEPOSICIONES 3 VEZ CADA DÍA", "BRISTOL 3"]
+    if mencionado("NAUSEA", "NAUSEAS", "EMESIS", "VOMITO", "VOMITOS"):
+        digestivo = [item for item in digestivo if item != "SIN NAUSEA NI EMESIS"]
+    if mencionado("DIARREA", "DIARREICA", "DIARREICAS"):
+        digestivo = [item for item in digestivo if item != "DEPOSICIONES 3 VEZ CADA DÍA"]
+        digestivo = [item for item in digestivo if item != "BRISTOL 3"]
+
+    urinario = [
+        "HÁBITO NORMAL",
+        "4 VECES AL DÍA",
+        "SIN SÍNTOMAS IRRITATIVOS URINARIO",
+        "NO COLURIA",
+        "SIN HEMATURIA",
     ]
-    faltantes = [
-        etiqueta
-        for etiqueta, terminos in categorias
-        if not any(termino in texto for termino in terminos)
+    if mencionado("COLURIA"):
+        urinario = [item for item in urinario if "COLURIA" not in item]
+    if mencionado("HEMATURIA"):
+        urinario = [item for item in urinario if "HEMATURIA" not in item]
+
+    respiratorios_altos = [
+        "ESTORNUDO 0/7",
+        "RINORREA: 0/7",
+        "CONGESTIÓN: 0/7",
+        "RONQUIDO EN LA NOCHE: 0/7",
+        "PRURITO NASAL 0/7",
+        "PRURITO OCULAR: 0/7",
     ]
-    if faltantes:
-        primera_linea = ", ".join(faltantes[:-1])
-        if primera_linea and len(faltantes) > 1:
-            primera_linea = f"{primera_linea}, {faltantes[-1]}"
+    if mencionado("ESTORNUDO"):
+        respiratorios_altos = [item for item in respiratorios_altos if "ESTORNUDO" not in item]
+    if mencionado("RINORREA"):
+        respiratorios_altos = [item for item in respiratorios_altos if "RINORREA" not in item]
+    if mencionado("CONGESTION"):
+        respiratorios_altos = [item for item in respiratorios_altos if "CONGESTIÓN" not in item]
+    if mencionado("RONQUIDO"):
+        respiratorios_altos = [item for item in respiratorios_altos if "RONQUIDO" not in item]
+    if mencionado("PRURITO NASAL"):
+        respiratorios_altos = [item for item in respiratorios_altos if "PRURITO NASAL" not in item]
+    if mencionado("PRURITO OCULAR"):
+        respiratorios_altos = [item for item in respiratorios_altos if "PRURITO OCULAR" not in item]
+
+    respiratorios_bajos = [
+        "TOS DIURNA 0/7",
+        "TOS NOCTURNA: 0/7",
+        "TOS CON EL FRIO: 0/7",
+        "TOS RISA: 0/7",
+        "TOS LLANTO: 0/7",
+        "TOS MIENTRAS COME: 0/7",
+        "TOS EJERCICIO: 0/7",
+    ]
+    if mencionado("TOS"):
+        respiratorios_bajos = []
+
+    lineas = []
+    if cardiovascular:
+        lineas.append(f"-SÍNTOMAS CARDIOVASCULARES: {', '.join(cardiovascular)}.")
+    if digestivo:
+        lineas.append(f"-DIGESTIVO: {', '.join(digestivo)}.")
+    lineas.append("-ALIMENTARIOS: ADECUADA PARA LA EDAD.")
+    if urinario:
+        lineas.append(f"-URINARIO: {', '.join(urinario)}.")
+    if respiratorios_altos:
+        lineas.append(f"-SÍNTOMAS RESPIRATORIOS ALTOS: {', '.join(respiratorios_altos)}.")
+    if respiratorios_bajos:
+        lineas.append(f"-SÍNTOMAS RESPIRATORIOS BAJOS: {', '.join(respiratorios_bajos)}.")
+    return "\n".join(lineas)
+
+
+def _construir_enfermedad_actual_homeopatia_pediatrica(texto_libre, sexo, grupo, edad_resumen):
+    texto_caso = str(texto_libre or "").strip()
+    texto_norm = _normalizar_texto_simple(texto_caso)
+    sexo_txt = (sexo or "").upper()
+    grupo_txt = (grupo or "").upper()
+    edad_txt = (edad_resumen or "").upper()
+
+    encabezado_partes = ["PACIENTE"]
+    if sexo_txt:
+        encabezado_partes.append(sexo_txt)
+    if grupo_txt:
+        encabezado_partes.append(grupo_txt)
+    if edad_txt:
+        encabezado_partes.extend(["DE", edad_txt + ","])
+    encabezado = " ".join(encabezado_partes).strip()
+    if encabezado:
+        encabezado = f"{encabezado} QUIEN CONSULTA POR"
+
+    if not texto_caso:
+        return encabezado, ""
+
+    def mencionado(*terminos):
+        return any(termino in texto_norm for termino in terminos)
+
+    habitos = []
+    if not mencionado("APETITO", "ALIMENTA", "COME", "INGESTA", "ALIMENTACION"):
+        habitos.append("REFIERE BUEN APETITO")
+    if not mencionado("DEPOSICION", "DIARREA", "ESTREÑ", "ESTREN", "BRISTOL"):
+        habitos.append("DEPOSICIONES SON NORMALES")
+    if not mencionado("ORINA", "DIURESIS", "URINAR", "HEMATURIA", "COLURIA", "URINARI"):
+        habitos.append("ORINA ES NORMAL")
+    if not mencionado("SUEÑO", "SUENO", "DUERME", "INSOMNIO", "DESPIERTA"):
+        habitos.append("SUEÑO ES TRANQUILO")
+
+    negaciones = []
+    if not mencionado("FIEBRE", "FEBRIL", "HIPERTERMIA", "TEMPERATURA"):
+        negaciones.append("FIEBRE")
+    if not mencionado("DIFICULTAD RESPIRATORIA", "DISNEA", "TIRAJE", "TIRAJES", "RETRACCION", "RETRACCIONES", "ALETEO", "QUEJIDO"):
+        negaciones.append("SIGNOS DE DIFICULTAD RESPIRATORIA")
+    if not mencionado("CIANOSIS"):
+        negaciones.append("CIANOSIS")
+
+    bloques = []
+    if habitos:
+        bloques.append(", ".join(habitos) + ".")
+    if negaciones:
+        if len(negaciones) == 1:
+            bloques.append(f"NIEGA {negaciones[0]} U OTROS SIGNOS.")
         else:
-            primera_linea = faltantes[0]
-        primera_linea = f"NIEGA {primera_linea} U OTROS SIGNOS."
+            bloques.append(f"NIEGA {', '.join(negaciones[:-1])}, {negaciones[-1]} U OTROS SIGNOS.")
     else:
-        primera_linea = "NIEGA OTROS SIGNOS NO REFERIDOS PREVIAMENTE."
-    return (
-        primera_linea
-        + "\n\nSÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 0/7, RINORREA: 0/7, CONGESTIÓN: 0/7, "
-        "RONQUIDO EN LA NOCHE: 0/7, PRURITO NASAL 0/7, PRURITO OCULAR: 0/7, "
-        "SÍNTOMAS RESPIRATORIOS BAJOS: TOS DIURNA 0/7, TOS NOCTURNA: 0/7, TOS CON EL FRIO: 0/7, "
-        "TOS RISA: 0/7, TOS LLANTO: 0/7, TOS MIENTRAS COME: 0/7 TOS EJERCICIO: 0/7, "
-        "SÍNTOMAS CARDIOVASCULARES: CANSANCIO NO, FATIGA AL COMER NO, CIANOSIS NO, "
-        "URINARIO: HÁBITO NORMAL, 4 VECES AL DÍA, SIN SÍNTOMAS IRRITATIVOS URINARIO, "
-        "DIGESTIVO: SIN EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3, ALIMENTARIOS: ADECUADA PARA LA EDAD."
-    )
+        bloques.append("NIEGA OTROS SIGNOS.")
+    if not mencionado("CONTAGIO", "CONTACTO", "INFECCION RESPIRATORIA EN EL HOGAR", "INFECCIONES RESPIRATORIAS EN EL HOGAR", "GRIPA EN EL HOGAR", "TOS EN EL HOGAR"):
+        bloques.append("NIEGA NOCIÓN DE CONTAGIO PARA INFECCIONES RESPIRATORIAS EN EL HOGAR.")
+
+    cola = " ".join(bloques).strip()
+    return encabezado, cola
 
 
 def _construir_diagnostico_cie10(prefix):
@@ -268,6 +353,7 @@ def render_consulta_externa(
     revision_default=None,
     revision_before_antecedentes=False,
     revision_auto_depende_enfermedad=False,
+    enfermedad_actual_auto_homeopatia_pediatrica=False,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -290,6 +376,7 @@ def render_consulta_externa(
         f"{prefix}_informante": "",
         f"{prefix}_motivo": "",
         f"{prefix}_enfermedad_actual": "",
+        f"{prefix}_enfermedad_actual_auto_base": "",
         f"{prefix}_antecedentes": antecedentes_default,
         f"{prefix}_revision": revision_default,
         f"{prefix}_revision_auto_base": revision_default,
@@ -406,6 +493,46 @@ def render_consulta_externa(
         st.info(f"Edad: {edad_texto}")
 
     motivo = st.text_area("Motivo de consulta", key=f"{prefix}_motivo")
+    edad_resumen_auto = f"{años} AÑOS" if años > 0 else (f"{meses} MESES" if fecha_nacimiento else "")
+    if enfermedad_actual_auto_homeopatia_pediatrica:
+        valor_actual = st.session_state.get(f"{prefix}_enfermedad_actual", "")
+        auto_previo = st.session_state.get(f"{prefix}_enfermedad_actual_auto_base", "")
+        encabezado_auto, cola_auto_previa = _construir_enfermedad_actual_homeopatia_pediatrica(
+            "",
+            sexo,
+            grupo,
+            edad_resumen_auto,
+        )
+        texto_libre = valor_actual
+        editable_como_auto = False
+        if not valor_actual:
+            texto_libre = ""
+            editable_como_auto = True
+        elif valor_actual == auto_previo:
+            texto_libre = ""
+            editable_como_auto = True
+        elif valor_actual.startswith(encabezado_auto):
+            cuerpo = valor_actual[len(encabezado_auto):].strip()
+            cola_previa = auto_previo[len(encabezado_auto):].strip() if auto_previo.startswith(encabezado_auto) else ""
+            if cola_previa and cuerpo.endswith(cola_previa):
+                texto_libre = cuerpo[:-len(cola_previa)].rstrip(" .,\n")
+                editable_como_auto = True
+        if editable_como_auto:
+            encabezado_final, cola_final = _construir_enfermedad_actual_homeopatia_pediatrica(
+                texto_libre,
+                sexo,
+                grupo,
+                edad_resumen_auto,
+            )
+            auto_nuevo = encabezado_final
+            if texto_libre:
+                auto_nuevo = f"{encabezado_final} {texto_libre.strip()}"
+                if cola_final:
+                    if not auto_nuevo.rstrip().endswith((".", ":", ";")):
+                        auto_nuevo += "."
+                    auto_nuevo += f" {cola_final}"
+            st.session_state[f"{prefix}_enfermedad_actual"] = auto_nuevo.strip()
+            st.session_state[f"{prefix}_enfermedad_actual_auto_base"] = auto_nuevo.strip()
     enfermedad_actual = st.text_area("Enfermedad actual", key=f"{prefix}_enfermedad_actual")
 
     if revision_auto_depende_enfermedad:

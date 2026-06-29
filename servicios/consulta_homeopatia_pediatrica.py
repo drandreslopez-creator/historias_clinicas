@@ -16,4 +16,5 @@ def render():
         revision_default=REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT,
         revision_before_antecedentes=True,
         revision_auto_depende_enfermedad=True,
+        enfermedad_actual_auto_homeopatia_pediatrica=True,
     )
