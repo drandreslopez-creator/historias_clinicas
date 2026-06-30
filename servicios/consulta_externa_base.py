@@ -938,6 +938,22 @@ def render_consulta_externa(
                     "Prioriza la semiología pediátrica y el material clínico realmente consignado en la historia."
                 ),
             )
+            if not repertorizacion_default.strip():
+                repertorizacion_default = complementar_repertorizacion_con_ia(
+                    "",
+                    contexto_repertorizacion_ia,
+                    fingerprint_repertorizacion_ia,
+                    instrucciones=(
+                        "Eres un médico homeópata pediátrico experto en repertorización clínica. "
+                        "Usa únicamente la información entregada y no inventes síntomas ni antecedentes. "
+                        "Responde en MAYÚSCULAS. "
+                        "Debes organizar la respuesta exactamente en dos apartados: "
+                        "1) TOTALIDAD PATOLÓGICA CARACTERÍSTICA (TPC) y "
+                        "2) TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC). "
+                        "En cada apartado resume de forma precisa los hallazgos más individualizantes del caso y, cuando sea útil, añade RUBROS / EJES REPERTORIALES SUGERIDOS. "
+                        "Prioriza la semiología pediátrica y el material clínico realmente consignado en la historia."
+                    ),
+                )
         if st.session_state.get(f"{prefix}_repertorizacion_base") != repertorizacion_default:
             if st.session_state.get(f"{prefix}_repertorizacion", "") == st.session_state.get(f"{prefix}_repertorizacion_base", ""):
                 st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_default
@@ -1000,6 +1016,21 @@ def render_consulta_externa(
                     "Integra criterios pediátricos y evita afirmaciones absolutas no sustentadas por el caso."
                 ),
             )
+            if not analisis_default.strip():
+                analisis_default = complementar_analisis_con_ia(
+                    "",
+                    contexto_analisis_ia,
+                    fingerprint_analisis_ia,
+                    instrucciones=(
+                        "Eres un médico homeópata pediátrico con experiencia en análisis clínico y repertorización. "
+                        "Usa únicamente la información consignada por el profesional y la repertorización disponible; no inventes síntomas, remedios ni hallazgos fuera del caso. "
+                        "Responde en MAYÚSCULAS. "
+                        "Organiza el texto en bloques breves con estos encabezados: RESUMEN CLÍNICO, ANÁLISIS HOMEOPÁTICO, SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE, ORGANOTERÁPICO. "
+                        "Si algún rubro no aplica, escribe NO CONSIDERADO. "
+                        "En cada medicamento propuesto explica brevemente por qué podría corresponder al caso según la totalidad clínica y la repertorización. "
+                        "Integra criterios pediátricos y evita afirmaciones absolutas no sustentadas por el caso."
+                    ),
+                )
         else:
             analisis_default = generar_analisis_asistido_urgencias(
                 enfermedad_auto,
@@ -1177,6 +1208,21 @@ def render_consulta_externa(
                     "Puedes añadir recomendaciones generales de seguimiento clínico y educación al cuidador si son coherentes con el caso."
                 ),
             )
+            if not plan_sugerido.strip():
+                plan_sugerido = complementar_plan_con_ia(
+                    "",
+                    contexto_plan_ia,
+                    fingerprint_plan_ia,
+                    instrucciones=(
+                        "Eres un médico homeópata pediátrico que redacta el PLAN terapéutico de una historia clínica. "
+                        "Usa únicamente la información del caso y del análisis homeopático entregado. "
+                        "Responde en MAYÚSCULAS, una indicación por línea. "
+                        "Incluye únicamente las opciones terapéuticas que realmente se desprendan del análisis: SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE Y ORGANOTERÁPICO SI FUERON CONSIDERADOS. "
+                        "Para cada uno especifica POTENCIA O ESCALA SI ESTÁ JUSTIFICADA, DOSIS, INTERVALO Y TIEMPO DE USO. "
+                        "Si algún medicamento no fue considerado en el análisis, no lo inventes ni lo incluyas. "
+                        "Puedes añadir recomendaciones generales de seguimiento clínico y educación al cuidador si son coherentes con el caso."
+                    ),
+                )
         else:
             plan_sugerido = plan_base_local
     else:
