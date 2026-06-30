@@ -183,22 +183,9 @@ def _revision_homeopatia_pediatrica_desde_enfermedad_actual(enfermedad_actual):
 
 
 def _construir_enfermedad_actual_homeopatia_pediatrica(texto_libre, sexo, grupo, edad_resumen):
+    encabezado = _construir_encabezado_enfermedad_actual(sexo, grupo, edad_resumen)
     texto_caso = str(texto_libre or "").strip()
     texto_norm = _normalizar_texto_simple(texto_caso)
-    sexo_txt = (sexo or "").upper()
-    grupo_txt = (grupo or "").upper()
-    edad_txt = (edad_resumen or "").upper()
-
-    encabezado_partes = ["PACIENTE"]
-    if sexo_txt:
-        encabezado_partes.append(sexo_txt)
-    if grupo_txt:
-        encabezado_partes.append(grupo_txt)
-    if edad_txt:
-        encabezado_partes.extend(["DE", edad_txt + ","])
-    encabezado = " ".join(encabezado_partes).strip()
-    if encabezado:
-        encabezado = f"{encabezado} QUIEN CONSULTA POR"
 
     if not texto_caso:
         return encabezado, ""
@@ -239,6 +226,40 @@ def _construir_enfermedad_actual_homeopatia_pediatrica(texto_libre, sexo, grupo,
 
     cola = " ".join(bloques).strip()
     return encabezado, cola
+
+
+def _etapa_vida_consulta_externa(es_pediatrica, grupo, años):
+    if es_pediatrica and grupo:
+        return grupo.upper()
+    if años is None:
+        return ""
+    if años >= 65:
+        return "ADULTO MAYOR"
+    if años >= 18:
+        return "ADULTO"
+    if años >= 10:
+        return "ADOLESCENTE"
+    return ""
+
+
+def _construir_encabezado_enfermedad_actual(sexo, etapa, edad_resumen):
+    sexo_txt = (sexo or "").upper()
+    etapa_txt = (etapa or "").upper()
+    edad_txt = (edad_resumen or "").upper()
+    partes = ["PACIENTE"]
+    if sexo_txt:
+        partes.append(sexo_txt)
+    if etapa_txt:
+        partes.append(etapa_txt)
+    if edad_txt:
+        partes.extend(["DE", edad_txt])
+    encabezado = " ".join(partes).strip()
+    return f"{encabezado} QUIEN CONSULTA POR".strip()
+
+
+def _construir_enfermedad_actual_prefijo(texto_libre, sexo, etapa, edad_resumen):
+    encabezado = _construir_encabezado_enfermedad_actual(sexo, etapa, edad_resumen)
+    return encabezado, ""
 
 
 def _construir_diagnostico_cie10(prefix):
@@ -353,6 +374,7 @@ def render_consulta_externa(
     revision_default=None,
     revision_before_antecedentes=False,
     revision_auto_depende_enfermedad=False,
+    enfermedad_actual_auto_prefijo=True,
     enfermedad_actual_auto_homeopatia_pediatrica=False,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
@@ -377,6 +399,7 @@ def render_consulta_externa(
         f"{prefix}_motivo": "",
         f"{prefix}_enfermedad_actual": "",
         f"{prefix}_enfermedad_actual_auto_base": "",
+        f"{prefix}_enfermedad_actual_auto_tail": "",
         f"{prefix}_antecedentes": antecedentes_default,
         f"{prefix}_revision": revision_default,
         f"{prefix}_revision_auto_base": revision_default,
@@ -494,36 +517,58 @@ def render_consulta_externa(
 
     motivo = st.text_area("Motivo de consulta", key=f"{prefix}_motivo")
     edad_resumen_auto = f"{años} AÑOS" if años > 0 else (f"{meses} MESES" if fecha_nacimiento else "")
-    if enfermedad_actual_auto_homeopatia_pediatrica:
+    etapa_vida_auto = _etapa_vida_consulta_externa(es_pediatrica, grupo, años if fecha_nacimiento else None)
+    if enfermedad_actual_auto_prefijo or enfermedad_actual_auto_homeopatia_pediatrica:
         valor_actual = st.session_state.get(f"{prefix}_enfermedad_actual", "")
         auto_previo = st.session_state.get(f"{prefix}_enfermedad_actual_auto_base", "")
-        encabezado_auto, cola_auto_previa = _construir_enfermedad_actual_homeopatia_pediatrica(
-            "",
-            sexo,
-            grupo,
-            edad_resumen_auto,
-        )
+        tail_previo = st.session_state.get(f"{prefix}_enfermedad_actual_auto_tail", "")
+        if enfermedad_actual_auto_homeopatia_pediatrica:
+            encabezado_auto, _ = _construir_enfermedad_actual_homeopatia_pediatrica(
+                "",
+                sexo,
+                etapa_vida_auto,
+                edad_resumen_auto,
+            )
+        else:
+            encabezado_auto, _ = _construir_enfermedad_actual_prefijo(
+                "",
+                sexo,
+                etapa_vida_auto,
+                edad_resumen_auto,
+            )
         texto_libre = valor_actual
         editable_como_auto = False
         if not valor_actual:
             texto_libre = ""
             editable_como_auto = True
+        elif valor_actual.startswith(encabezado_auto):
+            cuerpo = valor_actual[len(encabezado_auto):].strip()
+            if tail_previo and cuerpo.endswith(tail_previo):
+                texto_libre = cuerpo[:-len(tail_previo)].rstrip(" .,\n")
+            else:
+                texto_libre = cuerpo.rstrip()
+            editable_como_auto = True
         elif valor_actual == auto_previo:
             texto_libre = ""
             editable_como_auto = True
-        elif valor_actual.startswith(encabezado_auto):
-            cuerpo = valor_actual[len(encabezado_auto):].strip()
-            cola_previa = auto_previo[len(encabezado_auto):].strip() if auto_previo.startswith(encabezado_auto) else ""
-            if cola_previa and cuerpo.endswith(cola_previa):
-                texto_libre = cuerpo[:-len(cola_previa)].rstrip(" .,\n")
-                editable_como_auto = True
+        else:
+            texto_libre = valor_actual.strip()
+            editable_como_auto = True
         if editable_como_auto:
-            encabezado_final, cola_final = _construir_enfermedad_actual_homeopatia_pediatrica(
-                texto_libre,
-                sexo,
-                grupo,
-                edad_resumen_auto,
-            )
+            if enfermedad_actual_auto_homeopatia_pediatrica:
+                encabezado_final, cola_final = _construir_enfermedad_actual_homeopatia_pediatrica(
+                    texto_libre,
+                    sexo,
+                    etapa_vida_auto,
+                    edad_resumen_auto,
+                )
+            else:
+                encabezado_final, cola_final = _construir_enfermedad_actual_prefijo(
+                    texto_libre,
+                    sexo,
+                    etapa_vida_auto,
+                    edad_resumen_auto,
+                )
             auto_nuevo = encabezado_final
             if texto_libre:
                 auto_nuevo = f"{encabezado_final} {texto_libre.strip()}"
@@ -533,6 +578,7 @@ def render_consulta_externa(
                     auto_nuevo += f" {cola_final}"
             st.session_state[f"{prefix}_enfermedad_actual"] = auto_nuevo.strip()
             st.session_state[f"{prefix}_enfermedad_actual_auto_base"] = auto_nuevo.strip()
+            st.session_state[f"{prefix}_enfermedad_actual_auto_tail"] = cola_final.strip()
     enfermedad_actual = st.text_area("Enfermedad actual", key=f"{prefix}_enfermedad_actual")
 
     if revision_auto_depende_enfermedad:
