@@ -52,8 +52,8 @@ WORD_EXPORT_DIR_DEFAULT = BASE_DIR / "data" / "word_exports"
 DRAFT_URGENCIAS_PATH = BASE_DIR / "data" / "borrador_pediatria_urgencias.json"
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
-ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO XX GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO Y ECOGRAFÍAS ANTENATALES: NACE VÍA VAGINAL/ CESAREA A LAS XX SEM A TÉRMINO. EGRESO CONJUNTO, PESO XXXX GR - TALLA XX CM.
-INMUNOLÓGICOS: VACUNAS AL DÍA SEGÚN PAI.
+ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO DE # GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO, ECOGRAFÍAS ANTENATALES NORMALES. NACE VÍA VAGINAL/ CESAREA A LAS XX SEMANAS, PESO XXXX GR - TALLA XX CM. NO REQUIRIÓ OXIGENO SUPLEMENTARIO, NO REQUIRIÓ HOSPITALIZACIÓN, EGRESO CONJUNTO.
+INMUNOLÓGICOS: VACUNAS AL DÍA SEGÚN PAI (NO DOCUMENTADO); NO HA PRESENTADO REACCIONES ATRIBUIDAS A VACUNAS.
 ALIMENTACIÓN: ACORDE A EDAD.
 PATOLÓGICOS: NIEGA.
 HOSPITALARIOS: NIEGA.
@@ -63,9 +63,10 @@ TOXICOLÓGICO: NIEGA EXPOSICIÓN A HUMO DE LEÑA O CIGARRILLO.
 ALÉRGICOS: NIEGA.
 TRANSFUSIONALES: NIEGA.
 QUIRÚRGICOS: NIEGA.
-FAMILIARES: PADRE SANO, MADRE SANA, NO CONSANGUÍNEOS.
+FAMILIARES: PADRE Y MADRE SANOS (NO CONSANGUÍNEOS), HERMANOS XX.
 HEMOCLASIFICACIÓN: O POSITIVO.
-PSICOSOCIALES: VIVIENDA CON TODOS LOS SERVICIOS."""
+PSICOSOCIALES: VIVIENDA CON TODOS LOS SERVICIOS, MASCOTAS XX.
+ESCOLARIDAD: ACUDE A GUARDERÍA / PREESCOLAR / COLEGIO CON BUEN RENDIMIENTO ACADÉMICO."""
 
 EXAMEN_DEFAULT = """PACIENTE LUCE EN BUEN ESTADO GENERAL, ALERTA, BUEN ESTADO DE HIDRATACIÓN, AFEBRIL.
 
@@ -5103,8 +5104,8 @@ def render():
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         diagnostico_final = diagnostico_seleccionado or ""
-        paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY REPORTES"
-        imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY REPORTES"
+        paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY LABORATORIOS POR REPORTAR"
+        imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY IMAGENES POR REPORTAR"
 
         historia = f"""
 {titulo_historia.upper()}
@@ -5121,7 +5122,7 @@ TELEFONO: {telefono}
 PROVENIENTE: {proveniente}
 
 MOTIVO DE CONSULTA:
-"{motivo}"
+{motivo_reporte(motivo)}
 
 ENFERMEDAD ACTUAL:
 {enfermedad_auto}
@@ -5129,17 +5130,17 @@ ENFERMEDAD ACTUAL:
 REVISIÓN POR SISTEMAS:
 {revision}
 
-ANTECEDENTES:
+ANTECEDENTES PERSONALES Y FAMILIARES:
 {antecedentes}
 
 NEURODESARROLLO:
 {neuro_editable}
 
 SIGNOS VITALES:
-TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C PB: {pb} cm
+TA {texto_reporte_valor(ta)} mmHg FC: {texto_reporte_valor(fc)} lpm SpO2: {texto_reporte_valor(sat)}% FR: {texto_reporte_valor(fr)} rpm GLUCOMETRÍA: {texto_reporte_valor(glucometria)} mg/dl T: {texto_reporte_valor(temp)} °C PB: {texto_reporte_valor(pb)} cm
 
 ANTROPOMETRÍA:
-PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm
+PESO: {texto_reporte_valor(peso)} kg TALLA: {texto_reporte_valor(talla)} cm PC: {texto_reporte_valor(pc)} cm
 P/E Z: {z_pe}
 T/E Z: {z_te}
 P/T Z: {z_pt}
@@ -5177,13 +5178,13 @@ PLAN:
         st.success("Historia clínica generada")
         secciones_informe = [
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nINFORMANTE: {informante}\nEPS: {eps}\nTELEFONO: {telefono}\nPROVENIENTE: {proveniente}"),
-            ("MOTIVO DE CONSULTA", motivo),
+            ("MOTIVO DE CONSULTA", motivo_reporte(motivo)),
             ("ENFERMEDAD ACTUAL", enfermedad_auto),
             ("REVISIÓN POR SISTEMAS", revision),
-            ("ANTECEDENTES", antecedentes),
+            ("ANTECEDENTES PERSONALES Y FAMILIARES", antecedentes),
             ("NEURODESARROLLO", neuro_editable),
-            ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C PB: {pb} cm"),
-            ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm\nP/E Z: {z_pe}\nT/E Z: {z_te}\nP/T Z: {z_pt}\nIMC/E Z: {z_imc}\nPC/E Z: {z_pc}"),
+            ("SIGNOS VITALES", f"TA {texto_reporte_valor(ta)} mmHg FC: {texto_reporte_valor(fc)} lpm SpO2: {texto_reporte_valor(sat)}% FR: {texto_reporte_valor(fr)} rpm GLUCOMETRÍA: {texto_reporte_valor(glucometria)} mg/dl T: {texto_reporte_valor(temp)} °C PB: {texto_reporte_valor(pb)} cm"),
+            ("ANTROPOMETRÍA", f"PESO: {texto_reporte_valor(peso)} kg TALLA: {texto_reporte_valor(talla)} cm PC: {texto_reporte_valor(pc)} cm\nP/E Z: {z_pe}\nT/E Z: {z_te}\nP/T Z: {z_pt}\nIMC/E Z: {z_imc}\nPC/E Z: {z_pc}"),
             ("EXAMEN FÍSICO", examen),
             ("LABORATORIOS", paraclinicos_final),
             ("IMÁGENES", imagenes_final),

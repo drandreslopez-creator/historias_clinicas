@@ -266,6 +266,8 @@ def render():
     analisis = st.text_area("", key=f"{PREFIX}_analisis", height=180, label_visibility="collapsed")
 
     if st.button("Generar Historia Neonatal"):
+        paraclinicos_reporte = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY LABORATORIOS POR REPORTAR"
+        imagenes_reporte = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY IMAGENES POR REPORTAR"
         historia = f"""
 HISTORIA CLÍNICA DE ADAPTACIÓN NEONATAL
 
@@ -286,18 +288,18 @@ EXAMEN FÍSICO:
 {examen}
 
 SIGNOS VITALES:
-TA: {ta} mmHg
-FC: {fc} lpm
-FR: {fr} rpm
-GLUCOMETRÍA: {glucometria} mg/dl
-TEMP: {temp} °C
-SAT O2: {sat}%
+TA: {ta or "NO EVALUADO"} mmHg
+FC: {fc or "NO EVALUADO"} lpm
+FR: {fr or "NO EVALUADO"} rpm
+GLUCOMETRÍA: {glucometria or "NO EVALUADO"} mg/dl
+TEMP: {temp or "NO EVALUADO"} °C
+SAT O2: {sat or "NO EVALUADO"}%
 
 PARACLÍNICOS:
-{paraclinicos_texto}
+{paraclinicos_reporte}
 
 IMÁGENES:
-{imagenes_texto}
+{imagenes_reporte}
 
 ANÁLISIS:
 {analisis}

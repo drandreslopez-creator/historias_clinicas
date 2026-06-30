@@ -663,6 +663,8 @@ def render():
 
     if generar:
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
+        paraclinicos_reporte = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY LABORATORIOS POR REPORTAR"
+        imagenes_reporte = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY IMAGENES POR REPORTAR"
         historia = f"""
 {TITULO.upper()}
 
@@ -679,12 +681,12 @@ TELEFONO: {telefono}
 INFORMANTE / ACOMPAÑANTE: {informante}
 
 MOTIVO DE CONSULTA:
-{motivo}
+{"\"" + str(motivo).strip() + "\"" if str(motivo).strip() else "\"NO REGISTRADO\""}
 
 ENFERMEDAD ACTUAL:
 {enfermedad_actual}
 
-ANTECEDENTES:
+ANTECEDENTES PERSONALES Y FAMILIARES:
 {antecedentes}
 
 ALIMENTACIÓN:
@@ -706,19 +708,19 @@ REVISIÓN POR SISTEMAS:
 {revision}
 
 SIGNOS VITALES:
-TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C
+TA {ta or "NO EVALUADO"} mmHg FC: {fc or "NO EVALUADO"} lpm SpO2: {sat or "NO EVALUADO"}% FR: {fr or "NO EVALUADO"} rpm GLUCOMETRÍA: {glucometria or "NO EVALUADO"} mg/dl T: {temp or "NO EVALUADO"} °C
 
 ANTROPOMETRÍA:
-PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm PB: {pb} cm
+PESO: {peso or "NO EVALUADO"} kg TALLA: {talla or "NO EVALUADO"} cm PC: {pc or "NO EVALUADO"} cm PB: {pb or "NO EVALUADO"} cm
 
 EXAMEN FÍSICO:
 {examen}
 
 PARACLÍNICOS:
-{paraclinicos_texto}
+{paraclinicos_reporte}
 
 IMÁGENES:
-{imagenes_texto}
+{imagenes_reporte}
 
 ANÁLISIS:
 {analisis}
@@ -736,20 +738,20 @@ PLAN:
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad),
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
-            ("MOTIVO DE CONSULTA", motivo),
+            ("MOTIVO DE CONSULTA", f'"{motivo}"' if str(motivo).strip() else '"NO REGISTRADO"'),
             ("ENFERMEDAD ACTUAL", enfermedad_actual),
-            ("ANTECEDENTES", antecedentes),
+            ("ANTECEDENTES PERSONALES Y FAMILIARES", antecedentes),
             ("ALIMENTACIÓN", alimentacion),
             ("SUEÑO Y ELIMINACIÓN", sueno_eliminacion),
             ("VACUNACIÓN", vacunas),
             ("ENTORNO / HÁBITOS", entorno),
             ("NEURODESARROLLO", neuro),
             ("REVISIÓN POR SISTEMAS", revision),
-            ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C"),
-            ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm PC: {pc} cm PB: {pb} cm"),
+            ("SIGNOS VITALES", f"TA {ta or 'NO EVALUADO'} mmHg FC: {fc or 'NO EVALUADO'} lpm SpO2: {sat or 'NO EVALUADO'}% FR: {fr or 'NO EVALUADO'} rpm GLUCOMETRÍA: {glucometria or 'NO EVALUADO'} mg/dl T: {temp or 'NO EVALUADO'} °C"),
+            ("ANTROPOMETRÍA", f"PESO: {peso or 'NO EVALUADO'} kg TALLA: {talla or 'NO EVALUADO'} cm PC: {pc or 'NO EVALUADO'} cm PB: {pb or 'NO EVALUADO'} cm"),
             ("EXAMEN FÍSICO", examen),
-            ("PARACLÍNICOS", paraclinicos_texto),
-            ("IMÁGENES", imagenes_texto),
+            ("PARACLÍNICOS", paraclinicos_reporte),
+            ("IMÁGENES", imagenes_reporte),
             ("ANÁLISIS", analisis),
             ("DIAGNÓSTICOS", diagnosticos),
             ("OBSERVACIÓN DIAGNÓSTICA", observacion_dx),

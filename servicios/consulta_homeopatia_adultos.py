@@ -303,7 +303,7 @@ def render():
         label_visibility="collapsed",
     )
 
-    st.subheader("Antecedentes relevantes")
+    st.subheader("Antecedentes personales y familiares")
     antecedentes = st.text_area("", key=f"{prefix}_antecedentes", height=220, label_visibility="collapsed")
 
     st.subheader("Revisión por sistemas")
@@ -542,6 +542,8 @@ def render():
         antropometria = f"PESO {peso} KG TALLA {talla} CM"
         if imc_manual:
             antropometria += f" IMC {imc_manual} KG/M²"
+        paraclinicos_reporte = paraclinicos.strip() if str(paraclinicos).strip() else "NO HAY LABORATORIOS POR REPORTAR"
+        imagenes_reporte = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY IMAGENES POR REPORTAR"
 
         historia = f"""
 {titulo.upper()}
@@ -559,12 +561,12 @@ TELEFONO: {telefono}
 INFORMANTE / ACOMPAÑANTE: {informante}
 
 MOTIVO DE CONSULTA:
-{motivo}
+{"\"" + str(motivo).strip() + "\"" if str(motivo).strip() else "\"NO REGISTRADO\""}
 
 ENFERMEDAD ACTUAL (EVOLUCIÓN Y MODALIDADES):
 {enfermedad_actual}
 
-ANTECEDENTES RELEVANTES:
+ANTECEDENTES PERSONALES Y FAMILIARES:
 {antecedentes}
 
 REVISIÓN POR SISTEMAS:
@@ -580,17 +582,17 @@ SÍNTOMAS MENTALES:
 {sintomas_mentales}
 
 EXAMEN FÍSICO:
-TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm GLUCOMETRÍA {glucometria} mg/dl T {temp} °C
+TA {ta or "NO EVALUADO"} mmHg FC {fc or "NO EVALUADO"} lpm SpO2 {sat or "NO EVALUADO"}% FR {fr or "NO EVALUADO"} rpm GLUCOMETRÍA {glucometria or "NO EVALUADO"} mg/dl T {temp or "NO EVALUADO"} °C
 {antropometria}
 {examen}
 DIAGNÓSTICOS MÉDICOS:
 {diagnosticos}
 
 EXÁMENES PARACLÍNICOS:
-{paraclinicos}
+{paraclinicos_reporte}
 
 IMÁGENES:
-{imagenes_texto}
+{imagenes_reporte}
 
 ANÁLISIS HOMEOPÁTICO:
 {analisis_homeopatico}
@@ -608,20 +610,20 @@ ANÁLISIS Y TRATAMIENTO:
                 "DATOS DE IDENTIFICACIÓN",
                 f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}",
             ),
-            ("MOTIVO DE CONSULTA", motivo),
+            ("MOTIVO DE CONSULTA", f'"{motivo}"' if str(motivo).strip() else '"NO REGISTRADO"'),
             ("ENFERMEDAD ACTUAL (EVOLUCIÓN Y MODALIDADES)", enfermedad_actual),
-            ("ANTECEDENTES RELEVANTES", antecedentes),
+            ("ANTECEDENTES PERSONALES Y FAMILIARES", antecedentes),
             ("REVISIÓN POR SISTEMAS", revision),
             ("RESUMEN DE BIOPATOGRAFÍA", biopatografia),
             ("SÍNTOMAS GENERALES", sintomas_generales),
             ("SÍNTOMAS MENTALES", sintomas_mentales),
             (
                 "EXAMEN FÍSICO",
-                f"TA {ta} mmHg FC {fc} lpm SpO2 {sat}% FR {fr} rpm GLUCOMETRÍA {glucometria} mg/dl T {temp} °C\n{antropometria}\n{examen}",
+                f"TA {ta or 'NO EVALUADO'} mmHg FC {fc or 'NO EVALUADO'} lpm SpO2 {sat or 'NO EVALUADO'}% FR {fr or 'NO EVALUADO'} rpm GLUCOMETRÍA {glucometria or 'NO EVALUADO'} mg/dl T {temp or 'NO EVALUADO'} °C\n{antropometria}\n{examen}",
             ),
             ("DIAGNÓSTICOS MÉDICOS", diagnosticos),
-            ("EXÁMENES PARACLÍNICOS", paraclinicos),
-            ("IMÁGENES", imagenes_texto),
+            ("EXÁMENES PARACLÍNICOS", paraclinicos_reporte),
+            ("IMÁGENES", imagenes_reporte),
             ("ANÁLISIS HOMEOPÁTICO", analisis_homeopatico),
             ("RUBROS IMPORTANTES", rubros),
             ("ANÁLISIS Y TRATAMIENTO", tratamiento),

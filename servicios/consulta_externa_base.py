@@ -47,13 +47,21 @@ from servicios.pediatria_urgencias import (
 BASE_DIR = Path(__file__).resolve().parent.parent
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
-ANTECEDENTES_DEFAULT = """PERINATALES/NEONATALES: SEGUN REFIERE.
+ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO DE # GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO, ECOGRAFÍAS ANTENATALES NORMALES. NACE VÍA VAGINAL/ CESAREA A LAS XX SEMANAS, PESO XXXX GR - TALLA XX CM. NO REQUIRIÓ OXIGENO SUPLEMENTARIO, NO REQUIRIÓ HOSPITALIZACIÓN, EGRESO CONJUNTO.
+INMUNOLÓGICOS: VACUNAS AL DÍA SEGÚN PAI (NO DOCUMENTADO); NO HA PRESENTADO REACCIONES ATRIBUIDAS A VACUNAS.
+ALIMENTACIÓN: ACORDE A EDAD.
 PATOLÓGICOS: NIEGA.
 HOSPITALARIOS: NIEGA.
 FARMACOLÓGICOS: NIEGA.
+TRAUMÁTICOS: NIEGA.
+TOXICOLÓGICO: NIEGA EXPOSICIÓN A HUMO DE LEÑA O CIGARRILLO.
 ALÉRGICOS: NIEGA.
+TRANSFUSIONALES: NIEGA.
 QUIRÚRGICOS: NIEGA.
-FAMILIARES: SIN DATOS PATOLÓGICOS RELEVANTES."""
+FAMILIARES: PADRE Y MADRE SANOS (NO CONSANGUÍNEOS), HERMANOS XX.
+HEMOCLASIFICACIÓN: O POSITIVO.
+PSICOSOCIALES: VIVIENDA CON TODOS LOS SERVICIOS, MASCOTAS XX.
+ESCOLARIDAD: ACUDE A GUARDERÍA / PREESCOLAR / COLEGIO CON BUEN RENDIMIENTO ACADÉMICO."""
 
 ANTECEDENTES_ADULTO_DEFAULT = """PATOLÓGICOS: NIEGA.
 HOSPITALARIOS: NIEGA.
@@ -77,17 +85,29 @@ PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
 - CONTROL SEGUN EVOLUCIÓN"""
 
 SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT = """- APETITO:
+  CÓMO COME, SI TIENE MUCHA O POCA HAMBRE, HORARIOS, SACIEDAD RÁPIDA, ANSIEDAD POR COMER, RECHAZO DE ALIMENTOS O CAMBIOS DEL APETITO DURANTE LA ENFERMEDAD.
 - SED:
+  CUÁNTA AGUA PIDE, CADA CUÁNTO, SI PREFIERE BEBIDAS FRÍAS O TIBIAS, SI TOMA A GRANDES O PEQUEÑOS SORBOS, SI CASI NO PIDE LÍQUIDOS.
 - DESEOS:
+  ALIMENTOS O SABORES QUE MÁS PIDE O BUSCA: DULCE, SALADO, ÁCIDO, HELADOS, LECHE, HUEVO, PAN, TIERRA, HIELO U OTROS.
 - AVERSIONES:
+  ALIMENTOS, OLORES O SABORES QUE RECHAZA, LE PRODUCEN NÁUSEA, ASCO O LLANTO, O QUE NO TOLERA DESDE PEQUEÑO.
 - AGRAVACIONES:
+  EN QUÉ SITUACIONES SE AGRAVA: FRÍO, CALOR, VIENTO, BAÑO, NOCHE, MADRUGADA, MOVIMIENTO, LLANTO, COMIDA, CONTACTO, CAMBIOS DE RUTINA.
 - EMPEORA:
+  QUÉ MOMENTO DEL DÍA, POSICIÓN, CLIMA, ALIMENTO, EMOCIÓN O ACTIVIDAD LO HACE SENTIR PEOR O DESENCADENA LOS SÍNTOMAS.
 - CALOR VITAL:
+  SI ES CALUROSO O FRIOLENTO, SI DESTAPA O SE ARROPA MUCHO, MANOS Y PIES FRÍOS O CALIENTES, PREFERENCIA POR AMBIENTE ABIERTO O CERRADO.
 - TRANSPIRACIÓN:
+  SI SUDA MUCHO O POCO, EN QUÉ ZONAS, OLOR, SI MANCHA LA ROPA, SI EL SUDOR APARECE AL DORMIR, COMER, JUGAR O CON FIEBRE.
 - SUEÑO:
+  CÓMO DUERME, HORARIOS, SI LE CUESTA DORMIR, DESPIERTA MUCHO, DUERME SOLO O ACOMPAÑADO, POSICIÓN AL DORMIR, SI HABLA, BRUXA O SE MUEVE DEMASIADO.
 - SUEÑOS:
+  PESADILLAS, SUEÑOS REPETITIVOS, DESPIERTOS CON MIEDO, GRITOS NOCTURNOS, SOBRESALTOS, CONTENIDO DE LOS SUEÑOS SI LOGRAN DESCRIBIRLO.
 - SEXUALIDAD:
-- ESTADO DEL TIEMPO:"""
+  EN PEDIATRÍA EXPLORAR MÁS BIEN CURIOSIDAD CORPORAL, PUDOR, EXCESO O AUSENCIA DE EXPLORACIÓN, PREGUNTAS SOBRE EL CUERPO Y CONDUCTAS QUE LLAMEN LA ATENCIÓN SEGÚN LA EDAD.
+- ESTADO DEL TIEMPO:
+  CÓMO LE AFECTA EL CLIMA: LLUVIA, VIENTO, HUMEDAD, CALOR, FRÍO, CAMBIOS DE ESTACIÓN, DÍAS NUBLADOS O SOLEADOS."""
 
 BIOPATOGRAFICA_HOMEOPATIA_PEDIATRICA_DEFAULT = """- EMBARAZO Y GESTACIÓN:
   FUE DESEADO, CÓMO FUE EL ÁNIMO DE LA MADRE, SI HUBO APOYO DE LA PAREJA / FAMILIA, ESTRÉS, MIEDOS, TRISTEZA O EVENTOS MARCANTES DURANTE LA GESTACIÓN.
@@ -145,6 +165,21 @@ def _float_or_none(valor):
         return float(texto)
     except ValueError:
         return None
+
+
+def _texto_reporte_valor(valor, default="NO EVALUADO"):
+    texto = str(valor or "").strip()
+    return texto if texto else default
+
+
+def _motivo_reporte(texto):
+    texto_limpio = str(texto or "").strip()
+    return f'"{texto_limpio}"' if texto_limpio else '"NO REGISTRADO"'
+
+
+def _texto_reporte_bloque(texto, default):
+    texto_limpio = str(texto or "").strip()
+    return texto_limpio if texto_limpio else default
 
 
 def _normalizar_texto_simple(texto):
@@ -635,8 +670,8 @@ def render_consulta_externa(
         else:
             sintomas_generales = ""
 
-    st.subheader("Antecedentes")
-    antecedentes = st.text_area("Antecedentes", key=f"{prefix}_antecedentes", height=220)
+    st.subheader("Antecedentes personales y familiares")
+    antecedentes = st.text_area("Antecedentes personales y familiares", key=f"{prefix}_antecedentes", height=220)
 
     if mostrar_biopatografica:
         st.subheader("Historia biopatográfica")
@@ -993,6 +1028,8 @@ def render_consulta_externa(
 
     if generar:
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
+        paraclinicos_reporte = _texto_reporte_bloque(paraclinicos_texto, "NO HAY LABORATORIOS POR REPORTAR")
+        imagenes_reporte = _texto_reporte_bloque(imagenes_texto, "NO HAY IMAGENES POR REPORTAR")
         bloque_revision = f"""
 REVISIÓN POR SISTEMAS:
 {revision}
@@ -1004,7 +1041,7 @@ SÍNTOMAS GENERALES:
 {sintomas_generales}
 """
         bloque_antecedentes = f"""
-ANTECEDENTES:
+ANTECEDENTES PERSONALES Y FAMILIARES:
 {antecedentes}
 """
         bloque_biopatografica = ""
@@ -1035,7 +1072,7 @@ TELEFONO: {telefono}
 INFORMANTE / ACOMPAÑANTE: {informante}
 
 MOTIVO DE CONSULTA:
-{motivo}
+{_motivo_reporte(motivo)}
 
 ENFERMEDAD ACTUAL:
 {enfermedad_actual_historia}
@@ -1065,9 +1102,10 @@ NEURODESARROLLO:
 {neuro}
 """
         signos_vitales_linea = (
-            f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm "
-            f"GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C"
-            + (f" PB: {pb} cm" if mostrar_pb else "")
+            f"TA {_texto_reporte_valor(ta)} mmHg FC: {_texto_reporte_valor(fc)} lpm "
+            f"SpO2: {_texto_reporte_valor(sat)}% FR: {_texto_reporte_valor(fr)} rpm "
+            f"GLUCOMETRÍA: {_texto_reporte_valor(glucometria)} mg/dl T: {_texto_reporte_valor(temp)} °C"
+            + (f" PB: {_texto_reporte_valor(pb)} cm" if mostrar_pb else "")
         )
         historia += f"""
 
@@ -1075,12 +1113,12 @@ SIGNOS VITALES:
 {signos_vitales_linea}
 
 ANTROPOMETRÍA:
-PESO: {peso} kg TALLA: {talla} cm"""
+PESO: {_texto_reporte_valor(peso)} kg TALLA: {_texto_reporte_valor(talla)} cm"""
 
         if es_pediatrica:
-            historia += f" PC: {pc} cm"
+            historia += f" PC: {_texto_reporte_valor(pc)} cm"
         elif imc_adulto:
-            historia += f" IMC: {imc_adulto} kg/m²"
+            historia += f" IMC: {_texto_reporte_valor(imc_adulto)} kg/m²"
 
         historia += f"""
 
@@ -1088,10 +1126,10 @@ EXAMEN FÍSICO:
 {examen}
 
 PARACLÍNICOS:
-{paraclinicos_texto}
+{paraclinicos_reporte}
 
 IMÁGENES:
-{imagenes_texto}
+{imagenes_reporte}
 
 ANÁLISIS:
 {analisis}
@@ -1109,7 +1147,7 @@ PLAN:
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
-            ("MOTIVO DE CONSULTA", motivo),
+            ("MOTIVO DE CONSULTA", _motivo_reporte(motivo)),
             ("ENFERMEDAD ACTUAL", enfermedad_actual_historia),
         ]
         if revision_before_antecedentes:
@@ -1117,7 +1155,7 @@ PLAN:
                 [
                     ("REVISIÓN POR SISTEMAS", revision),
                     *((("SÍNTOMAS GENERALES", sintomas_generales),) if mostrar_sintomas_generales else ()),
-                    ("ANTECEDENTES", antecedentes),
+                    ("ANTECEDENTES PERSONALES Y FAMILIARES", antecedentes),
                     *((("HISTORIA BIOPATOGRÁFICA", biopatografica),) if mostrar_biopatografica else ()),
                     *((("SÍNTOMAS MENTALES", sintomas_mentales),) if mostrar_sintomas_mentales else ()),
                 ]
@@ -1125,7 +1163,7 @@ PLAN:
         else:
             secciones.extend(
                 [
-                    ("ANTECEDENTES", antecedentes),
+                    ("ANTECEDENTES PERSONALES Y FAMILIARES", antecedentes),
                     *((("HISTORIA BIOPATOGRÁFICA", biopatografica),) if mostrar_biopatografica else ()),
                     *((("SÍNTOMAS MENTALES", sintomas_mentales),) if mostrar_sintomas_mentales else ()),
                     ("REVISIÓN POR SISTEMAS", revision),
@@ -1136,11 +1174,11 @@ PLAN:
             secciones.append(("NEURODESARROLLO", neuro))
         secciones.extend(
             [
-                ("SIGNOS VITALES", f"TA {ta} mmHg FC: {fc} lpm SpO2: {sat}% FR: {fr} rpm GLUCOMETRÍA: {glucometria} mg/dl T: {temp} °C" + (f" PB: {pb} cm" if mostrar_pb else "")),
-                ("ANTROPOMETRÍA", f"PESO: {peso} kg TALLA: {talla} cm" + (f" PC: {pc} cm" if es_pediatrica else (f" IMC: {imc_adulto} kg/m²" if imc_adulto else ""))),
+                ("SIGNOS VITALES", f"TA {_texto_reporte_valor(ta)} mmHg FC: {_texto_reporte_valor(fc)} lpm SpO2: {_texto_reporte_valor(sat)}% FR: {_texto_reporte_valor(fr)} rpm GLUCOMETRÍA: {_texto_reporte_valor(glucometria)} mg/dl T: {_texto_reporte_valor(temp)} °C" + (f" PB: {_texto_reporte_valor(pb)} cm" if mostrar_pb else "")),
+                ("ANTROPOMETRÍA", f"PESO: {_texto_reporte_valor(peso)} kg TALLA: {_texto_reporte_valor(talla)} cm" + (f" PC: {_texto_reporte_valor(pc)} cm" if es_pediatrica else (f" IMC: {_texto_reporte_valor(imc_adulto)} kg/m²" if imc_adulto else ""))),
                 ("EXAMEN FÍSICO", examen),
-                ("PARACLÍNICOS", paraclinicos_texto),
-                ("IMÁGENES", imagenes_texto),
+                ("PARACLÍNICOS", paraclinicos_reporte),
+                ("IMÁGENES", imagenes_reporte),
                 ("ANÁLISIS", analisis),
                 ("DIAGNÓSTICOS", diagnosticos),
                 ("OBSERVACIÓN DIAGNÓSTICA", observacion_dx),
