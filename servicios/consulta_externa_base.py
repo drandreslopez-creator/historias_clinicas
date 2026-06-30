@@ -112,6 +112,23 @@ BIOPATOGRAFICA_HOMEOPATIA_PEDIATRICA_DEFAULT = """- EMBARAZO Y GESTACIÓN:
 - ANTECEDENTES FAMILIARES CON SENTIDO HOMEOPÁTICO:
   TEMPERAMENTOS FAMILIARES, ENFERMEDADES REPETITIVAS, PATOLOGÍAS CRÓNICAS, TRASTORNOS EMOCIONALES, ALERGIAS, ASMA, DERMATITIS O AUTOINMUNIDAD."""
 
+SINTOMAS_MENTALES_HOMEOPATIA_PEDIATRICA_DEFAULT = """- AFECTO Y AMOR:
+  FORMA DE EXPRESAR EL CARIÑO, NECESIDAD DE CONTACTO, APEGO A MADRE / CUIDADOR, CELOS, FACILIDAD PARA RECIBIR Y DAR AFECTO.
+- VOLUNTAD Y CONDUCTA:
+  OBEDIENCIA, OPOSICIÓN, TERQUEDAD, IMPULSIVIDAD, TOLERANCIA A LA FRUSTRACIÓN, MANERA DE PEDIR LAS COSAS, RABIETAS O CONTROL.
+- ENTENDIMIENTO, INTELIGENCIA Y JUICIO:
+  ATENCIÓN, MEMORIA, COMPRENSIÓN, LENGUAJE, APRENDIZAJE, CURIOSIDAD, MADUREZ PARA LA EDAD Y CAPACIDAD DE JUICIO.
+- EMOCIONALES:
+  MIEDOS, ANSIEDAD, TRISTEZA, ANGUSTIA, SENSACIÓN DE ABANDONO, SOBRESALTOS, PESADILLAS, REACCIONES ANTE CAMBIOS O PÉRDIDAS.
+- HUMOR:
+  ALEGRE, IRRITABLE, VARIABLE, SERIO, SENSIBLE, LLORÓN, EXPLOSIVO, FACILIDAD PARA CONSOLARLO O CALMARLO.
+- GUSTOS:
+  JUEGOS PREFERIDOS, COMPAÑÍA O SOLEDAD, RUTINAS, COLORES, ANIMALES, ACTIVIDADES, PERSONAS CON LAS QUE MÁS DISFRUTA ESTAR.
+- CONCIENCIA MORAL:
+  CULPA, NOCIÓN DE LO BUENO Y LO MALO, SENSIBILIDAD ANTE EL CASTIGO, REMORDIMIENTO, HONESTIDAD, RESPUESTA A NORMAS Y LÍMITES.
+- PERSONALIDAD:
+  TIMIDEZ O EXTROVERSIÓN, SEGURIDAD, DEPENDENCIA O INDEPENDENCIA, DOMINANTE O SUMISO, ORDENADO O DESCUIDADO, SOCIABLE O RESERVADO."""
+
 REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT = """-SÍNTOMAS CARDIOVASCULARES: NIEGA CANSANCIO, NO FATIGA AL COMER, NO CIANOSIS.
 -DIGESTIVO: SIN NAUSEA NI EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3.
 -ALIMENTARIOS: ADECUADA PARA LA EDAD.
@@ -424,6 +441,8 @@ def render_consulta_externa(
     sintomas_generales_default="",
     mostrar_biopatografica=False,
     biopatografica_default="",
+    mostrar_sintomas_mentales=False,
+    sintomas_mentales_default="",
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -433,6 +452,7 @@ def render_consulta_externa(
     revision_default = revision_default or "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
     sintomas_generales_default = sintomas_generales_default or ""
     biopatografica_default = biopatografica_default or ""
+    sintomas_mentales_default = sintomas_mentales_default or ""
     if mostrar_pb is None:
         mostrar_pb = es_pediatrica
     history_path = _historia_path(history_filename)
@@ -453,6 +473,7 @@ def render_consulta_externa(
         f"{prefix}_revision_auto_base": revision_default,
         f"{prefix}_sintomas_generales": sintomas_generales_default,
         f"{prefix}_biopatografica": biopatografica_default,
+        f"{prefix}_sintomas_mentales": sintomas_mentales_default,
         f"{prefix}_fc": "",
         f"{prefix}_fr": "",
         f"{prefix}_ta": "",
@@ -626,6 +647,16 @@ def render_consulta_externa(
         )
     else:
         biopatografica = ""
+
+    if mostrar_sintomas_mentales:
+        st.subheader("Síntomas mentales")
+        sintomas_mentales = st.text_area(
+            "Síntomas mentales",
+            key=f"{prefix}_sintomas_mentales",
+            height=260,
+        )
+    else:
+        sintomas_mentales = ""
 
     neuro = ""
     if mostrar_neurodesarrollo and fecha_nacimiento:
@@ -806,6 +837,7 @@ def render_consulta_externa(
             "revision_por_sistemas": revision,
             "sintomas_generales": sintomas_generales,
             "historia_biopatografica": biopatografica,
+            "sintomas_mentales": sintomas_mentales,
             "signos_vitales": {
                 "ta": ta,
                 "fc": fc,
@@ -981,6 +1013,12 @@ ANTECEDENTES:
 HISTORIA BIOPATOGRÁFICA:
 {biopatografica}
 """
+        bloque_sintomas_mentales = ""
+        if mostrar_sintomas_mentales:
+            bloque_sintomas_mentales = f"""
+SÍNTOMAS MENTALES:
+{sintomas_mentales}
+"""
         historia = f"""
 {titulo.upper()}
 
@@ -1009,10 +1047,14 @@ ENFERMEDAD ACTUAL:
             historia += bloque_antecedentes
             if bloque_biopatografica:
                 historia += bloque_biopatografica
+            if bloque_sintomas_mentales:
+                historia += bloque_sintomas_mentales
         else:
             historia += bloque_antecedentes
             if bloque_biopatografica:
                 historia += bloque_biopatografica
+            if bloque_sintomas_mentales:
+                historia += bloque_sintomas_mentales
             historia += bloque_revision
             if bloque_sintomas_generales:
                 historia += bloque_sintomas_generales
@@ -1077,6 +1119,7 @@ PLAN:
                     *((("SÍNTOMAS GENERALES", sintomas_generales),) if mostrar_sintomas_generales else ()),
                     ("ANTECEDENTES", antecedentes),
                     *((("HISTORIA BIOPATOGRÁFICA", biopatografica),) if mostrar_biopatografica else ()),
+                    *((("SÍNTOMAS MENTALES", sintomas_mentales),) if mostrar_sintomas_mentales else ()),
                 ]
             )
         else:
@@ -1084,6 +1127,7 @@ PLAN:
                 [
                     ("ANTECEDENTES", antecedentes),
                     *((("HISTORIA BIOPATOGRÁFICA", biopatografica),) if mostrar_biopatografica else ()),
+                    *((("SÍNTOMAS MENTALES", sintomas_mentales),) if mostrar_sintomas_mentales else ()),
                     ("REVISIÓN POR SISTEMAS", revision),
                     *((("SÍNTOMAS GENERALES", sintomas_generales),) if mostrar_sintomas_generales else ()),
                 ]

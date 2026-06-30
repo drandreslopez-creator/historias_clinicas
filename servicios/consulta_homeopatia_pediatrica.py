@@ -2,6 +2,7 @@ from servicios.consulta_externa_base import (
     BIOPATOGRAFICA_HOMEOPATIA_PEDIATRICA_DEFAULT,
     REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT,
     SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT,
+    SINTOMAS_MENTALES_HOMEOPATIA_PEDIATRICA_DEFAULT,
     render_consulta_externa,
 )
 
@@ -24,4 +25,6 @@ def render():
         sintomas_generales_default=SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT,
         mostrar_biopatografica=True,
         biopatografica_default=BIOPATOGRAFICA_HOMEOPATIA_PEDIATRICA_DEFAULT,
+        mostrar_sintomas_mentales=True,
+        sintomas_mentales_default=SINTOMAS_MENTALES_HOMEOPATIA_PEDIATRICA_DEFAULT,
     )
