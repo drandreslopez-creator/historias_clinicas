@@ -6,9 +6,18 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from core.calculos import calcular_edad
+from core.calculos import calcular_edad, edad_en_meses
 from core.clasificacion import grupo_etario
+from herramientas.antropometria import calcular_imc
 from herramientas.neurodesarrollo import obtener_neurodesarrollo
+from herramientas.oms_full import (
+    zscore_imc_edad,
+    zscore_pc_edad,
+    zscore_peso_edad,
+    zscore_peso_talla,
+    zscore_talla_edad,
+)
+from herramientas.diagnostico_nutricional import diagnostico_mayor_5, diagnostico_menor_5
 from servicios.pediatria_urgencias import (
     ANTECEDENTES_DEFAULT as ANTECEDENTES_URGENCIAS_DEFAULT,
     EXAMEN_DEFAULT as EXAMEN_URGENCIAS_DEFAULT,
@@ -788,6 +797,34 @@ def render_consulta_externa(
     talla_num = _float_or_none(talla)
     pc_num = _float_or_none(pc)
     pb_num = _float_or_none(pb)
+
+    if es_pediatrica and fecha_nacimiento and peso_num and peso_num > 0 and talla_num and talla_num > 0 and sexo:
+        edad_meses = edad_en_meses(fecha_nacimiento)
+        sexo_oms = 1 if sexo == "Masculino" else 2
+        imc_calc = calcular_imc(peso_num, talla_num)
+
+        z_pe = zscore_peso_edad(peso_num, edad_meses, sexo_oms)
+        z_te = zscore_talla_edad(talla_num, edad_meses, sexo_oms)
+        z_imc = zscore_imc_edad(imc_calc, edad_meses, sexo_oms)
+        z_pt = zscore_peso_talla(peso_num, talla_num, sexo_oms, edad_meses)
+        z_pc = zscore_pc_edad(pc_num, edad_meses, sexo_oms) if pc_num and pc_num > 0 else None
+
+        st.subheader("OMS automático")
+        col_oms_1, col_oms_2, col_oms_3 = st.columns(3)
+        with col_oms_1:
+            st.write(f"P/E Z: {z_pe}")
+            st.write(f"T/E Z: {z_te}")
+        with col_oms_2:
+            st.write(f"P/T Z: {z_pt}")
+            st.write(f"IMC/E Z: {z_imc}")
+        with col_oms_3:
+            st.write(f"PC/E Z: {z_pc}")
+
+        if edad_meses < 60:
+            dx_nutricional = diagnostico_menor_5(z_pt, z_pe, z_te, z_pc)
+        else:
+            dx_nutricional = diagnostico_mayor_5(z_imc, z_te)
+        st.caption(f"Diagnóstico nutricional: {dx_nutricional}")
 
     st.subheader("Examen físico")
     if usar_modo_urgencias and st.session_state.get(f"{prefix}_examen") == EXAMEN_DEFAULT:
