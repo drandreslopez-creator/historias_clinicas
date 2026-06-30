@@ -76,6 +76,19 @@ PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
 - SIGNOS DE ALARMA
 - CONTROL SEGUN EVOLUCIÓN"""
 
+SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT = """- Apetito:
+- Sed:
+- Deseos:
+- Aversiones:
+- Agravaciones:
+- Empeora:
+- Calor vital:
+- Transpiración:
+- Sueño:
+- Sueños:
+- Sexualidad:
+- Estado del tiempo:"""
+
 REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT = """-SÍNTOMAS CARDIOVASCULARES: NIEGA CANSANCIO, NO FATIGA AL COMER, NO CIANOSIS.
 -DIGESTIVO: SIN NAUSEA NI EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3.
 -ALIMENTARIOS: ADECUADA PARA LA EDAD.
@@ -262,6 +275,14 @@ def _construir_enfermedad_actual_prefijo(texto_libre, sexo, etapa, edad_resumen)
     return encabezado, ""
 
 
+def _construir_enfermedad_actual_render(texto_libre, sexo, etapa, edad_resumen):
+    texto = str(texto_libre or "").strip().upper()
+    if not texto:
+        return ""
+    encabezado = _construir_encabezado_enfermedad_actual(sexo, etapa, edad_resumen)
+    return f"{encabezado} {texto}".strip()
+
+
 def _construir_diagnostico_cie10(prefix):
     cie10 = cargar_cie10()
     busqueda_cie10 = st.text_input(
@@ -376,6 +397,8 @@ def render_consulta_externa(
     revision_auto_depende_enfermedad=False,
     enfermedad_actual_auto_prefijo=True,
     enfermedad_actual_auto_homeopatia_pediatrica=False,
+    mostrar_sintomas_generales=False,
+    sintomas_generales_default="",
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -383,6 +406,7 @@ def render_consulta_externa(
         antecedentes_default = antecedentes_default or (ANTECEDENTES_DEFAULT if es_pediatrica else ANTECEDENTES_ADULTO_DEFAULT)
     plan_default = plan_default or PLAN_DEFAULT
     revision_default = revision_default or "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
+    sintomas_generales_default = sintomas_generales_default or ""
     if mostrar_pb is None:
         mostrar_pb = es_pediatrica
     history_path = _historia_path(history_filename)
@@ -398,11 +422,10 @@ def render_consulta_externa(
         f"{prefix}_informante": "",
         f"{prefix}_motivo": "",
         f"{prefix}_enfermedad_actual": "",
-        f"{prefix}_enfermedad_actual_auto_base": "",
-        f"{prefix}_enfermedad_actual_auto_tail": "",
         f"{prefix}_antecedentes": antecedentes_default,
         f"{prefix}_revision": revision_default,
         f"{prefix}_revision_auto_base": revision_default,
+        f"{prefix}_sintomas_generales": sintomas_generales_default,
         f"{prefix}_fc": "",
         f"{prefix}_fr": "",
         f"{prefix}_ta": "",
@@ -518,68 +541,28 @@ def render_consulta_externa(
     motivo = st.text_area("Motivo de consulta", key=f"{prefix}_motivo")
     edad_resumen_auto = f"{años} AÑOS" if años > 0 else (f"{meses} MESES" if fecha_nacimiento else "")
     etapa_vida_auto = _etapa_vida_consulta_externa(es_pediatrica, grupo, años if fecha_nacimiento else None)
-    if enfermedad_actual_auto_prefijo or enfermedad_actual_auto_homeopatia_pediatrica:
-        valor_actual = st.session_state.get(f"{prefix}_enfermedad_actual", "")
-        auto_previo = st.session_state.get(f"{prefix}_enfermedad_actual_auto_base", "")
-        tail_previo = st.session_state.get(f"{prefix}_enfermedad_actual_auto_tail", "")
-        if enfermedad_actual_auto_homeopatia_pediatrica:
-            encabezado_auto, _ = _construir_enfermedad_actual_homeopatia_pediatrica(
-                "",
-                sexo,
-                etapa_vida_auto,
-                edad_resumen_auto,
-            )
-        else:
-            encabezado_auto, _ = _construir_enfermedad_actual_prefijo(
-                "",
-                sexo,
-                etapa_vida_auto,
-                edad_resumen_auto,
-            )
-        texto_libre = valor_actual
-        editable_como_auto = False
-        if not valor_actual:
-            texto_libre = ""
-            editable_como_auto = True
-        elif valor_actual.startswith(encabezado_auto):
-            cuerpo = valor_actual[len(encabezado_auto):].strip()
-            if tail_previo and cuerpo.endswith(tail_previo):
-                texto_libre = cuerpo[:-len(tail_previo)].rstrip(" .,\n")
-            else:
-                texto_libre = cuerpo.rstrip()
-            editable_como_auto = True
-        elif valor_actual == auto_previo:
-            texto_libre = ""
-            editable_como_auto = True
-        else:
-            texto_libre = valor_actual.strip()
-            editable_como_auto = True
-        if editable_como_auto:
-            if enfermedad_actual_auto_homeopatia_pediatrica:
-                encabezado_final, cola_final = _construir_enfermedad_actual_homeopatia_pediatrica(
-                    texto_libre,
-                    sexo,
-                    etapa_vida_auto,
-                    edad_resumen_auto,
-                )
-            else:
-                encabezado_final, cola_final = _construir_enfermedad_actual_prefijo(
-                    texto_libre,
-                    sexo,
-                    etapa_vida_auto,
-                    edad_resumen_auto,
-                )
-            auto_nuevo = encabezado_final
-            if texto_libre:
-                auto_nuevo = f"{encabezado_final} {texto_libre.strip()}"
-                if cola_final:
-                    if not auto_nuevo.rstrip().endswith((".", ":", ";")):
-                        auto_nuevo += "."
-                    auto_nuevo += f" {cola_final}"
-            st.session_state[f"{prefix}_enfermedad_actual"] = auto_nuevo.strip()
-            st.session_state[f"{prefix}_enfermedad_actual_auto_base"] = auto_nuevo.strip()
-            st.session_state[f"{prefix}_enfermedad_actual_auto_tail"] = cola_final.strip()
-    enfermedad_actual = st.text_area("Enfermedad actual", key=f"{prefix}_enfermedad_actual")
+    enfermedad_actual_label = "Detalles enfermedad actual" if usar_modo_urgencias else "Enfermedad actual"
+    enfermedad_actual = st.text_area(enfermedad_actual_label, key=f"{prefix}_enfermedad_actual")
+    enfermedad_actual_historia = enfermedad_actual
+    if enfermedad_actual_auto_homeopatia_pediatrica:
+        encabezado_final, cola_final = _construir_enfermedad_actual_homeopatia_pediatrica(
+            enfermedad_actual,
+            sexo,
+            etapa_vida_auto,
+            edad_resumen_auto,
+        )
+        enfermedad_actual_historia = f"{encabezado_final} {str(enfermedad_actual or '').strip()}".strip()
+        if enfermedad_actual and cola_final:
+            if not enfermedad_actual_historia.rstrip().endswith((".", ":", ";")):
+                enfermedad_actual_historia += "."
+            enfermedad_actual_historia += f" {cola_final}"
+    elif enfermedad_actual_auto_prefijo:
+        enfermedad_actual_historia = _construir_enfermedad_actual_render(
+            enfermedad_actual,
+            sexo,
+            etapa_vida_auto,
+            edad_resumen_auto,
+        )
 
     if revision_auto_depende_enfermedad:
         revision_auto = _revision_homeopatia_pediatrica_desde_enfermedad_actual(enfermedad_actual)
@@ -594,6 +577,15 @@ def render_consulta_externa(
         if usar_modo_urgencias and st.session_state.get(f"{prefix}_revision") == revision_default:
             st.session_state[f"{prefix}_revision"] = REVISION_URGENCIAS_DEFAULT
         revision = st.text_area("Revisión", key=f"{prefix}_revision")
+        if mostrar_sintomas_generales:
+            st.subheader("Síntomas generales")
+            sintomas_generales = st.text_area(
+                "Síntomas generales",
+                key=f"{prefix}_sintomas_generales",
+                height=220,
+            )
+        else:
+            sintomas_generales = ""
 
     st.subheader("Antecedentes")
     antecedentes = st.text_area("Antecedentes", key=f"{prefix}_antecedentes", height=220)
@@ -611,6 +603,15 @@ def render_consulta_externa(
         if usar_modo_urgencias and st.session_state.get(f"{prefix}_revision") == revision_default:
             st.session_state[f"{prefix}_revision"] = REVISION_URGENCIAS_DEFAULT
         revision = st.text_area("Revisión", key=f"{prefix}_revision")
+        if mostrar_sintomas_generales:
+            st.subheader("Síntomas generales")
+            sintomas_generales = st.text_area(
+                "Síntomas generales",
+                key=f"{prefix}_sintomas_generales",
+                height=220,
+            )
+        else:
+            sintomas_generales = ""
 
     st.subheader("Signos vitales")
     col_sv_1, col_sv_2, col_sv_3 = st.columns(3)
@@ -720,7 +721,7 @@ def render_consulta_externa(
     grupo_txt = f" {grupo.upper()}" if grupo else ""
     edad_resumen = f"{años} AÑOS" if años > 0 else (f"{meses} MESES" if fecha_nacimiento else "")
 
-    enfermedad_auto = f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}".strip()
+    enfermedad_auto = enfermedad_actual_historia or f"PACIENTE {sexo_txt}{grupo_txt} DE {edad_resumen}, QUIEN CONSULTA POR {str(enfermedad_actual).upper()}".strip()
     resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
     destinatario_informacion = extraer_destinatario_informacion(informante)
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
@@ -766,6 +767,7 @@ def render_consulta_externa(
             "conducta_sugerida_local": conducta_sugerida_analisis,
             "conducta_final_texto": conducta_final_texto,
             "revision_por_sistemas": revision,
+            "sintomas_generales": sintomas_generales,
             "signos_vitales": {
                 "ta": ta,
                 "fc": fc,
@@ -925,6 +927,12 @@ def render_consulta_externa(
 REVISIÓN POR SISTEMAS:
 {revision}
 """
+        bloque_sintomas_generales = ""
+        if mostrar_sintomas_generales:
+            bloque_sintomas_generales = f"""
+SÍNTOMAS GENERALES:
+{sintomas_generales}
+"""
         bloque_antecedentes = f"""
 ANTECEDENTES:
 {antecedentes}
@@ -948,12 +956,17 @@ MOTIVO DE CONSULTA:
 {motivo}
 
 ENFERMEDAD ACTUAL:
-{enfermedad_actual}
+{enfermedad_actual_historia}
 """
         if revision_before_antecedentes:
-            historia += bloque_revision + bloque_antecedentes
+            historia += bloque_revision
+            if bloque_sintomas_generales:
+                historia += bloque_sintomas_generales
+            historia += bloque_antecedentes
         else:
             historia += bloque_antecedentes + bloque_revision
+            if bloque_sintomas_generales:
+                historia += bloque_sintomas_generales
         if mostrar_neurodesarrollo:
             historia += f"""
 
@@ -1001,12 +1014,13 @@ PLAN:
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
             ("MOTIVO DE CONSULTA", motivo),
-            ("ENFERMEDAD ACTUAL", enfermedad_actual),
+            ("ENFERMEDAD ACTUAL", enfermedad_actual_historia),
         ]
         if revision_before_antecedentes:
             secciones.extend(
                 [
                     ("REVISIÓN POR SISTEMAS", revision),
+                    *((("SÍNTOMAS GENERALES", sintomas_generales),) if mostrar_sintomas_generales else ()),
                     ("ANTECEDENTES", antecedentes),
                 ]
             )
@@ -1015,6 +1029,7 @@ PLAN:
                 [
                     ("ANTECEDENTES", antecedentes),
                     ("REVISIÓN POR SISTEMAS", revision),
+                    *((("SÍNTOMAS GENERALES", sintomas_generales),) if mostrar_sintomas_generales else ()),
                 ]
             )
         if mostrar_neurodesarrollo:

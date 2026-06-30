@@ -1,5 +1,6 @@
 from servicios.consulta_externa_base import (
     REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT,
+    SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT,
     render_consulta_externa,
 )
 
@@ -18,4 +19,6 @@ def render():
         revision_before_antecedentes=True,
         revision_auto_depende_enfermedad=True,
         enfermedad_actual_auto_homeopatia_pediatrica=False,
+        mostrar_sintomas_generales=True,
+        sintomas_generales_default=SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT,
     )
