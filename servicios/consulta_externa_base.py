@@ -497,6 +497,10 @@ def render_consulta_externa(
     sintomas_mentales_default="",
     modo_homeopatia_pediatrica_ia=False,
     criterios_repertorizacion_default="",
+    mostrar_conducta_final=True,
+    conducta_final_oculta="",
+    instrucciones_analisis_ia=None,
+    instrucciones_plan_ia=None,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -880,6 +884,16 @@ def render_consulta_externa(
             examen,
             paraclinicos_texto,
         )
+    elif not mostrar_conducta_final:
+        conducta_final_analisis = conducta_final_oculta or "EGRESO"
+        permitir_generacion_analisis = _hay_contexto_suficiente_homeopatia(
+            motivo,
+            enfermedad_actual,
+            antecedentes,
+            revision,
+            examen,
+            paraclinicos_texto,
+        )
     else:
         conducta_final_analisis = st.selectbox(
             "Conducta final",
@@ -1153,15 +1167,18 @@ def render_consulta_externa(
             contexto_analisis_ia,
             fingerprint_analisis_ia,
             instrucciones=(
-                "Eres un asistente clínico que redacta análisis médicos en español. "
-                "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-                "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-                "Integra antecedentes relevantes cuando aporten al caso clínico. "
-                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
-                "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-                "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-                "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
+                instrucciones_analisis_ia
+                or (
+                    "Eres un asistente clínico que redacta análisis médicos en español. "
+                    "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                    "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                    "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                    "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                    "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
+                    "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                    "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                    "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
+                )
             ),
         )
 
@@ -1270,6 +1287,7 @@ def render_consulta_externa(
             plan_base_local,
             contexto_plan_ia,
             fingerprint_plan_ia,
+            instrucciones=instrucciones_plan_ia,
         )
     if st.session_state.get(f"{prefix}_plan_base") != plan_sugerido:
         if st.session_state.get(f"{prefix}_plan", "") == st.session_state.get(f"{prefix}_plan_base", ""):
