@@ -883,21 +883,20 @@ def render_consulta_externa(
         if not modo_homeopatia_pediatrica_ia
         else ""
     )
-    repertorizacion = ""
+    repertorizacion = st.session_state.get(f"{prefix}_repertorizacion", "")
+    analisis_default = st.session_state.get(f"{prefix}_analisis_base", "")
+    plan_generado_homeo = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
+    generar_repertorizacion_ia = False
     if modo_homeopatia_pediatrica_ia:
         st.subheader("Repertorización")
-        criterios_repertorizacion = st.text_area(
-            "Criterios para repertorización IA",
-            key=f"{prefix}_criterios_repertorizacion",
-            height=140,
-        )
         generar_repertorizacion_ia = st.button(
             "Generar repertorización con IA",
             key=f"{prefix}_generar_repertorizacion_ia",
             use_container_width=True,
         )
-        repertorizacion_default = ""
-        if permitir_generacion_analisis:
+        if generar_repertorizacion_ia and not permitir_generacion_analisis:
+            st.warning("Completa un poco más la historia clínica antes de generar la repertorización.")
+        elif generar_repertorizacion_ia and permitir_generacion_analisis:
             contexto_repertorizacion_ia = {
                 "titulo": titulo,
                 "modalidad_consulta": modalidad_consulta or "",
@@ -923,7 +922,7 @@ def render_consulta_externa(
                 "examen_fisico": examen,
                 "paraclinicos": paraclinicos_texto,
                 "imagenes": imagenes_texto,
-                "criterios_repertorizacion": criterios_repertorizacion,
+                "criterios_repertorizacion": CRITERIOS_REPERTORIZACION_HOMEOPATIA_PEDIATRICA_DEFAULT,
             }
             fingerprint_repertorizacion_ia = hashlib.md5(
                 json.dumps(contexto_repertorizacion_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -938,77 +937,6 @@ def render_consulta_externa(
                 "En cada apartado resume de forma precisa los hallazgos más individualizantes del caso y, cuando sea útil, añade RUBROS / EJES REPERTORIALES SUGERIDOS. "
                 "Prioriza la semiología pediátrica y el material clínico realmente consignado en la historia."
             )
-            if generar_repertorizacion_ia:
-                repertorizacion_default = complementar_repertorizacion_con_ia(
-                    "",
-                    contexto_repertorizacion_ia,
-                    fingerprint_repertorizacion_ia,
-                    instrucciones=instrucciones_repertorizacion,
-                    forzar=True,
-                )
-            else:
-                repertorizacion_default = complementar_repertorizacion_con_ia(
-                    "",
-                    contexto_repertorizacion_ia,
-                    fingerprint_repertorizacion_ia,
-                    instrucciones=instrucciones_repertorizacion,
-                )
-            if not repertorizacion_default.strip():
-                repertorizacion_default = complementar_repertorizacion_con_ia(
-                    "",
-                    contexto_repertorizacion_ia,
-                    fingerprint_repertorizacion_ia,
-                    instrucciones=instrucciones_repertorizacion,
-                    forzar=generar_repertorizacion_ia,
-                )
-        if st.session_state.get(f"{prefix}_repertorizacion_base") != repertorizacion_default:
-            if st.session_state.get(f"{prefix}_repertorizacion", "") == st.session_state.get(f"{prefix}_repertorizacion_base", ""):
-                st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_default
-            elif f"{prefix}_repertorizacion_base" not in st.session_state:
-                st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_default
-            st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_default
-        repertorizacion = st.text_area(
-            "Repertorización homeopática",
-            key=f"{prefix}_repertorizacion",
-            height=240,
-        )
-
-    analisis_default = ""
-    if permitir_generacion_analisis:
-        if modo_homeopatia_pediatrica_ia:
-            contexto_analisis_ia = {
-                "titulo": titulo,
-                "modalidad_consulta": modalidad_consulta or "",
-                "motivo_consulta": motivo,
-                "enfermedad_actual": enfermedad_actual,
-                "antecedentes": antecedentes,
-                "revision_por_sistemas": revision,
-                "sintomas_generales": sintomas_generales,
-                "historia_biopatografica": biopatografica,
-                "sintomas_mentales": sintomas_mentales,
-                "parentesco_acompanante": destinatario_informacion,
-                "signos_vitales": {
-                    "ta": ta,
-                    "fc": fc,
-                    "fr": fr,
-                    "spo2": sat,
-                    "glucometria": glucometria,
-                    "temperatura": temp,
-                    "peso": peso,
-                    "talla": talla,
-                    "pc": pc,
-                    "pb": pb,
-                },
-                "examen_fisico": examen,
-                "paraclinicos": paraclinicos_texto,
-                "imagenes": imagenes_texto,
-                "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
-                "repertorizacion": repertorizacion,
-                "criterios_repertorizacion": st.session_state.get(f"{prefix}_criterios_repertorizacion", ""),
-            }
-            fingerprint_analisis_ia = hashlib.md5(
-                json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-            ).hexdigest()
             instrucciones_analisis_homeo = (
                 "Eres un médico homeópata pediátrico con experiencia en análisis clínico y repertorización. "
                 "Usa únicamente la información consignada por el profesional y la repertorización disponible; no inventes síntomas, remedios ni hallazgos fuera del caso. "
@@ -1018,82 +946,187 @@ def render_consulta_externa(
                 "En cada medicamento propuesto explica brevemente por qué podría corresponder al caso según la totalidad clínica y la repertorización. "
                 "Integra criterios pediátricos y evita afirmaciones absolutas no sustentadas por el caso."
             )
-            analisis_default = complementar_analisis_con_ia(
-                "",
-                contexto_analisis_ia,
-                fingerprint_analisis_ia,
-                instrucciones=instrucciones_analisis_homeo,
-                forzar=generar_repertorizacion_ia,
+            instrucciones_plan_homeo = (
+                "Eres un médico homeópata pediátrico que redacta el PLAN terapéutico de una historia clínica. "
+                "Usa únicamente la información del caso y del análisis homeopático entregado. "
+                "Responde en MAYÚSCULAS, una indicación por línea. "
+                "Incluye únicamente las opciones terapéuticas que realmente se desprendan del análisis: SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE Y ORGANOTERÁPICO SI FUERON CONSIDERADOS. "
+                "Para cada uno especifica POTENCIA O ESCALA SI ESTÁ JUSTIFICADA, DOSIS, INTERVALO Y TIEMPO DE USO. "
+                "Si algún medicamento no fue considerado en el análisis, no lo inventes ni lo incluyas. "
+                "Puedes añadir recomendaciones generales de seguimiento clínico y educación al cuidador si son coherentes con el caso."
             )
-            if not analisis_default.strip():
-                analisis_default = complementar_analisis_con_ia(
+            with st.spinner("Generando repertorización, análisis y plan con IA..."):
+                repertorizacion_generada = complementar_repertorizacion_con_ia(
+                    "",
+                    contexto_repertorizacion_ia,
+                    fingerprint_repertorizacion_ia,
+                    instrucciones=instrucciones_repertorizacion,
+                    forzar=True,
+                ).strip()
+                if repertorizacion_generada:
+                    st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
+                    st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
+                    repertorizacion = repertorizacion_generada
+
+                contexto_analisis_ia = {
+                    "titulo": titulo,
+                    "modalidad_consulta": modalidad_consulta or "",
+                    "motivo_consulta": motivo,
+                    "enfermedad_actual": enfermedad_actual,
+                    "antecedentes": antecedentes,
+                    "revision_por_sistemas": revision,
+                    "sintomas_generales": sintomas_generales,
+                    "historia_biopatografica": biopatografica,
+                    "sintomas_mentales": sintomas_mentales,
+                    "parentesco_acompanante": destinatario_informacion,
+                    "signos_vitales": {
+                        "ta": ta,
+                        "fc": fc,
+                        "fr": fr,
+                        "spo2": sat,
+                        "glucometria": glucometria,
+                        "temperatura": temp,
+                        "peso": peso,
+                        "talla": talla,
+                        "pc": pc,
+                        "pb": pb,
+                    },
+                    "examen_fisico": examen,
+                    "paraclinicos": paraclinicos_texto,
+                    "imagenes": imagenes_texto,
+                    "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
+                    "repertorizacion": repertorizacion,
+                }
+                fingerprint_analisis_ia = hashlib.md5(
+                    json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+                analisis_generado = complementar_analisis_con_ia(
                     "",
                     contexto_analisis_ia,
                     fingerprint_analisis_ia,
                     instrucciones=instrucciones_analisis_homeo,
-                    forzar=generar_repertorizacion_ia,
-                )
-        else:
-            analisis_default = generar_analisis_asistido_urgencias(
-                enfermedad_auto,
-                resumen_antecedentes_analisis,
-                resumen_examen_analisis,
-                resumen_signos_analisis,
-                resumen_paraclinicos_analisis,
-                conducta_final_texto,
-                destinatario_informacion,
-            )
-            contexto_analisis_ia = {
-                "titulo": titulo,
-                "modalidad_consulta": modalidad_consulta or "",
-                "motivo_consulta": motivo,
-                "enfermedad_actual": enfermedad_actual,
-                "antecedentes": antecedentes,
-                "parentesco_acompanante": destinatario_informacion,
-                "conducta_final_definida": conducta_final_analisis,
-                "conducta_sugerida_local": conducta_sugerida_analisis,
-                "conducta_final_texto": conducta_final_texto,
-                "revision_por_sistemas": revision,
-                "sintomas_generales": sintomas_generales,
-                "historia_biopatografica": biopatografica,
-                "sintomas_mentales": sintomas_mentales,
-                "signos_vitales": {
-                    "ta": ta,
-                    "fc": fc,
-                    "fr": fr,
-                    "spo2": sat,
-                    "glucometria": glucometria,
-                    "temperatura": temp,
-                    "peso": peso,
-                    "talla": talla,
-                    "pc": pc,
-                    "pb": pb,
-                    "imc": imc_adulto if not es_pediatrica else "",
-                },
-                "examen_fisico": examen,
-                "paraclinicos": paraclinicos_texto,
-                "imagenes": imagenes_texto,
-                "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
-            }
-            fingerprint_analisis_ia = hashlib.md5(
-                json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-            ).hexdigest()
-            analisis_default = complementar_analisis_con_ia(
-                analisis_default,
-                contexto_analisis_ia,
-                fingerprint_analisis_ia,
-                instrucciones=(
-                    "Eres un asistente clínico que redacta análisis médicos en español. "
-                    "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-                    "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-                    "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-                    "Integra antecedentes relevantes cuando aporten al caso clínico. "
-                    "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
-                    "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-                    "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-                    "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
-                ),
-            )
+                    forzar=True,
+                ).strip()
+                if analisis_generado:
+                    st.session_state[f"{prefix}_analisis"] = analisis_generado
+                    st.session_state[f"{prefix}_analisis_base"] = analisis_generado
+                    analisis_default = analisis_generado
+
+                contexto_plan_ia = {
+                    "titulo": titulo,
+                    "modalidad_consulta": modalidad_consulta or "",
+                    "diagnostico_cie10_principal": st.session_state.get(f"{prefix}_diagnosticos", ""),
+                    "analisis": analisis_default,
+                    "repertorizacion": repertorizacion,
+                    "enfermedad_actual": enfermedad_actual,
+                    "antecedentes": antecedentes,
+                    "revision_por_sistemas": revision,
+                    "sintomas_generales": sintomas_generales,
+                    "historia_biopatografica": biopatografica,
+                    "sintomas_mentales": sintomas_mentales,
+                    "signos_vitales": {
+                        "ta": ta,
+                        "fc": fc,
+                        "fr": fr,
+                        "spo2": sat,
+                        "glucometria": glucometria,
+                        "temperatura": temp,
+                        "peso": peso,
+                        "talla": talla,
+                        "pc": pc,
+                        "pb": pb,
+                    },
+                    "examen_fisico": examen,
+                    "paraclinicos": paraclinicos_texto,
+                    "imagenes": imagenes_texto,
+                }
+                fingerprint_plan_ia = hashlib.md5(
+                    json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+                plan_homeo_generado = complementar_plan_con_ia(
+                    "",
+                    contexto_plan_ia,
+                    fingerprint_plan_ia,
+                    instrucciones=instrucciones_plan_homeo,
+                    forzar=True,
+                ).strip()
+                if plan_homeo_generado:
+                    st.session_state[f"{prefix}_plan"] = plan_homeo_generado
+                    st.session_state[f"{prefix}_plan_base"] = plan_homeo_generado
+                    plan_generado_homeo = plan_homeo_generado
+
+            if repertorizacion or analisis_default or plan_generado_homeo:
+                st.success("Repertorización generada correctamente.")
+            else:
+                st.warning("No fue posible generar la repertorización con la información actual.")
+
+        repertorizacion = st.text_area(
+            "Repertorización homeopática",
+            key=f"{prefix}_repertorizacion",
+            height=240,
+        )
+
+    if permitir_generacion_analisis and not modo_homeopatia_pediatrica_ia:
+        analisis_default = generar_analisis_asistido_urgencias(
+            enfermedad_auto,
+            resumen_antecedentes_analisis,
+            resumen_examen_analisis,
+            resumen_signos_analisis,
+            resumen_paraclinicos_analisis,
+            conducta_final_texto,
+            destinatario_informacion,
+        )
+        contexto_analisis_ia = {
+            "titulo": titulo,
+            "modalidad_consulta": modalidad_consulta or "",
+            "motivo_consulta": motivo,
+            "enfermedad_actual": enfermedad_actual,
+            "antecedentes": antecedentes,
+            "parentesco_acompanante": destinatario_informacion,
+            "conducta_final_definida": conducta_final_analisis,
+            "conducta_sugerida_local": conducta_sugerida_analisis,
+            "conducta_final_texto": conducta_final_texto,
+            "revision_por_sistemas": revision,
+            "sintomas_generales": sintomas_generales,
+            "historia_biopatografica": biopatografica,
+            "sintomas_mentales": sintomas_mentales,
+            "signos_vitales": {
+                "ta": ta,
+                "fc": fc,
+                "fr": fr,
+                "spo2": sat,
+                "glucometria": glucometria,
+                "temperatura": temp,
+                "peso": peso,
+                "talla": talla,
+                "pc": pc,
+                "pb": pb,
+                "imc": imc_adulto if not es_pediatrica else "",
+            },
+            "examen_fisico": examen,
+            "paraclinicos": paraclinicos_texto,
+            "imagenes": imagenes_texto,
+            "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
+        }
+        fingerprint_analisis_ia = hashlib.md5(
+            json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        analisis_default = complementar_analisis_con_ia(
+            analisis_default,
+            contexto_analisis_ia,
+            fingerprint_analisis_ia,
+            instrucciones=(
+                "Eres un asistente clínico que redacta análisis médicos en español. "
+                "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
+                "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
+            ),
+        )
 
     st.subheader("Análisis")
     if permitir_generacion_analisis and st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
@@ -1164,64 +1197,7 @@ def render_consulta_externa(
         st.session_state[f"{prefix}_plan"] = PLAN_URGENCIAS_DEFAULT
     plan_base_local = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
     if modo_homeopatia_pediatrica_ia:
-        if permitir_generacion_analisis:
-            contexto_plan_ia = {
-                "titulo": titulo,
-                "modalidad_consulta": modalidad_consulta or "",
-                "diagnostico_cie10_principal": diagnosticos,
-                "analisis": analisis_default,
-                "repertorizacion": repertorizacion,
-                "enfermedad_actual": enfermedad_actual,
-                "antecedentes": antecedentes,
-                "revision_por_sistemas": revision,
-                "sintomas_generales": sintomas_generales,
-                "historia_biopatografica": biopatografica,
-                "sintomas_mentales": sintomas_mentales,
-                "signos_vitales": {
-                    "ta": ta,
-                    "fc": fc,
-                    "fr": fr,
-                    "spo2": sat,
-                    "glucometria": glucometria,
-                    "temperatura": temp,
-                    "peso": peso,
-                    "talla": talla,
-                    "pc": pc,
-                    "pb": pb,
-                },
-                "examen_fisico": examen,
-                "paraclinicos": paraclinicos_texto,
-                "imagenes": imagenes_texto,
-            }
-            fingerprint_plan_ia = hashlib.md5(
-                json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-            ).hexdigest()
-            instrucciones_plan_homeo = (
-                "Eres un médico homeópata pediátrico que redacta el PLAN terapéutico de una historia clínica. "
-                "Usa únicamente la información del caso y del análisis homeopático entregado. "
-                "Responde en MAYÚSCULAS, una indicación por línea. "
-                "Incluye únicamente las opciones terapéuticas que realmente se desprendan del análisis: SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE Y ORGANOTERÁPICO SI FUERON CONSIDERADOS. "
-                "Para cada uno especifica POTENCIA O ESCALA SI ESTÁ JUSTIFICADA, DOSIS, INTERVALO Y TIEMPO DE USO. "
-                "Si algún medicamento no fue considerado en el análisis, no lo inventes ni lo incluyas. "
-                "Puedes añadir recomendaciones generales de seguimiento clínico y educación al cuidador si son coherentes con el caso."
-            )
-            plan_sugerido = complementar_plan_con_ia(
-                "",
-                contexto_plan_ia,
-                fingerprint_plan_ia,
-                instrucciones=instrucciones_plan_homeo,
-                forzar=generar_repertorizacion_ia,
-            )
-            if not plan_sugerido.strip():
-                plan_sugerido = complementar_plan_con_ia(
-                    "",
-                    contexto_plan_ia,
-                    fingerprint_plan_ia,
-                    instrucciones=instrucciones_plan_homeo,
-                    forzar=generar_repertorizacion_ia,
-                )
-        else:
-            plan_sugerido = plan_base_local
+        plan_sugerido = plan_generado_homeo
     else:
         contexto_plan_ia = {
             "titulo": titulo,
