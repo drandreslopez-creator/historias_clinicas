@@ -20,6 +20,7 @@ from servicios.pediatria_urgencias import (
     coincide_grupos,
     complementar_analisis_con_ia,
     complementar_plan_con_ia,
+    complementar_repertorizacion_con_ia,
     construir_conducta_final_analisis,
     construir_observacion_diagnostica_base,
     construir_conducta_sugerida_analisis,
@@ -105,7 +106,7 @@ SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT = """- APETITO:
 - SUEÑOS:
   PESADILLAS, SUEÑOS REPETITIVOS, DESPIERTOS CON MIEDO, GRITOS NOCTURNOS, SOBRESALTOS, CONTENIDO DE LOS SUEÑOS SI LOGRAN DESCRIBIRLO.
 - SEXUALIDAD:
-  EN PEDIATRÍA EXPLORAR MÁS BIEN CURIOSIDAD CORPORAL, PUDOR, EXCESO O AUSENCIA DE EXPLORACIÓN, PREGUNTAS SOBRE EL CUERPO Y CONDUCTAS QUE LLAMEN LA ATENCIÓN SEGÚN LA EDAD.
+  CURIOSIDAD CORPORAL, PUDOR, EXCESO O AUSENCIA DE EXPLORACIÓN, PREGUNTAS SOBRE EL CUERPO Y CONDUCTAS QUE LLAMEN LA ATENCIÓN SEGÚN LA EDAD.
 - ESTADO DEL TIEMPO:
   CÓMO LE AFECTA EL CLIMA: LLUVIA, VIENTO, HUMEDAD, CALOR, FRÍO, CAMBIOS DE ESTACIÓN, DÍAS NUBLADOS O SOLEADOS."""
 
@@ -156,6 +157,8 @@ REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT = """-SÍNTOMAS CARDIOVASCULARES: NIEGA C
 -SÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 0/7, RINORREA: 0/7, CONGESTIÓN: 0/7, RONQUIDO EN LA NOCHE: 0/7, PRURITO NASAL 0/7, PRURITO OCULAR: 0/7.
 -SÍNTOMAS RESPIRATORIOS BAJOS: TOS DIURNA 0/7, TOS NOCTURNA: 0/7, TOS CON EL FRIO: 0/7, TOS RISA: 0/7, TOS LLANTO: 0/7, TOS MIENTRAS COME: 0/7 TOS EJERCICIO: 0/7."""
 
+CRITERIOS_REPERTORIZACION_HOMEOPATIA_PEDIATRICA_DEFAULT = """PRIORIZAR PRIMERO LOS SÍNTOMAS MENTALES CARACTERÍSTICOS, LUEGO LOS GENERALES, POSTERIORMENTE LAS MODALIDADES Y FINALMENTE LOS LOCALES RELEVANTES. INTEGRAR LOS ANTECEDENTES PERSONALES Y FAMILIARES, LA HISTORIA BIOPATOGRÁFICA, LA REVISIÓN POR SISTEMAS, LOS SÍNTOMAS GENERALES, LOS SÍNTOMAS MENTALES, EL EXAMEN FÍSICO Y LOS PARACLÍNICOS SI APORTAN. GENERAR 1) TOTALIDAD PATOLÓGICA CARACTERÍSTICA (TPC) Y 2) TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC), DESTACANDO LOS RUBROS PEDIÁTRICOS MÁS INDIVIDUALIZANTES."""
+
 
 def _float_or_none(valor):
     texto = str(valor or "").strip().replace(",", ".")
@@ -180,6 +183,11 @@ def _motivo_reporte(texto):
 def _texto_reporte_bloque(texto, default):
     texto_limpio = str(texto or "").strip()
     return texto_limpio if texto_limpio else default
+
+
+def _hay_contexto_suficiente_homeopatia(*bloques):
+    texto = " ".join(str(bloque or "").strip() for bloque in bloques)
+    return len(texto.strip()) >= 60
 
 
 def _normalizar_texto_simple(texto):
@@ -478,16 +486,22 @@ def render_consulta_externa(
     biopatografica_default="",
     mostrar_sintomas_mentales=False,
     sintomas_mentales_default="",
+    modo_homeopatia_pediatrica_ia=False,
+    criterios_repertorizacion_default="",
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
     else:
         antecedentes_default = antecedentes_default or (ANTECEDENTES_DEFAULT if es_pediatrica else ANTECEDENTES_ADULTO_DEFAULT)
-    plan_default = plan_default or PLAN_DEFAULT
+    if plan_default is None:
+        plan_default = "" if modo_homeopatia_pediatrica_ia else PLAN_DEFAULT
     revision_default = revision_default or "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
     sintomas_generales_default = sintomas_generales_default or ""
     biopatografica_default = biopatografica_default or ""
     sintomas_mentales_default = sintomas_mentales_default or ""
+    criterios_repertorizacion_default = (
+        criterios_repertorizacion_default or CRITERIOS_REPERTORIZACION_HOMEOPATIA_PEDIATRICA_DEFAULT
+    )
     if mostrar_pb is None:
         mostrar_pb = es_pediatrica
     history_path = _historia_path(history_filename)
@@ -509,6 +523,9 @@ def render_consulta_externa(
         f"{prefix}_sintomas_generales": sintomas_generales_default,
         f"{prefix}_biopatografica": biopatografica_default,
         f"{prefix}_sintomas_mentales": sintomas_mentales_default,
+        f"{prefix}_criterios_repertorizacion": criterios_repertorizacion_default,
+        f"{prefix}_repertorizacion": "",
+        f"{prefix}_repertorizacion_base": "",
         f"{prefix}_fc": "",
         f"{prefix}_fr": "",
         f"{prefix}_ta": "",
@@ -813,12 +830,26 @@ def render_consulta_externa(
 
     paraclinicos_texto = st.text_area("Laboratorios", key=f"{prefix}_paraclinicos_texto", height=160)
     imagenes_texto = st.text_area("Imágenes", key=f"{prefix}_imagenes_texto", height=120)
-    conducta_final_analisis = st.selectbox(
-        "Conducta final",
-        ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
-        key=f"{prefix}_conducta_final_analisis",
-    )
-    permitir_generacion_analisis = conducta_final_analisis != "PENDIENTE DEFINIR"
+    if modo_homeopatia_pediatrica_ia:
+        conducta_final_analisis = ""
+        permitir_generacion_analisis = _hay_contexto_suficiente_homeopatia(
+            motivo,
+            enfermedad_actual,
+            antecedentes,
+            revision,
+            sintomas_generales,
+            biopatografica,
+            sintomas_mentales,
+            examen,
+            paraclinicos_texto,
+        )
+    else:
+        conducta_final_analisis = st.selectbox(
+            "Conducta final",
+            ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
+            key=f"{prefix}_conducta_final_analisis",
+        )
+        permitir_generacion_analisis = conducta_final_analisis != "PENDIENTE DEFINIR"
 
     sexo_txt = (sexo or "").upper()
     grupo_txt = f" {grupo.upper()}" if grupo else ""
@@ -844,72 +875,192 @@ def render_consulta_externa(
         paraclinicos_texto,
         resumen_signos_analisis,
     )
-    conducta_final_texto = construir_conducta_final_analisis(
-        conducta_final_analisis,
-        conducta_sugerida_analisis,
+    conducta_final_texto = (
+        construir_conducta_final_analisis(
+            conducta_final_analisis,
+            conducta_sugerida_analisis,
+        )
+        if not modo_homeopatia_pediatrica_ia
+        else ""
     )
+    repertorizacion = ""
+    if modo_homeopatia_pediatrica_ia:
+        st.subheader("Repertorización")
+        criterios_repertorizacion = st.text_area(
+            "Criterios para repertorización IA",
+            key=f"{prefix}_criterios_repertorizacion",
+            height=140,
+        )
+        repertorizacion_default = ""
+        if permitir_generacion_analisis:
+            contexto_repertorizacion_ia = {
+                "titulo": titulo,
+                "modalidad_consulta": modalidad_consulta or "",
+                "motivo_consulta": motivo,
+                "enfermedad_actual": enfermedad_actual,
+                "antecedentes": antecedentes,
+                "revision_por_sistemas": revision,
+                "sintomas_generales": sintomas_generales,
+                "historia_biopatografica": biopatografica,
+                "sintomas_mentales": sintomas_mentales,
+                "signos_vitales": {
+                    "ta": ta,
+                    "fc": fc,
+                    "fr": fr,
+                    "spo2": sat,
+                    "glucometria": glucometria,
+                    "temperatura": temp,
+                    "peso": peso,
+                    "talla": talla,
+                    "pc": pc,
+                    "pb": pb,
+                },
+                "examen_fisico": examen,
+                "paraclinicos": paraclinicos_texto,
+                "imagenes": imagenes_texto,
+                "criterios_repertorizacion": criterios_repertorizacion,
+            }
+            fingerprint_repertorizacion_ia = hashlib.md5(
+                json.dumps(contexto_repertorizacion_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            repertorizacion_default = complementar_repertorizacion_con_ia(
+                "",
+                contexto_repertorizacion_ia,
+                fingerprint_repertorizacion_ia,
+                instrucciones=(
+                    "Eres un médico homeópata pediátrico experto en repertorización clínica. "
+                    "Usa únicamente la información entregada y no inventes síntomas ni antecedentes. "
+                    "Responde en MAYÚSCULAS. "
+                    "Debes organizar la respuesta exactamente en dos apartados: "
+                    "1) TOTALIDAD PATOLÓGICA CARACTERÍSTICA (TPC) y "
+                    "2) TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC). "
+                    "En cada apartado resume de forma precisa los hallazgos más individualizantes del caso y, cuando sea útil, añade RUBROS / EJES REPERTORIALES SUGERIDOS. "
+                    "Prioriza la semiología pediátrica y el material clínico realmente consignado en la historia."
+                ),
+            )
+        if st.session_state.get(f"{prefix}_repertorizacion_base") != repertorizacion_default:
+            if st.session_state.get(f"{prefix}_repertorizacion", "") == st.session_state.get(f"{prefix}_repertorizacion_base", ""):
+                st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_default
+            elif f"{prefix}_repertorizacion_base" not in st.session_state:
+                st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_default
+            st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_default
+        repertorizacion = st.text_area(
+            "Repertorización homeopática",
+            key=f"{prefix}_repertorizacion",
+            height=240,
+        )
+
     analisis_default = ""
     if permitir_generacion_analisis:
-        analisis_default = generar_analisis_asistido_urgencias(
-            enfermedad_auto,
-            resumen_antecedentes_analisis,
-            resumen_examen_analisis,
-            resumen_signos_analisis,
-            resumen_paraclinicos_analisis,
-            conducta_final_texto,
-            destinatario_informacion,
-        )
-        contexto_analisis_ia = {
-            "titulo": titulo,
-            "modalidad_consulta": modalidad_consulta or "",
-            "motivo_consulta": motivo,
-            "enfermedad_actual": enfermedad_actual,
-            "antecedentes": antecedentes,
-            "parentesco_acompanante": destinatario_informacion,
-            "conducta_final_definida": conducta_final_analisis,
-            "conducta_sugerida_local": conducta_sugerida_analisis,
-            "conducta_final_texto": conducta_final_texto,
-            "revision_por_sistemas": revision,
-            "sintomas_generales": sintomas_generales,
-            "historia_biopatografica": biopatografica,
-            "sintomas_mentales": sintomas_mentales,
-            "signos_vitales": {
-                "ta": ta,
-                "fc": fc,
-                "fr": fr,
-                "spo2": sat,
-                "glucometria": glucometria,
-                "temperatura": temp,
-                "peso": peso,
-                "talla": talla,
-                "pc": pc,
-                "pb": pb,
-                "imc": imc_adulto if not es_pediatrica else "",
-            },
-            "examen_fisico": examen,
-            "paraclinicos": paraclinicos_texto,
-            "imagenes": imagenes_texto,
-            "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
-        }
-        fingerprint_analisis_ia = hashlib.md5(
-            json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-        ).hexdigest()
-        analisis_default = complementar_analisis_con_ia(
-            analisis_default,
-            contexto_analisis_ia,
-            fingerprint_analisis_ia,
-            instrucciones=(
-                "Eres un asistente clínico que redacta análisis médicos en español. "
-                "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-                "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-                "Integra antecedentes relevantes cuando aporten al caso clínico. "
-                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
-                "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-                "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-                "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
-            ),
-        )
+        if modo_homeopatia_pediatrica_ia:
+            contexto_analisis_ia = {
+                "titulo": titulo,
+                "modalidad_consulta": modalidad_consulta or "",
+                "motivo_consulta": motivo,
+                "enfermedad_actual": enfermedad_actual,
+                "antecedentes": antecedentes,
+                "revision_por_sistemas": revision,
+                "sintomas_generales": sintomas_generales,
+                "historia_biopatografica": biopatografica,
+                "sintomas_mentales": sintomas_mentales,
+                "parentesco_acompanante": destinatario_informacion,
+                "signos_vitales": {
+                    "ta": ta,
+                    "fc": fc,
+                    "fr": fr,
+                    "spo2": sat,
+                    "glucometria": glucometria,
+                    "temperatura": temp,
+                    "peso": peso,
+                    "talla": talla,
+                    "pc": pc,
+                    "pb": pb,
+                },
+                "examen_fisico": examen,
+                "paraclinicos": paraclinicos_texto,
+                "imagenes": imagenes_texto,
+                "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
+                "repertorizacion": repertorizacion,
+                "criterios_repertorizacion": st.session_state.get(f"{prefix}_criterios_repertorizacion", ""),
+            }
+            fingerprint_analisis_ia = hashlib.md5(
+                json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            analisis_default = complementar_analisis_con_ia(
+                "",
+                contexto_analisis_ia,
+                fingerprint_analisis_ia,
+                instrucciones=(
+                    "Eres un médico homeópata pediátrico con experiencia en análisis clínico y repertorización. "
+                    "Usa únicamente la información consignada por el profesional y la repertorización disponible; no inventes síntomas, remedios ni hallazgos fuera del caso. "
+                    "Responde en MAYÚSCULAS. "
+                    "Organiza el texto en bloques breves con estos encabezados: RESUMEN CLÍNICO, ANÁLISIS HOMEOPÁTICO, SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE, ORGANOTERÁPICO. "
+                    "Si algún rubro no aplica, escribe NO CONSIDERADO. "
+                    "En cada medicamento propuesto explica brevemente por qué podría corresponder al caso según la totalidad clínica y la repertorización. "
+                    "Integra criterios pediátricos y evita afirmaciones absolutas no sustentadas por el caso."
+                ),
+            )
+        else:
+            analisis_default = generar_analisis_asistido_urgencias(
+                enfermedad_auto,
+                resumen_antecedentes_analisis,
+                resumen_examen_analisis,
+                resumen_signos_analisis,
+                resumen_paraclinicos_analisis,
+                conducta_final_texto,
+                destinatario_informacion,
+            )
+            contexto_analisis_ia = {
+                "titulo": titulo,
+                "modalidad_consulta": modalidad_consulta or "",
+                "motivo_consulta": motivo,
+                "enfermedad_actual": enfermedad_actual,
+                "antecedentes": antecedentes,
+                "parentesco_acompanante": destinatario_informacion,
+                "conducta_final_definida": conducta_final_analisis,
+                "conducta_sugerida_local": conducta_sugerida_analisis,
+                "conducta_final_texto": conducta_final_texto,
+                "revision_por_sistemas": revision,
+                "sintomas_generales": sintomas_generales,
+                "historia_biopatografica": biopatografica,
+                "sintomas_mentales": sintomas_mentales,
+                "signos_vitales": {
+                    "ta": ta,
+                    "fc": fc,
+                    "fr": fr,
+                    "spo2": sat,
+                    "glucometria": glucometria,
+                    "temperatura": temp,
+                    "peso": peso,
+                    "talla": talla,
+                    "pc": pc,
+                    "pb": pb,
+                    "imc": imc_adulto if not es_pediatrica else "",
+                },
+                "examen_fisico": examen,
+                "paraclinicos": paraclinicos_texto,
+                "imagenes": imagenes_texto,
+                "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
+            }
+            fingerprint_analisis_ia = hashlib.md5(
+                json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            analisis_default = complementar_analisis_con_ia(
+                analisis_default,
+                contexto_analisis_ia,
+                fingerprint_analisis_ia,
+                instrucciones=(
+                    "Eres un asistente clínico que redacta análisis médicos en español. "
+                    "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                    "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                    "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                    "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                    "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
+                    "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                    "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                    "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
+                ),
+            )
 
     st.subheader("Análisis")
     if permitir_generacion_analisis and st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
@@ -942,76 +1093,128 @@ def render_consulta_externa(
         diagnosticos = _construir_diagnostico_cie10(prefix)
     else:
         diagnosticos = st.text_area("Diagnósticos", key=f"{prefix}_diagnosticos", height=120)
-    obs_dx_default = construir_observacion_diagnostica_base(
-        diagnosticos,
-        analisis_default,
-        antecedentes,
-        "",
-    )
-    contexto_obs_dx_ia = {
-        "diagnostico_cie10_principal": diagnosticos,
-        "analisis": analisis_default,
-        "antecedentes": antecedentes,
-        "enfermedad_actual": enfermedad_actual,
-        "paraclinicos": paraclinicos_texto,
-        "diagnostico_nutricional": "",
-        "titulo": titulo,
-    }
-    fingerprint_obs_dx_ia = hashlib.md5(
-        json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    obs_dx_default = complementar_observacion_diagnostica_con_ia(
-        obs_dx_default,
-        contexto_obs_dx_ia,
-        fingerprint_obs_dx_ia,
-    )
-    if st.session_state.get(f"{prefix}_obs_dx_base") != obs_dx_default:
-        if st.session_state.get(f"{prefix}_obs_dx", "") == st.session_state.get(f"{prefix}_obs_dx_base", ""):
-            st.session_state[f"{prefix}_obs_dx"] = obs_dx_default
-        elif f"{prefix}_obs_dx_base" not in st.session_state:
-            st.session_state[f"{prefix}_obs_dx"] = obs_dx_default
-        st.session_state[f"{prefix}_obs_dx_base"] = obs_dx_default
-    observacion_dx = st.text_area("Observación diagnóstica", key=f"{prefix}_obs_dx", height=100)
+    observacion_dx = ""
+    if not modo_homeopatia_pediatrica_ia:
+        obs_dx_default = construir_observacion_diagnostica_base(
+            diagnosticos,
+            analisis_default,
+            antecedentes,
+            "",
+        )
+        contexto_obs_dx_ia = {
+            "diagnostico_cie10_principal": diagnosticos,
+            "analisis": analisis_default,
+            "antecedentes": antecedentes,
+            "enfermedad_actual": enfermedad_actual,
+            "paraclinicos": paraclinicos_texto,
+            "diagnostico_nutricional": "",
+            "titulo": titulo,
+        }
+        fingerprint_obs_dx_ia = hashlib.md5(
+            json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        obs_dx_default = complementar_observacion_diagnostica_con_ia(
+            obs_dx_default,
+            contexto_obs_dx_ia,
+            fingerprint_obs_dx_ia,
+        )
+        if st.session_state.get(f"{prefix}_obs_dx_base") != obs_dx_default:
+            if st.session_state.get(f"{prefix}_obs_dx", "") == st.session_state.get(f"{prefix}_obs_dx_base", ""):
+                st.session_state[f"{prefix}_obs_dx"] = obs_dx_default
+            elif f"{prefix}_obs_dx_base" not in st.session_state:
+                st.session_state[f"{prefix}_obs_dx"] = obs_dx_default
+            st.session_state[f"{prefix}_obs_dx_base"] = obs_dx_default
+        observacion_dx = st.text_area("Observación diagnóstica", key=f"{prefix}_obs_dx", height=100)
 
     st.subheader("Plan")
-    if usar_modo_urgencias and st.session_state.get(f"{prefix}_plan") == plan_default:
+    if usar_modo_urgencias and not modo_homeopatia_pediatrica_ia and st.session_state.get(f"{prefix}_plan") == plan_default:
         st.session_state[f"{prefix}_plan"] = PLAN_URGENCIAS_DEFAULT
     plan_base_local = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
-    contexto_plan_ia = {
-        "titulo": titulo,
-        "modalidad_consulta": modalidad_consulta or "",
-        "diagnostico_cie10_principal": diagnosticos,
-        "observacion_diagnostica": observacion_dx,
-        "conducta_final_definida": conducta_final_analisis,
-        "conducta_final_texto": conducta_final_texto,
-        "analisis": analisis_default,
-        "enfermedad_actual": enfermedad_actual,
-        "antecedentes": antecedentes,
-        "signos_vitales": {
-            "ta": ta,
-            "fc": fc,
-            "fr": fr,
-            "spo2": sat,
-            "glucometria": glucometria,
-            "temperatura": temp,
-            "peso": peso,
-            "talla": talla,
-            "pc": pc,
-            "pb": pb,
-            "imc": imc_adulto if not es_pediatrica else "",
-        },
-        "examen_fisico": examen,
-        "paraclinicos": paraclinicos_texto,
-        "imagenes": imagenes_texto,
-    }
-    fingerprint_plan_ia = hashlib.md5(
-        json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-    ).hexdigest()
-    plan_sugerido = complementar_plan_con_ia(
-        plan_base_local,
-        contexto_plan_ia,
-        fingerprint_plan_ia,
-    )
+    if modo_homeopatia_pediatrica_ia:
+        if permitir_generacion_analisis:
+            contexto_plan_ia = {
+                "titulo": titulo,
+                "modalidad_consulta": modalidad_consulta or "",
+                "diagnostico_cie10_principal": diagnosticos,
+                "analisis": analisis_default,
+                "repertorizacion": repertorizacion,
+                "enfermedad_actual": enfermedad_actual,
+                "antecedentes": antecedentes,
+                "revision_por_sistemas": revision,
+                "sintomas_generales": sintomas_generales,
+                "historia_biopatografica": biopatografica,
+                "sintomas_mentales": sintomas_mentales,
+                "signos_vitales": {
+                    "ta": ta,
+                    "fc": fc,
+                    "fr": fr,
+                    "spo2": sat,
+                    "glucometria": glucometria,
+                    "temperatura": temp,
+                    "peso": peso,
+                    "talla": talla,
+                    "pc": pc,
+                    "pb": pb,
+                },
+                "examen_fisico": examen,
+                "paraclinicos": paraclinicos_texto,
+                "imagenes": imagenes_texto,
+            }
+            fingerprint_plan_ia = hashlib.md5(
+                json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+            ).hexdigest()
+            plan_sugerido = complementar_plan_con_ia(
+                "",
+                contexto_plan_ia,
+                fingerprint_plan_ia,
+                instrucciones=(
+                    "Eres un médico homeópata pediátrico que redacta el PLAN terapéutico de una historia clínica. "
+                    "Usa únicamente la información del caso y del análisis homeopático entregado. "
+                    "Responde en MAYÚSCULAS, una indicación por línea. "
+                    "Incluye únicamente las opciones terapéuticas que realmente se desprendan del análisis: SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE Y ORGANOTERÁPICO SI FUERON CONSIDERADOS. "
+                    "Para cada uno especifica POTENCIA O ESCALA SI ESTÁ JUSTIFICADA, DOSIS, INTERVALO Y TIEMPO DE USO. "
+                    "Si algún medicamento no fue considerado en el análisis, no lo inventes ni lo incluyas. "
+                    "Puedes añadir recomendaciones generales de seguimiento clínico y educación al cuidador si son coherentes con el caso."
+                ),
+            )
+        else:
+            plan_sugerido = plan_base_local
+    else:
+        contexto_plan_ia = {
+            "titulo": titulo,
+            "modalidad_consulta": modalidad_consulta or "",
+            "diagnostico_cie10_principal": diagnosticos,
+            "observacion_diagnostica": observacion_dx,
+            "conducta_final_definida": conducta_final_analisis,
+            "conducta_final_texto": conducta_final_texto,
+            "analisis": analisis_default,
+            "enfermedad_actual": enfermedad_actual,
+            "antecedentes": antecedentes,
+            "signos_vitales": {
+                "ta": ta,
+                "fc": fc,
+                "fr": fr,
+                "spo2": sat,
+                "glucometria": glucometria,
+                "temperatura": temp,
+                "peso": peso,
+                "talla": talla,
+                "pc": pc,
+                "pb": pb,
+                "imc": imc_adulto if not es_pediatrica else "",
+            },
+            "examen_fisico": examen,
+            "paraclinicos": paraclinicos_texto,
+            "imagenes": imagenes_texto,
+        }
+        fingerprint_plan_ia = hashlib.md5(
+            json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+        ).hexdigest()
+        plan_sugerido = complementar_plan_con_ia(
+            plan_base_local,
+            contexto_plan_ia,
+            fingerprint_plan_ia,
+        )
     if st.session_state.get(f"{prefix}_plan_base") != plan_sugerido:
         if st.session_state.get(f"{prefix}_plan", "") == st.session_state.get(f"{prefix}_plan_base", ""):
             st.session_state[f"{prefix}_plan"] = plan_sugerido
@@ -1130,6 +1333,14 @@ PARACLÍNICOS:
 
 IMÁGENES:
 {imagenes_reporte}
+"""
+        if modo_homeopatia_pediatrica_ia:
+            historia += f"""
+
+REPERTORIZACIÓN:
+{repertorizacion}
+"""
+        historia += f"""
 
 ANÁLISIS:
 {analisis}
@@ -1137,12 +1348,15 @@ ANÁLISIS:
 DIAGNÓSTICOS:
 {diagnosticos}
 
-OBSERVACIÓN DIAGNÓSTICA:
-{observacion_dx}
-
 PLAN:
 {plan}
 """
+        if not modo_homeopatia_pediatrica_ia:
+            historia = historia.replace(
+                f"\nPLAN:\n{plan}\n",
+                f"\nOBSERVACIÓN DIAGNÓSTICA:\n{observacion_dx}\n\nPLAN:\n{plan}\n",
+                1,
+            )
 
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
@@ -1179,9 +1393,10 @@ PLAN:
                 ("EXAMEN FÍSICO", examen),
                 ("PARACLÍNICOS", paraclinicos_reporte),
                 ("IMÁGENES", imagenes_reporte),
+                *((("REPERTORIZACIÓN", repertorizacion),) if modo_homeopatia_pediatrica_ia else ()),
                 ("ANÁLISIS", analisis),
                 ("DIAGNÓSTICOS", diagnosticos),
-                ("OBSERVACIÓN DIAGNÓSTICA", observacion_dx),
+                *((("OBSERVACIÓN DIAGNÓSTICA", observacion_dx),) if not modo_homeopatia_pediatrica_ia else ()),
                 ("PLAN", plan),
             ]
         )

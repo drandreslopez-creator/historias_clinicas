@@ -3245,6 +3245,60 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
     return base_plan
 
 
+def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instrucciones=None):
+    if not ia_analisis_configurada():
+        return base_texto
+    if not debe_refinar_con_ia("repertorizacion", fingerprint):
+        return base_texto
+
+    cache_key = "repertorizacion_ia_cache"
+    cache = st.session_state.get(cache_key, {})
+    if cache.get("fingerprint") == fingerprint and cache.get("texto"):
+        return cache["texto"]
+
+    api_key = obtener_secret_app("openai_api_key")
+    model = obtener_secret_app("openai_model", "gpt-4o-mini")
+
+    instrucciones = instrucciones or (
+        "Eres un asistente clínico con enfoque en homeopatía que organiza una repertorización en español. "
+        "Usa únicamente la información entregada. No inventes síntomas, antecedentes ni hallazgos. "
+        "Responde en MAYÚSCULAS y estructura el resultado de forma clara y útil para la práctica clínica."
+    )
+
+    prompt = {
+        "borrador_base": base_texto,
+        "contexto_clinico": contexto,
+    }
+
+    try:
+        response = requests.post(
+            "https://api.openai.com/v1/responses",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "input": json.dumps(prompt, ensure_ascii=False),
+                "instructions": instrucciones,
+                "temperature": 0.2,
+                "max_output_tokens": 700,
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        texto = extraer_texto_respuesta_openai(response.json())
+        if texto:
+            texto = texto.strip()
+            cache = {"fingerprint": fingerprint, "texto": texto}
+            st.session_state[cache_key] = cache
+            return texto
+    except Exception:
+        return base_texto
+
+    return base_texto
+
+
 def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instrucciones=None):
     if not ia_analisis_configurada():
         return base_texto
