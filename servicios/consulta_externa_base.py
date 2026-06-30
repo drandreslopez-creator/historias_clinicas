@@ -501,6 +501,7 @@ def render_consulta_externa(
     conducta_final_oculta="",
     instrucciones_analisis_ia=None,
     instrucciones_plan_ia=None,
+    usar_plan_urgencias_primera_vez=True,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -1247,7 +1248,12 @@ def render_consulta_externa(
         observacion_dx = st.text_area("Observación diagnóstica", key=f"{prefix}_obs_dx", height=100)
 
     st.subheader("Plan")
-    if usar_modo_urgencias and not modo_homeopatia_pediatrica_ia and st.session_state.get(f"{prefix}_plan") == plan_default:
+    if (
+        usar_modo_urgencias
+        and usar_plan_urgencias_primera_vez
+        and not modo_homeopatia_pediatrica_ia
+        and st.session_state.get(f"{prefix}_plan") == plan_default
+    ):
         st.session_state[f"{prefix}_plan"] = PLAN_URGENCIAS_DEFAULT
     plan_base_local = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
     if modo_homeopatia_pediatrica_ia:

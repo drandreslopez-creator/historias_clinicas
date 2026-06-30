@@ -12,6 +12,7 @@ def render():
         mostrar_modalidad_consulta=True,
         mostrar_pb=True,
         modo_pediatrico_urgencias_primera_vez=True,
+        usar_plan_urgencias_primera_vez=False,
         revision_auto_depende_enfermedad=True,
         mostrar_conducta_final=False,
         conducta_final_oculta="EGRESO",
