@@ -3189,10 +3189,10 @@ def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fing
     return base_observacion
 
 
-def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=None):
+def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=None, forzar=False):
     if not ia_analisis_configurada():
         return base_plan
-    if not debe_refinar_con_ia("plan", fingerprint):
+    if not forzar and not debe_refinar_con_ia("plan", fingerprint):
         return base_plan
 
     cache_key = "plan_ia_cache"
@@ -3245,10 +3245,10 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
     return base_plan
 
 
-def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instrucciones=None):
+def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instrucciones=None, forzar=False):
     if not ia_analisis_configurada():
         return base_texto
-    if not debe_refinar_con_ia("repertorizacion", fingerprint):
+    if not forzar and not debe_refinar_con_ia("repertorizacion", fingerprint):
         return base_texto
 
     cache_key = "repertorizacion_ia_cache"
@@ -3355,10 +3355,10 @@ def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instruc
     return base_texto
 
 
-def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucciones=None):
+def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucciones=None, forzar=False):
     if not ia_analisis_configurada():
         return base_analisis
-    if not debe_refinar_con_ia("analisis", fingerprint):
+    if not forzar and not debe_refinar_con_ia("analisis", fingerprint):
         return base_analisis
 
     cache_key = "analisis_ia_cache"
