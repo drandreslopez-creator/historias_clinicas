@@ -89,6 +89,19 @@ SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT = """- APETITO:
 - SEXUALIDAD:
 - ESTADO DEL TIEMPO:"""
 
+BIOPATOGRAFICA_HOMEOPATIA_PEDIATRICA_DEFAULT = """- EMBARAZO Y GESTACIÓN:
+- PARTO / NACIMIENTO:
+- LACTANCIA Y ALIMENTACIÓN INICIAL:
+- DESARROLLO PSICOMOTOR Y DEL LENGUAJE:
+- TEMPERAMENTO DESDE PEQUEÑO:
+- ENFERMEDADES IMPORTANTES PREVIAS:
+- USO FRECUENTE DE MEDICAMENTOS / ANTIBIÓTICOS / CORTICOIDES:
+- VACUNACIÓN Y RESPUESTA A VACUNAS:
+- TRAUMAS FÍSICOS O EMOCIONALES RELEVANTES:
+- CAMBIOS IMPORTANTES EN EL HOGAR / ESCOLARIDAD / CUIDADORES:
+- FORMA DE ENFERMAR DESDE LA INFANCIA:
+- ANTECEDENTES FAMILIARES RELEVANTES:"""
+
 REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT = """-SÍNTOMAS CARDIOVASCULARES: NIEGA CANSANCIO, NO FATIGA AL COMER, NO CIANOSIS.
 -DIGESTIVO: SIN NAUSEA NI EMESIS, DEPOSICIONES 3 VEZ CADA DÍA, BRISTOL 3.
 -ALIMENTARIOS: ADECUADA PARA LA EDAD.
@@ -399,6 +412,8 @@ def render_consulta_externa(
     enfermedad_actual_auto_homeopatia_pediatrica=False,
     mostrar_sintomas_generales=False,
     sintomas_generales_default="",
+    mostrar_biopatografica=False,
+    biopatografica_default="",
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -407,6 +422,7 @@ def render_consulta_externa(
     plan_default = plan_default or PLAN_DEFAULT
     revision_default = revision_default or "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
     sintomas_generales_default = sintomas_generales_default or ""
+    biopatografica_default = biopatografica_default or ""
     if mostrar_pb is None:
         mostrar_pb = es_pediatrica
     history_path = _historia_path(history_filename)
@@ -426,6 +442,7 @@ def render_consulta_externa(
         f"{prefix}_revision": revision_default,
         f"{prefix}_revision_auto_base": revision_default,
         f"{prefix}_sintomas_generales": sintomas_generales_default,
+        f"{prefix}_biopatografica": biopatografica_default,
         f"{prefix}_fc": "",
         f"{prefix}_fr": "",
         f"{prefix}_ta": "",
@@ -589,6 +606,16 @@ def render_consulta_externa(
 
     st.subheader("Antecedentes")
     antecedentes = st.text_area("Antecedentes", key=f"{prefix}_antecedentes", height=220)
+
+    if mostrar_biopatografica:
+        st.subheader("Historia biopatográfica")
+        biopatografica = st.text_area(
+            "Historia biopatográfica",
+            key=f"{prefix}_biopatografica",
+            height=240,
+        )
+    else:
+        biopatografica = ""
 
     neuro = ""
     if mostrar_neurodesarrollo and fecha_nacimiento:
@@ -768,6 +795,7 @@ def render_consulta_externa(
             "conducta_final_texto": conducta_final_texto,
             "revision_por_sistemas": revision,
             "sintomas_generales": sintomas_generales,
+            "historia_biopatografica": biopatografica,
             "signos_vitales": {
                 "ta": ta,
                 "fc": fc,
@@ -937,6 +965,12 @@ SÍNTOMAS GENERALES:
 ANTECEDENTES:
 {antecedentes}
 """
+        bloque_biopatografica = ""
+        if mostrar_biopatografica:
+            bloque_biopatografica = f"""
+HISTORIA BIOPATOGRÁFICA:
+{biopatografica}
+"""
         historia = f"""
 {titulo.upper()}
 
@@ -963,8 +997,13 @@ ENFERMEDAD ACTUAL:
             if bloque_sintomas_generales:
                 historia += bloque_sintomas_generales
             historia += bloque_antecedentes
+            if bloque_biopatografica:
+                historia += bloque_biopatografica
         else:
-            historia += bloque_antecedentes + bloque_revision
+            historia += bloque_antecedentes
+            if bloque_biopatografica:
+                historia += bloque_biopatografica
+            historia += bloque_revision
             if bloque_sintomas_generales:
                 historia += bloque_sintomas_generales
         if mostrar_neurodesarrollo:
@@ -1022,12 +1061,14 @@ PLAN:
                     ("REVISIÓN POR SISTEMAS", revision),
                     *((("SÍNTOMAS GENERALES", sintomas_generales),) if mostrar_sintomas_generales else ()),
                     ("ANTECEDENTES", antecedentes),
+                    *((("HISTORIA BIOPATOGRÁFICA", biopatografica),) if mostrar_biopatografica else ()),
                 ]
             )
         else:
             secciones.extend(
                 [
                     ("ANTECEDENTES", antecedentes),
+                    *((("HISTORIA BIOPATOGRÁFICA", biopatografica),) if mostrar_biopatografica else ()),
                     ("REVISIÓN POR SISTEMAS", revision),
                     *((("SÍNTOMAS GENERALES", sintomas_generales),) if mostrar_sintomas_generales else ()),
                 ]
