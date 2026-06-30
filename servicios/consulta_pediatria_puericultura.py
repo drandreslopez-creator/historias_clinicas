@@ -7,6 +7,7 @@ def render():
         titulo="CONSULTA EXTERNA - PEDIATRÍA Y PUERICULTURA",
         history_filename="historias_pediatria_puericultura.jsonl",
         es_pediatrica=True,
+        plan_default="",
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=True,
         mostrar_pb=True,
@@ -24,9 +25,11 @@ def render():
         ),
         instrucciones_plan_ia=(
             "Eres un asistente clínico experto en consulta externa pediátrica. "
-            "Usa únicamente la información entregada. No inventes diagnósticos ni medicamentos no sustentados por el caso. "
+            "Usa la historia clínica completa, los diagnósticos consignados, el peso, la edad, los signos vitales, el examen físico y los paraclínicos si existen para proponer el PLAN-TRATAMIENTO. "
             "Redacta el PLAN en MAYÚSCULAS, una indicación por línea, orientado a MANEJO AMBULATORIO. "
-            "Puedes sugerir manejo sintomático, recomendaciones generales, educación a cuidadores, signos de alarma y seguimiento por consulta externa según la historia clínica y la patología. "
-            "Si no hay datos para un medicamento específico, limita el plan a recomendaciones y seguimiento."
+            "Debes sugerir de forma integral tratamiento, recomendaciones, educación a cuidadores, signos de alarma y seguimiento por consulta externa según la patología o los hallazgos del caso. "
+            "Si el diagnóstico e historia lo permiten, puedes proponer medicamentos y calcular dosis pediátricas según peso o edad; si faltan datos para una dosis segura, no la inventes y deja una indicación general. "
+            "No inventes diagnósticos ni hallazgos no presentes en la historia. "
+            "El plan debe sentirse completo y útil para consulta externa pediátrica."
         ),
     )
