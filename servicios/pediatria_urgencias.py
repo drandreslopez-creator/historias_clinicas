@@ -52,6 +52,16 @@ WORD_EXPORT_DIR_DEFAULT = BASE_DIR / "data" / "word_exports"
 DRAFT_URGENCIAS_PATH = BASE_DIR / "data" / "borrador_pediatria_urgencias.json"
 BOGOTA_TZ = ZoneInfo("America/Bogota")
 
+
+def texto_reporte_valor(valor, default="NO EVALUADO"):
+    texto = str(valor or "").strip()
+    return texto if texto else default
+
+
+def motivo_reporte(texto):
+    texto_limpio = str(texto or "").strip()
+    return f'"{texto_limpio}"' if texto_limpio else '"NO REGISTRADO"'
+
 ANTECEDENTES_DEFAULT = """NEONATALES: PRODUCTO DE # GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO, ECOGRAFÍAS ANTENATALES NORMALES. NACE VÍA VAGINAL/ CESAREA A LAS XX SEMANAS, PESO XXXX GR - TALLA XX CM. NO REQUIRIÓ OXIGENO SUPLEMENTARIO, NO REQUIRIÓ HOSPITALIZACIÓN, EGRESO CONJUNTO.
 INMUNOLÓGICOS: VACUNAS AL DÍA SEGÚN PAI (NO DOCUMENTADO); NO HA PRESENTADO REACCIONES ATRIBUIDAS A VACUNAS.
 ALIMENTACIÓN: ACORDE A EDAD.
