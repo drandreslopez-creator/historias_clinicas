@@ -1,5 +1,6 @@
 import os
 import hashlib
+import time
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -3154,6 +3155,66 @@ def extraer_texto_respuesta_openai(data):
     return "\n".join(p for p in partes if p).strip()
 
 
+def extraer_json_desde_texto(texto):
+    texto = str(texto or "").strip()
+    if not texto:
+        return {}
+
+    candidatos = [texto]
+    if "```json" in texto.lower():
+        partes = re.split(r"```json|```", texto, flags=re.IGNORECASE)
+        candidatos.extend(parte.strip() for parte in partes if parte.strip())
+    elif "```" in texto:
+        partes = texto.split("```")
+        candidatos.extend(parte.strip() for parte in partes if parte.strip())
+
+    inicio = texto.find("{")
+    fin = texto.rfind("}")
+    if inicio != -1 and fin != -1 and fin > inicio:
+        candidatos.append(texto[inicio:fin + 1].strip())
+
+    for candidato in candidatos:
+        try:
+            data = json.loads(candidato)
+            if isinstance(data, dict):
+                return data
+        except Exception:
+            continue
+    return {}
+
+
+def solicitar_respuesta_openai(model, payload, timeout=25, max_reintentos=2):
+    api_key = obtener_secret_app("openai_api_key")
+    ultimo_error = None
+
+    for intento in range(max_reintentos + 1):
+        try:
+            response = requests.post(
+                "https://api.openai.com/v1/responses",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
+            if response.status_code == 429 and intento < max_reintentos:
+                time.sleep(2 + (intento * 3))
+                continue
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            ultimo_error = e
+            if getattr(getattr(e, "response", None), "status_code", None) == 429 and intento < max_reintentos:
+                time.sleep(2 + (intento * 3))
+                continue
+            break
+
+    if ultimo_error:
+        raise ultimo_error
+    raise RuntimeError("No fue posible obtener respuesta de OpenAI.")
+
+
 def extraer_descripcion_principal_diagnostico(diagnostico):
     texto = str(diagnostico or "").strip()
     if not texto:
@@ -3291,13 +3352,9 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
     }
 
     try:
-        response = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
+        data = solicitar_respuesta_openai(
+            model,
+            {
                 "model": model,
                 "input": json.dumps(prompt, ensure_ascii=False),
                 "instructions": instrucciones,
@@ -3306,8 +3363,7 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
             },
             timeout=25,
         )
-        response.raise_for_status()
-        texto = extraer_texto_respuesta_openai(response.json())
+        texto = extraer_texto_respuesta_openai(data)
         if texto:
             texto = texto.strip()
             cache = {"fingerprint": fingerprint, "texto": texto}
@@ -3349,13 +3405,9 @@ def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instr
     }
 
     try:
-        response = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
+        data = solicitar_respuesta_openai(
+            model,
+            {
                 "model": model,
                 "input": json.dumps(prompt, ensure_ascii=False),
                 "instructions": instrucciones,
@@ -3364,8 +3416,7 @@ def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instr
             },
             timeout=60,
         )
-        response.raise_for_status()
-        texto = extraer_texto_respuesta_openai(response.json())
+        texto = extraer_texto_respuesta_openai(data)
         if texto:
             texto = texto.strip()
             cache = {"fingerprint": fingerprint, "texto": texto}
@@ -3378,6 +3429,92 @@ def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instr
         return base_texto
 
     return base_texto
+
+
+def generar_paquete_homeopatia_con_ia(contexto, fingerprint, instrucciones_repertorizacion="", instrucciones_analisis="", instrucciones_plan=""):
+    if not ia_analisis_configurada():
+        registrar_error_ia("repertorizacion", "No se encontró `openai_api_key` configurada para generar la repertorización con IA.")
+        registrar_error_ia("analisis", "No se encontró `openai_api_key` configurada para generar el análisis con IA.")
+        registrar_error_ia("plan", "No se encontró `openai_api_key` configurada para generar el plan con IA.")
+        return {}
+
+    cache_key = "paquete_homeopatia_ia_cache"
+    cache = st.session_state.get(cache_key, {})
+    if cache.get("fingerprint") == fingerprint and isinstance(cache.get("data"), dict):
+        limpiar_error_ia("repertorizacion")
+        limpiar_error_ia("analisis")
+        limpiar_error_ia("plan")
+        return cache["data"]
+
+    model = obtener_secret_app("openai_model", "gpt-4o-mini")
+    instrucciones = (
+        "Eres un médico homeópata pediátrico experto en repertorización, análisis clínico y plan terapéutico. "
+        "Usa únicamente la información clínica suministrada. No inventes síntomas, diagnósticos, medicamentos ni paraclínicos. "
+        "Responde exclusivamente en formato JSON válido, sin markdown, sin comillas triples y sin texto adicional. "
+        "El JSON debe tener exactamente estas llaves: repertorizacion, analisis, plan. "
+        "Cada valor debe ser un string en MAYÚSCULAS. "
+        "Para REPERTORIZACION integra y obedece estas instrucciones: " + str(instrucciones_repertorizacion or "") + " "
+        "Para ANALISIS integra y obedece estas instrucciones: " + str(instrucciones_analisis or "") + " "
+        "Para PLAN integra y obedece estas instrucciones: " + str(instrucciones_plan or "")
+    )
+
+    prompt = {
+        "contexto_clinico": contexto,
+        "formato_objetivo": {
+            "repertorizacion": "TEXTO EN MAYÚSCULAS CON 1) TOTALIDAD PATOLÓGICA CARACTERÍSTICA (TPC) Y 2) TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC).",
+            "analisis": "TEXTO EN MAYÚSCULAS CON RESUMEN CLÍNICO, ANÁLISIS HOMEOPÁTICO, SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE, ORGANOTERÁPICO.",
+            "plan": "TEXTO EN MAYÚSCULAS, UNA INDICACIÓN POR LÍNEA, COHERENTE CON EL ANÁLISIS."
+        },
+    }
+
+    try:
+        data = solicitar_respuesta_openai(
+            model,
+            {
+                "model": model,
+                "input": json.dumps(prompt, ensure_ascii=False),
+                "instructions": instrucciones,
+                "temperature": 0.2,
+                "max_output_tokens": 1800,
+            },
+            timeout=90,
+        )
+        texto = extraer_texto_respuesta_openai(data)
+        paquete = extraer_json_desde_texto(texto)
+        repert = str(paquete.get("repertorizacion") or "").strip()
+        analisis = str(paquete.get("analisis") or "").strip()
+        plan = str(paquete.get("plan") or "").strip()
+
+        if repert or analisis or plan:
+            resultado = {
+                "repertorizacion": repert,
+                "analisis": analisis,
+                "plan": plan,
+            }
+            st.session_state[cache_key] = {"fingerprint": fingerprint, "data": resultado}
+            if repert:
+                limpiar_error_ia("repertorizacion")
+            else:
+                registrar_error_ia("repertorizacion", "La IA no devolvió la sección de repertorización.")
+            if analisis:
+                limpiar_error_ia("analisis")
+            else:
+                registrar_error_ia("analisis", "La IA no devolvió la sección de análisis.")
+            if plan:
+                limpiar_error_ia("plan")
+            else:
+                registrar_error_ia("plan", "La IA no devolvió la sección de plan.")
+            return resultado
+
+        registrar_error_ia("repertorizacion", "La IA no devolvió un JSON válido con repertorización.")
+        registrar_error_ia("analisis", "La IA no devolvió un JSON válido con análisis.")
+        registrar_error_ia("plan", "La IA no devolvió un JSON válido con plan.")
+        return {}
+    except Exception as e:
+        registrar_error_ia("repertorizacion", e)
+        registrar_error_ia("analisis", e)
+        registrar_error_ia("plan", e)
+        return {}
 
 
 def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instrucciones=None):
@@ -3408,13 +3545,9 @@ def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instruc
     }
 
     try:
-        response = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
+        data = solicitar_respuesta_openai(
+            model,
+            {
                 "model": model,
                 "input": json.dumps(prompt, ensure_ascii=False),
                 "instructions": instrucciones,
@@ -3423,8 +3556,7 @@ def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instruc
             },
             timeout=25,
         )
-        response.raise_for_status()
-        texto = extraer_texto_respuesta_openai(response.json())
+        texto = extraer_texto_respuesta_openai(data)
         if texto:
             texto = texto.strip()
             cache = {"fingerprint": fingerprint, "texto": texto}
@@ -3469,13 +3601,9 @@ def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucci
     }
 
     try:
-        response = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
+        data = solicitar_respuesta_openai(
+            model,
+            {
                 "model": model,
                 "input": json.dumps(prompt, ensure_ascii=False),
                 "instructions": instrucciones,
@@ -3484,8 +3612,7 @@ def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucci
             },
             timeout=25,
         )
-        response.raise_for_status()
-        texto = extraer_texto_respuesta_openai(response.json())
+        texto = extraer_texto_respuesta_openai(data)
         if texto:
             cache = {"fingerprint": fingerprint, "texto": texto.strip()}
             st.session_state[cache_key] = cache

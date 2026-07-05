@@ -46,6 +46,7 @@ from servicios.pediatria_urgencias import (
     complementar_observacion_diagnostica_con_ia,
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
+    generar_paquete_homeopatia_con_ia,
     guardar_docx_exportado,
     obtener_error_ia,
     puntuar_diagnostico,
@@ -1202,25 +1203,7 @@ def render_consulta_externa(
                 "Puedes añadir recomendaciones generales de seguimiento clínico y educación al cuidador si son coherentes con el caso."
             )
             with st.spinner("Generando repertorización, análisis y plan con IA..."):
-                repertorizacion_generada = complementar_repertorizacion_con_ia(
-                    "",
-                    contexto_repertorizacion_ia,
-                    fingerprint_repertorizacion_ia,
-                    instrucciones=instrucciones_repertorizacion,
-                    forzar=True,
-                ).strip()
-                if repertorizacion_generada:
-                    st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
-                    st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
-                    repertorizacion = repertorizacion_generada
-                else:
-                    repertorizacion_generada = _generar_repertorizacion_local(contexto_repertorizacion_ia)
-                    if repertorizacion_generada:
-                        st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
-                        st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
-                        repertorizacion = repertorizacion_generada
-
-                contexto_analisis_ia = {
+                contexto_homeo_ia = {
                     "titulo": titulo,
                     "modalidad_consulta": modalidad_consulta or "",
                     "motivo_consulta": motivo,
@@ -1247,61 +1230,34 @@ def render_consulta_externa(
                     "paraclinicos": paraclinicos_texto,
                     "imagenes": imagenes_texto,
                     "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
-                    "repertorizacion": repertorizacion,
+                    "criterios_repertorizacion": CRITERIOS_REPERTORIZACION_HOMEOPATIA_PEDIATRICA_DEFAULT,
                 }
-                fingerprint_analisis_ia = hashlib.md5(
-                    json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-                ).hexdigest()
-                analisis_generado = complementar_analisis_con_ia(
-                    "",
-                    contexto_analisis_ia,
-                    fingerprint_analisis_ia,
-                    instrucciones=instrucciones_analisis_homeo,
-                    forzar=True,
-                ).strip()
+                paquete_homeo_ia = generar_paquete_homeopatia_con_ia(
+                    contexto_homeo_ia,
+                    fingerprint_repertorizacion_ia,
+                    instrucciones_repertorizacion=instrucciones_repertorizacion,
+                    instrucciones_analisis=instrucciones_analisis_homeo,
+                    instrucciones_plan=instrucciones_plan_homeo,
+                )
+                repertorizacion_generada = str(paquete_homeo_ia.get("repertorizacion") or "").strip()
+                if repertorizacion_generada:
+                    st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
+                    st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
+                    repertorizacion = repertorizacion_generada
+                else:
+                    repertorizacion_generada = _generar_repertorizacion_local(contexto_repertorizacion_ia)
+                    if repertorizacion_generada:
+                        st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
+                        st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
+                        repertorizacion = repertorizacion_generada
+
+                analisis_generado = str(paquete_homeo_ia.get("analisis") or "").strip()
                 if analisis_generado:
                     st.session_state[f"{prefix}_analisis"] = analisis_generado
                     st.session_state[f"{prefix}_analisis_base"] = analisis_generado
                     analisis_default = analisis_generado
 
-                contexto_plan_ia = {
-                    "titulo": titulo,
-                    "modalidad_consulta": modalidad_consulta or "",
-                    "diagnostico_cie10_principal": st.session_state.get(f"{prefix}_diagnosticos", ""),
-                    "analisis": analisis_default,
-                    "repertorizacion": repertorizacion,
-                    "enfermedad_actual": enfermedad_actual,
-                    "antecedentes": antecedentes,
-                    "revision_por_sistemas": revision,
-                    "sintomas_generales": sintomas_generales,
-                    "historia_biopatografica": biopatografica,
-                    "sintomas_mentales": sintomas_mentales,
-                    "signos_vitales": {
-                        "ta": ta,
-                        "fc": fc,
-                        "fr": fr,
-                        "spo2": sat,
-                        "glucometria": glucometria,
-                        "temperatura": temp,
-                        "peso": peso,
-                        "talla": talla,
-                        "pc": pc,
-                        "pb": pb,
-                    },
-                    "examen_fisico": examen,
-                    "paraclinicos": paraclinicos_texto,
-                    "imagenes": imagenes_texto,
-                }
-                fingerprint_plan_ia = hashlib.md5(
-                    json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
-                ).hexdigest()
-                plan_homeo_generado = complementar_plan_con_ia(
-                    "",
-                    contexto_plan_ia,
-                    fingerprint_plan_ia,
-                    instrucciones=instrucciones_plan_homeo,
-                    forzar=True,
-                ).strip()
+                plan_homeo_generado = str(paquete_homeo_ia.get("plan") or "").strip()
                 if plan_homeo_generado:
                     st.session_state[f"{prefix}_plan"] = plan_homeo_generado
                     st.session_state[f"{prefix}_plan_base"] = plan_homeo_generado
