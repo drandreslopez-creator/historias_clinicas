@@ -1119,6 +1119,57 @@ def solicitar_limpieza_formulario():
     st.session_state["_limpiar_formulario"] = True
 
 
+def cargar_ejemplo_urgencias():
+    limpiar_formulario()
+    ejemplo = {
+        "nombre_1": "MARIA JOSE GOMEZ",
+        "tipo_documento_1": "RC",
+        "documento_1": "1098765432",
+        "fecha_1": date(2022, 3, 15),
+        "sexo_1": "Femenino",
+        "eps_1": "NUEVA EPS",
+        "telefono_1": "3204567890",
+        "informante_1": "MADRE - 32 AÑOS - AMA DE CASA",
+        "proveniente_1": "SOGAMOSO",
+        "motivo_1": "FIEBRE Y TOS",
+        "enfermedad_1": "CUADRO CLÍNICO DE 3 DÍAS DE EVOLUCIÓN CONSISTENTE EN TOS HÚMEDA, RINORREA HIALINA, FIEBRE SUBJETIVA Y DISMINUCIÓN DEL APETITO. NIEGA VÓMITO, DIARREA O DIFICULTAD RESPIRATORIA.",
+        "antecedentes_1": ANTECEDENTES_DEFAULT,
+        "neuro_1": "",
+        "neuro_prev": None,
+        "revision": REVISION_DEFAULT,
+        "ta": "90/55",
+        "fc": "112",
+        "fr": "24",
+        "sat": "97",
+        "glucometria": "",
+        "temp": "38.1",
+        "pb": "16.0",
+        "peso": "16.2",
+        "talla": "101",
+        "pc": "50.5",
+        "scq_pct": "",
+        "examen": "PACIENTE LUCE EN BUEN ESTADO GENERAL, ALERTA, HIDRATADA, FEBRIL.\n\nCABEZA: NORMOCÉFALA, SIN LESIONES.\nOJOS: CONJUNTIVAS ROSADAS, ESCLERAS ANICTÉRICAS.\nOÍDOS: SIN ALTERACIONES.\nNARIZ: RINORREA HIALINA ESCASA.\nOROFARINGE: MUCOSAS HÚMEDAS, FARINGE LEVEMENTE ERITEMATOSA.\nCUELLO: MÓVIL, SIN ADENOPATÍAS.\nTÓRAX: SIMÉTRICO, NORMOEXPANSIBLE, SIN TIRAJES.\nCARDIOPULMONAR: RUIDOS CARDIACOS RÍTMICOS, SIN SOPLOS, MURMULLO VESICULAR CONSERVADO.\nABDOMEN: BLANDO, NO DOLOROSO.\nEXTREMIDADES: EUTRÓFICAS, SIN EDEMAS.\nNEUROLÓGICO: ALERTA, SIN FOCALIZACIONES.\nPIEL: ROSADA, BIEN PERFUNDIDA, SIN LESIONES.",
+        "analisis": "",
+        "analisis_base": "",
+        "busqueda_cie10": "rinofaringitis",
+        "dx_cie10": None,
+        "obs_dx": "",
+        "plan": "",
+        "plan_base": "",
+        "conducta_final_analisis": "PENDIENTE DEFINIR",
+        "paraclinicos_texto": "",
+        "paraclinicos_auto": "",
+        "paraclinicos_pdf_sig": "",
+        "imagenes_texto": "",
+        "imagenes_auto": "",
+        "imagenes_pdf_sig": "",
+        "codigo_trauma_activar": False,
+    }
+    for key, value in ejemplo.items():
+        st.session_state[key] = value
+    borrar_borrador_urgencias()
+
+
 def guardar_historia(datos):
     HISTORIAS_PATH.parent.mkdir(parents=True, exist_ok=True)
     with HISTORIAS_PATH.open("a", encoding="utf-8") as f:
@@ -4443,6 +4494,10 @@ def render():
     )
 
     st.header(titulo_historia)
+    col_acc_1, col_acc_2 = st.columns(2)
+    if col_acc_1.button("Ver ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
+        cargar_ejemplo_urgencias()
+        st.rerun()
 
     col1, col2 = st.columns(2)
 

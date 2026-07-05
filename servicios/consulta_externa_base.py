@@ -449,6 +449,114 @@ def _clear_state(prefix, defaults):
         st.session_state[key] = value
 
 
+def _cargar_ejemplo_consulta_externa(
+    prefix,
+    defaults,
+    *,
+    es_pediatrica=False,
+    mostrar_neurodesarrollo=False,
+    mostrar_sintomas_generales=False,
+    mostrar_biopatografica=False,
+    mostrar_sintomas_mentales=False,
+    mostrar_pb=False,
+    mostrar_modalidad_consulta=True,
+):
+    _clear_state(prefix, defaults)
+
+    es_homeopatia_pediatrica = prefix == "homeo_ped"
+    fecha_nacimiento = date(2022, 3, 15) if es_pediatrica else date(1992, 8, 21)
+    sexo = "Femenino" if es_pediatrica else "Masculino"
+    modalidad = "PRIMERA VEZ" if mostrar_modalidad_consulta else defaults.get(f"{prefix}_modalidad_consulta", "PRIMERA VEZ")
+
+    ejemplo = {
+        f"{prefix}_nombre": "MARIA JOSE GOMEZ" if es_pediatrica else "CARLOS EDUARDO PEREZ",
+        f"{prefix}_tipo_documento": "RC" if es_pediatrica else "CC",
+        f"{prefix}_documento": "1098765432",
+        f"{prefix}_fecha_nacimiento": fecha_nacimiento,
+        f"{prefix}_sexo": sexo,
+        f"{prefix}_eps": "NUEVA EPS",
+        f"{prefix}_telefono": "3204567890",
+        f"{prefix}_informante": "MADRE" if es_pediatrica else "PACIENTE",
+        f"{prefix}_motivo": (
+            "TOS Y FIEBRE DE 3 DÍAS DE EVOLUCIÓN"
+            if es_pediatrica and not es_homeopatia_pediatrica
+            else ("TOS RECURRENTE Y RINORREA FRECUENTE" if es_homeopatia_pediatrica else "CEFALEA Y MALESTAR GENERAL")
+        ),
+        f"{prefix}_enfermedad_actual": (
+            (
+                "MADRE REFIERE CUADRO DE VARIOS MESES DE EVOLUCIÓN CONSISTENTE EN EPISODIOS FRECUENTES DE RINORREA HIALINA, ESTORNUDOS MATUTINOS, TOS NOCTURNA Y EMPEORAMIENTO CON EL FRÍO. DESDE HACE 1 SEMANA PRESENTA MAYOR IRRITABILIDAD, SUEÑO INQUIETO Y APEGO EXAGERADO A LA MADRE."
+                if es_homeopatia_pediatrica
+                else "CUADRO CLÍNICO DE 3 DÍAS DE EVOLUCIÓN CONSISTENTE EN TOS HÚMEDA, RINORREA HIALINA, FIEBRE SUBJETIVA Y DISMINUCIÓN DEL APETITO. MADRE NIEGA VÓMITO, DIARREA O DIFICULTAD RESPIRATORIA."
+            )
+            if es_pediatrica
+            else "CUADRO CLÍNICO DE 2 DÍAS DE EVOLUCIÓN CONSISTENTE EN CEFALEA HOLOCRANEANA, MALESTAR GENERAL Y CONGESTIÓN NASAL, SIN SIGNOS DE ALARMA."
+        ),
+        f"{prefix}_antecedentes": defaults.get(f"{prefix}_antecedentes", ""),
+        f"{prefix}_revision": (
+            "-SÍNTOMAS CARDIOVASCULARES: NIEGA CANSANCIO, NO FATIGA AL COMER, NO CIANOSIS.\n-DIGESTIVO: SIN NAUSEA NI EMESIS, DEPOSICIONES 1-2 VECES AL DÍA, BRISTOL 3.\n-ALIMENTARIOS: ADECUADA PARA LA EDAD.\n-URINARIO: HÁBITO NORMAL, SIN COLURIA, SIN HEMATURIA.\n-SÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 5/7, RINORREA 5/7, CONGESTIÓN 3/7, PRURITO NASAL 4/7.\n-SÍNTOMAS RESPIRATORIOS BAJOS: TOS NOCTURNA 4/7, TOS CON EL FRÍO 5/7."
+            if es_homeopatia_pediatrica
+            else defaults.get(f"{prefix}_revision", "")
+        ),
+        f"{prefix}_fc": "112" if es_pediatrica else "78",
+        f"{prefix}_fr": "24" if es_pediatrica else "16",
+        f"{prefix}_ta": "90/55" if es_pediatrica else "118/74",
+        f"{prefix}_sat": "97",
+        f"{prefix}_glucometria": "",
+        f"{prefix}_temp": "38.1" if es_pediatrica else "36.8",
+        f"{prefix}_peso": "16.2" if es_pediatrica else "72",
+        f"{prefix}_talla": "101" if es_pediatrica else "173",
+        f"{prefix}_pc": "50.5" if es_pediatrica else "",
+        f"{prefix}_pb": "16.0" if es_pediatrica and mostrar_pb else "",
+        f"{prefix}_examen": (
+            (
+                "PACIENTE LUCE EN BUEN ESTADO GENERAL, ALERTA, HIDRATADA, AFEBRIL.\n\nCABEZA: NORMOCÉFALA.\nOJOS: CONJUNTIVAS ROSADAS, PRURITO OCULAR ESCASO.\nNARIZ: MUCOSA NASAL EDEMATOSA, RINORREA HIALINA.\nOROFARINGE: MUCOSAS HÚMEDAS, SIN EXUDADOS.\nCUELLO: SIN ADENOPATÍAS.\nTÓRAX: SIMÉTRICO, SIN TIRAJES.\nCARDIOPULMONAR: RUIDOS CARDÍACOS RÍTMICOS, MURMULLO VESICULAR CONSERVADO, SIN DIFICULTAD RESPIRATORIA.\nABDOMEN: BLANDO, NO DOLOROSO.\nEXTREMIDADES: SIN EDEMAS.\nNEUROLÓGICO: ALERTA, REACTIVA.\nPIEL: BIEN PERFUNDIDA, SIN LESIONES."
+                if es_homeopatia_pediatrica
+                else "PACIENTE LUCE EN BUEN ESTADO GENERAL, ALERTA, HIDRATADA, FEBRIL.\n\nCABEZA: NORMOCÉFALA.\nOJOS: CONJUNTIVAS ROSADAS.\nNARIZ: RINORREA HIALINA ESCASA.\nOROFARINGE: MUCOSAS HÚMEDAS, FARINGE LEVEMENTE ERITEMATOSA.\nCUELLO: SIN ADENOPATÍAS.\nTÓRAX: SIMÉTRICO, SIN TIRAJES.\nCARDIOPULMONAR: RUIDOS CARDÍACOS RÍTMICOS, MURMULLO VESICULAR CONSERVADO, SIN DIFICULTAD RESPIRATORIA.\nABDOMEN: BLANDO, NO DOLOROSO.\nEXTREMIDADES: SIN EDEMAS.\nNEUROLÓGICO: ALERTA, SIN FOCALIZACIONES.\nPIEL: BIEN PERFUNDIDA, SIN LESIONES."
+            )
+            if es_pediatrica
+            else "PACIENTE EN BUEN ESTADO GENERAL, ALERTA, ORIENTADO.\n\nCABEZA Y CUELLO: CONGESTIÓN NASAL, OROFARINGE SIN EXUDADOS.\nCARDIOPULMONAR: SIN HALLAZGOS PATOLÓGICOS EVIDENTES.\nABDOMEN: BLANDO, NO DOLOROSO.\nEXTREMIDADES: SIN EDEMAS.\nNEUROLÓGICO: SIN FOCALIZACIONES."
+        ),
+        f"{prefix}_paraclinicos_texto": "",
+        f"{prefix}_imagenes_texto": "",
+        f"{prefix}_analisis": "",
+        f"{prefix}_analisis_base": "",
+        f"{prefix}_diagnosticos": "INFECCIÓN RESPIRATORIA AGUDA DE VÍAS RESPIRATORIAS SUPERIORES" if not es_pediatrica else "",
+        f"{prefix}_obs_dx": "",
+        f"{prefix}_obs_dx_base": "",
+        f"{prefix}_plan": "",
+        f"{prefix}_plan_base": "",
+        f"{prefix}_conducta_final_analisis": "PENDIENTE DEFINIR",
+        f"{prefix}_repertorizacion": "",
+        f"{prefix}_repertorizacion_base": "",
+        f"{prefix}_modalidad_consulta": modalidad,
+    }
+
+    if mostrar_sintomas_generales:
+        ejemplo[f"{prefix}_sintomas_generales"] = (
+            "- APETITO: DISMINUIDO EN LAS CRISIS.\n- SED: BAJA, PREFIERE PEQUEÑOS SORBOS.\n- DESEOS: DULCES Y BEBIDAS FRÍAS.\n- AVERSIONES: VERDURAS COCIDAS.\n- AGRAVACIONES: FRÍO, MADRUGADA, CAMBIO DE CLIMA.\n- EMPEORA: AL DESTAPARSE Y CON EL VIENTO.\n- CALOR VITAL: FRIOLENTA, BUSCA ARROPARSE.\n- TRANSPIRACIÓN: ESCASA, SUELE SUDAR EN CABEZA AL DORMIR.\n- SUEÑO: INQUIETO, DESPIERTA LLAMANDO A LA MADRE.\n- SUEÑOS: PESADILLAS OCASIONALES.\n- SEXUALIDAD: ACORDE A LA EDAD, SIN HALLAZGOS RELEVANTES.\n- ESTADO DEL TIEMPO: CLARAMENTE PEOR CON FRÍO Y HUMEDAD."
+            if es_homeopatia_pediatrica
+            else defaults.get(f"{prefix}_sintomas_generales", "")
+        )
+    if mostrar_biopatografica:
+        ejemplo[f"{prefix}_biopatografica"] = (
+            "- EMBARAZO Y GESTACIÓN: EMBARAZO DESEADO, MADRE REFIRIÓ ANSIEDAD Y PREOCUPACIÓN DURANTE EL TERCER TRIMESTRE.\n- PARTO / NACIMIENTO: PARTO VAGINAL, SIN COMPLICACIONES MAYORES, APEGO TEMPRANO ADECUADO.\n- VÍNCULO TEMPRANO Y LACTANCIA: MUY APEGADA A LA MADRE, LACTANCIA MATERNA HASTA LOS 18 MESES.\n- PRIMEROS RASGOS DEL CARÁCTER: NIÑA SENSIBLE, AFECTUOSA, TEMEROSA A LOS EXTRAÑOS.\n- DESARROLLO Y ADAPTACIÓN: DESARROLLO PSICOMOTOR ADECUADO, DIFICULTAD PARA ADAPTARSE A CAMBIOS DE RUTINA.\n- MIEDOS Y REACCIONES EMOCIONALES: MIEDO A LA OSCURIDAD Y A QUEDARSE SOLA.\n- FORMA DE ENFERMAR: TENDENCIA A CUADROS RESPIRATORIOS ALTOS RECURRENTES.\n- SUPRESIONES / INTERVENCIONES: USO REPETIDO DE ANTIHISTAMÍNICOS Y VARIOS CICLOS DE ANTIBIÓTICO.\n- MODALIDADES RELEVANTES: PEOR CON FRÍO Y DE NOCHE; MEJORA EN BRAZOS DE LA MADRE.\n- DINÁMICA FAMILIAR Y ENTORNO: CONVIVE CON PADRES, BUENA RED DE APOYO.\n- ANTECEDENTES FAMILIARES CON SENTIDO HOMEOPÁTICO: MADRE CON RINITIS ALÉRGICA, PADRE CON DERMATITIS."
+            if es_homeopatia_pediatrica
+            else defaults.get(f"{prefix}_biopatografica", "")
+        )
+    if mostrar_sintomas_mentales:
+        ejemplo[f"{prefix}_sintomas_mentales"] = (
+            "- AFECTO Y AMOR: MUY AFECTUOSA, NECESITA CONTACTO FÍSICO FRECUENTE.\n- VOLUNTAD Y CONDUCTA: TENDENCIA A TERQUEDAD SUAVE, LLORA SI NO OBTIENE COMPAÑÍA.\n- ENTENDIMIENTO, INTELIGENCIA Y JUICIO: CURIOSA, APRENDE RÁPIDO, BUENA COMPRENSIÓN PARA LA EDAD.\n- EMOCIONALES: ANSIOSA ANTE CAMBIOS Y SEPARACIÓN DE LA MADRE.\n- HUMOR: VARIABLE, IRRITABLE CUANDO DUERME MAL.\n- GUSTOS: PREFIERE JUGAR ACOMPAÑADA, LE GUSTA LA MÚSICA Y LOS ANIMALES.\n- CONCIENCIA MORAL: SENSIBLE AL REGAÑO, LLORA FÁCILMENTE SI SIENTE DESAPROBACIÓN.\n- PERSONALIDAD: TÍMIDA AL INICIO, LUEGO CARIÑOSA Y DEPENDIENTE DEL ENTORNO CERCANO."
+            if es_homeopatia_pediatrica
+            else defaults.get(f"{prefix}_sintomas_mentales", "")
+        )
+    if mostrar_neurodesarrollo:
+        ejemplo[f"{prefix}_neuro"] = ""
+        ejemplo[f"{prefix}_neuro_prev"] = None
+
+    for key, value in ejemplo.items():
+        st.session_state[key] = value
+
+
 def _load_histories(path):
     if not path.exists():
         return []
@@ -577,6 +685,20 @@ def render_consulta_externa(
     _init_state(defaults)
 
     st.header(titulo)
+    col_acc_1, col_acc_2 = st.columns(2)
+    if col_acc_1.button("Ver ejemplo", key=f"{prefix}_ver_ejemplo", use_container_width=True):
+        _cargar_ejemplo_consulta_externa(
+            prefix,
+            defaults,
+            es_pediatrica=es_pediatrica,
+            mostrar_neurodesarrollo=mostrar_neurodesarrollo,
+            mostrar_sintomas_generales=mostrar_sintomas_generales,
+            mostrar_biopatografica=mostrar_biopatografica,
+            mostrar_sintomas_mentales=mostrar_sintomas_mentales,
+            mostrar_pb=mostrar_pb,
+            mostrar_modalidad_consulta=mostrar_modalidad_consulta,
+        )
+        st.rerun()
 
     modalidad_consulta = modalidad_consulta_forzada
     if modalidad_consulta_forzada is not None:
