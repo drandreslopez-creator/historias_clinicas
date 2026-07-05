@@ -1266,7 +1266,7 @@ def render_consulta_externa(
             if repertorizacion or analisis_default or plan_generado_homeo:
                 error_repert = obtener_error_ia("repertorizacion")
                 if error_repert and repertorizacion:
-                    st.warning(f"Se generó una repertorización base. La IA no respondió correctamente: {error_repert}")
+                    st.info(f"Se generó una repertorización base. {error_repert}")
                 else:
                     st.success("Repertorización generada correctamente.")
             else:

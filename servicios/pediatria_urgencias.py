@@ -3113,7 +3113,7 @@ def ia_analisis_configurada():
 
 
 def registrar_error_ia(nombre, mensaje):
-    st.session_state[f"_{nombre}_ia_error"] = str(mensaje or "").strip()
+    st.session_state[f"_{nombre}_ia_error"] = normalizar_mensaje_error_ia(mensaje)
 
 
 def limpiar_error_ia(nombre):
@@ -3122,6 +3122,23 @@ def limpiar_error_ia(nombre):
 
 def obtener_error_ia(nombre):
     return st.session_state.get(f"_{nombre}_ia_error", "")
+
+
+def normalizar_mensaje_error_ia(mensaje):
+    texto = str(mensaje or "").strip()
+    texto_up = texto.upper()
+
+    if "429" in texto or "TOO MANY REQUESTS" in texto_up:
+        return "LÍMITE TEMPORAL DE SOLICITUDES A LA IA. INTENTA NUEVAMENTE EN 30 A 60 SEGUNDOS."
+    if "401" in texto or "UNAUTHORIZED" in texto_up:
+        return "NO FUE POSIBLE AUTENTICAR LA IA. REVISA LA OPENAI_API_KEY CONFIGURADA EN SECRETS."
+    if "403" in texto or "FORBIDDEN" in texto_up:
+        return "LA IA RECHAZÓ LA SOLICITUD POR PERMISOS O RESTRICCIONES DE LA CUENTA."
+    if "TIMEOUT" in texto_up or "TIMED OUT" in texto_up:
+        return "LA IA TARDÓ DEMASIADO EN RESPONDER. INTENTA NUEVAMENTE."
+    if "CONNECTION" in texto_up or "NETWORK" in texto_up:
+        return "NO FUE POSIBLE CONECTAR CON LA IA EN ESTE MOMENTO. INTENTA NUEVAMENTE."
+    return texto
 
 
 def debe_refinar_con_ia(nombre, fingerprint):
@@ -3183,7 +3200,7 @@ def extraer_json_desde_texto(texto):
     return {}
 
 
-def solicitar_respuesta_openai(model, payload, timeout=25, max_reintentos=2):
+def solicitar_respuesta_openai(model, payload, timeout=25, max_reintentos=3):
     api_key = obtener_secret_app("openai_api_key")
     ultimo_error = None
 
@@ -3199,14 +3216,24 @@ def solicitar_respuesta_openai(model, payload, timeout=25, max_reintentos=2):
                 timeout=timeout,
             )
             if response.status_code == 429 and intento < max_reintentos:
-                time.sleep(2 + (intento * 3))
+                retry_after = response.headers.get("retry-after")
+                try:
+                    espera = max(2, min(25, int(float(retry_after)))) if retry_after else (5 + (intento * 7))
+                except Exception:
+                    espera = 5 + (intento * 7)
+                time.sleep(espera)
                 continue
             response.raise_for_status()
             return response.json()
         except Exception as e:
             ultimo_error = e
             if getattr(getattr(e, "response", None), "status_code", None) == 429 and intento < max_reintentos:
-                time.sleep(2 + (intento * 3))
+                retry_after = getattr(getattr(e, "response", None), "headers", {}).get("retry-after")
+                try:
+                    espera = max(2, min(25, int(float(retry_after)))) if retry_after else (5 + (intento * 7))
+                except Exception:
+                    espera = 5 + (intento * 7)
+                time.sleep(espera)
                 continue
             break
 
