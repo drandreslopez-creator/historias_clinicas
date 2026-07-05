@@ -47,6 +47,7 @@ from servicios.pediatria_urgencias import (
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
     guardar_docx_exportado,
+    obtener_error_ia,
     puntuar_diagnostico,
     subir_docx_a_google_drive,
     render_informe_html,
@@ -197,6 +198,77 @@ def _texto_reporte_bloque(texto, default):
 def _hay_contexto_suficiente_homeopatia(*bloques):
     texto = " ".join(str(bloque or "").strip() for bloque in bloques)
     return len(texto.strip()) >= 60
+
+
+def _extraer_items_repertorizacion(texto, max_items=4):
+    items = []
+    for linea in str(texto or "").splitlines():
+        limpio = linea.strip(" -\t\r\n")
+        if not limpio:
+            continue
+        if ":" in limpio:
+            _, resto = limpio.split(":", 1)
+            resto = resto.strip(" -\t\r\n")
+            if resto:
+                limpio = resto
+        if len(limpio) < 4:
+            continue
+        items.append(limpio.upper())
+        if len(items) >= max_items:
+            break
+    return items
+
+
+def _generar_repertorizacion_local(contexto):
+    tpc = []
+    tsc = []
+
+    motivo = str(contexto.get("motivo_consulta") or "").strip()
+    enfermedad_actual = str(contexto.get("enfermedad_actual") or "").strip()
+    revision = str(contexto.get("revision_por_sistemas") or "").strip()
+    examen = str(contexto.get("examen_fisico") or "").strip()
+    paraclinicos = str(contexto.get("paraclinicos") or "").strip()
+    antecedentes = str(contexto.get("antecedentes") or "").strip()
+    sintomas_generales = str(contexto.get("sintomas_generales") or "").strip()
+    biopatografica = str(contexto.get("historia_biopatografica") or "").strip()
+    sintomas_mentales = str(contexto.get("sintomas_mentales") or "").strip()
+
+    if motivo:
+        tpc.append(f"MOTIVO DE CONSULTA: {motivo.upper()}")
+    tpc.extend(_extraer_items_repertorizacion(enfermedad_actual, max_items=3))
+    tpc.extend(_extraer_items_repertorizacion(revision, max_items=3))
+    tpc.extend(_extraer_items_repertorizacion(examen, max_items=3))
+    if paraclinicos:
+        tpc.extend(_extraer_items_repertorizacion(paraclinicos, max_items=2))
+
+    tsc.extend(_extraer_items_repertorizacion(sintomas_mentales, max_items=4))
+    tsc.extend(_extraer_items_repertorizacion(sintomas_generales, max_items=4))
+    tsc.extend(_extraer_items_repertorizacion(biopatografica, max_items=3))
+    tsc.extend(_extraer_items_repertorizacion(antecedentes, max_items=2))
+
+    def _deduplicar(items):
+        salida = []
+        vistos = set()
+        for item in items:
+            clave = item.strip().upper()
+            if not clave or clave in vistos:
+                continue
+            vistos.add(clave)
+            salida.append(clave)
+        return salida
+
+    tpc = _deduplicar(tpc)
+    tsc = _deduplicar(tsc)
+
+    if not tpc and not tsc:
+        return ""
+
+    lineas = ["1) TOTALIDAD PATOLÓGICA CARACTERÍSTICA (TPC)"]
+    lineas.extend(f"- {item}" for item in (tpc or ["SIN DATOS SUFICIENTES."]))
+    lineas.append("")
+    lineas.append("2) TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC)")
+    lineas.extend(f"- {item}" for item in (tsc or ["SIN DATOS SUFICIENTES."]))
+    return "\n".join(lineas).strip()
 
 
 def _normalizar_texto_simple(texto):
@@ -1141,6 +1213,12 @@ def render_consulta_externa(
                     st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
                     st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
                     repertorizacion = repertorizacion_generada
+                else:
+                    repertorizacion_generada = _generar_repertorizacion_local(contexto_repertorizacion_ia)
+                    if repertorizacion_generada:
+                        st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
+                        st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
+                        repertorizacion = repertorizacion_generada
 
                 contexto_analisis_ia = {
                     "titulo": titulo,
@@ -1230,9 +1308,17 @@ def render_consulta_externa(
                     plan_generado_homeo = plan_homeo_generado
 
             if repertorizacion or analisis_default or plan_generado_homeo:
-                st.success("Repertorización generada correctamente.")
+                error_repert = obtener_error_ia("repertorizacion")
+                if error_repert and repertorizacion:
+                    st.warning(f"Se generó una repertorización base. La IA no respondió correctamente: {error_repert}")
+                else:
+                    st.success("Repertorización generada correctamente.")
             else:
-                st.warning("No fue posible generar la repertorización con la información actual.")
+                error_repert = obtener_error_ia("repertorizacion")
+                if error_repert:
+                    st.error(f"No fue posible generar la repertorización con IA: {error_repert}")
+                else:
+                    st.warning("No fue posible generar la repertorización con la información actual.")
 
         repertorizacion = st.text_area(
             "Repertorización homeopática",

@@ -3111,6 +3111,18 @@ def ia_analisis_configurada():
     return bool(obtener_secret_app("openai_api_key"))
 
 
+def registrar_error_ia(nombre, mensaje):
+    st.session_state[f"_{nombre}_ia_error"] = str(mensaje or "").strip()
+
+
+def limpiar_error_ia(nombre):
+    st.session_state.pop(f"_{nombre}_ia_error", None)
+
+
+def obtener_error_ia(nombre):
+    return st.session_state.get(f"_{nombre}_ia_error", "")
+
+
 def debe_refinar_con_ia(nombre, fingerprint):
     pending_key = f"_{nombre}_ia_pending_fp"
     last_key = f"_{nombre}_ia_last_fp"
@@ -3252,6 +3264,7 @@ def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fing
 
 def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=None, forzar=False):
     if not ia_analisis_configurada():
+        registrar_error_ia("plan", "No se encontró `openai_api_key` configurada para generar el plan con IA.")
         return base_plan
     if not forzar and not debe_refinar_con_ia("plan", fingerprint):
         return base_plan
@@ -3299,8 +3312,11 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
             texto = texto.strip()
             cache = {"fingerprint": fingerprint, "texto": texto}
             st.session_state[cache_key] = cache
+            limpiar_error_ia("plan")
             return texto
-    except Exception:
+        registrar_error_ia("plan", "La IA no devolvió texto para el plan.")
+    except Exception as e:
+        registrar_error_ia("plan", e)
         return base_plan
 
     return base_plan
@@ -3308,6 +3324,7 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
 
 def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instrucciones=None, forzar=False):
     if not ia_analisis_configurada():
+        registrar_error_ia("repertorizacion", "No se encontró `openai_api_key` configurada para generar la repertorización con IA.")
         return base_texto
     if not forzar and not debe_refinar_con_ia("repertorizacion", fingerprint):
         return base_texto
@@ -3345,7 +3362,7 @@ def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instr
                 "temperature": 0.2,
                 "max_output_tokens": 700,
             },
-            timeout=30,
+            timeout=60,
         )
         response.raise_for_status()
         texto = extraer_texto_respuesta_openai(response.json())
@@ -3353,8 +3370,11 @@ def complementar_repertorizacion_con_ia(base_texto, contexto, fingerprint, instr
             texto = texto.strip()
             cache = {"fingerprint": fingerprint, "texto": texto}
             st.session_state[cache_key] = cache
+            limpiar_error_ia("repertorizacion")
             return texto
-    except Exception:
+        registrar_error_ia("repertorizacion", "La IA no devolvió texto para la repertorización.")
+    except Exception as e:
+        registrar_error_ia("repertorizacion", e)
         return base_texto
 
     return base_texto
@@ -3418,6 +3438,7 @@ def complementar_codigo_trauma_con_ia(base_texto, contexto, fingerprint, instruc
 
 def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucciones=None, forzar=False):
     if not ia_analisis_configurada():
+        registrar_error_ia("analisis", "No se encontró `openai_api_key` configurada para generar el análisis con IA.")
         return base_analisis
     if not forzar and not debe_refinar_con_ia("analisis", fingerprint):
         return base_analisis
@@ -3468,8 +3489,11 @@ def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucci
         if texto:
             cache = {"fingerprint": fingerprint, "texto": texto.strip()}
             st.session_state[cache_key] = cache
+            limpiar_error_ia("analisis")
             return texto.strip()
-    except Exception:
+        registrar_error_ia("analisis", "La IA no devolvió texto para el análisis.")
+    except Exception as e:
+        registrar_error_ia("analisis", e)
         return base_analisis
 
     return base_analisis
