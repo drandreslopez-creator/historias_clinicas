@@ -201,18 +201,98 @@ def _hay_contexto_suficiente_homeopatia(*bloques):
     return len(texto.strip()) >= 60
 
 
-def _extraer_items_repertorizacion(texto, max_items=4):
+def _normalizar_texto_simple(texto):
+    return (
+        str(texto or "")
+        .upper()
+        .replace("Á", "A")
+        .replace("É", "E")
+        .replace("Í", "I")
+        .replace("Ó", "O")
+        .replace("Ú", "U")
+    )
+
+
+def _lineas_normalizadas(texto):
+    return {
+        _normalizar_texto_simple(linea.strip())
+        for linea in str(texto or "").splitlines()
+        if linea.strip()
+    }
+
+
+LINEAS_GUIA_REPERTORIZACION = (
+    _lineas_normalizadas(SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT)
+    | _lineas_normalizadas(BIOPATOGRAFICA_HOMEOPATIA_PEDIATRICA_DEFAULT)
+    | _lineas_normalizadas(SINTOMAS_MENTALES_HOMEOPATIA_PEDIATRICA_DEFAULT)
+    | _lineas_normalizadas(REVISION_HOMEOPATIA_PEDIATRICA_DEFAULT)
+    | _lineas_normalizadas(ANTECEDENTES_DEFAULT)
+)
+
+
+def _es_texto_placeholder_repertorizacion(texto):
+    texto_norm = _normalizar_texto_simple(texto)
+    marcadores = [
+        " XX",
+        "XXXX",
+        "#",
+        "VIA VAGINAL/ CESAREA",
+        "NO REQUIRIO OXIGENO SUPLEMENTARIO",
+        "VACUNAS AL DIA SEGUN PAI",
+        "NIEGA.",
+        "ACORDE A EDAD",
+        "ADECUADA PARA LA EDAD",
+    ]
+    return any(marcador in texto_norm for marcador in marcadores)
+
+
+def _es_texto_negativo_repertorizacion(texto):
+    texto_norm = _normalizar_texto_simple(texto).strip(" -.:;")
+    inicios = (
+        "NIEGA ",
+        "NO ",
+        "SIN ",
+    )
+    return texto_norm.startswith(inicios)
+
+
+def _limpiar_item_repertorizacion(texto, preservar_etiqueta=False):
+    linea = str(texto or "").strip(" -\t\r\n")
+    if not linea:
+        return ""
+
+    linea_norm = _normalizar_texto_simple(linea)
+    if linea_norm in LINEAS_GUIA_REPERTORIZACION:
+        return ""
+
+    if ":" in linea:
+        etiqueta, resto = linea.split(":", 1)
+        etiqueta = etiqueta.strip(" -\t\r\n")
+        resto = resto.strip(" -\t\r\n")
+        if not resto:
+            return ""
+        if _normalizar_texto_simple(linea) in LINEAS_GUIA_REPERTORIZACION:
+            return ""
+        if _es_texto_placeholder_repertorizacion(resto):
+            return ""
+        if preservar_etiqueta:
+            return f"{etiqueta.upper()}: {resto.upper()}".strip()
+        return resto.upper()
+
+    if _es_texto_placeholder_repertorizacion(linea):
+        return ""
+    return linea.upper()
+
+
+def _extraer_items_repertorizacion(texto, max_items=4, preservar_etiqueta=False, excluir_negativos=False):
     items = []
     for linea in str(texto or "").splitlines():
-        limpio = linea.strip(" -\t\r\n")
+        limpio = _limpiar_item_repertorizacion(linea, preservar_etiqueta=preservar_etiqueta)
         if not limpio:
             continue
-        if ":" in limpio:
-            _, resto = limpio.split(":", 1)
-            resto = resto.strip(" -\t\r\n")
-            if resto:
-                limpio = resto
-        if len(limpio) < 4:
+        if excluir_negativos and _es_texto_negativo_repertorizacion(limpio):
+            continue
+        if len(limpio.strip()) < 4:
             continue
         items.append(limpio.upper())
         if len(items) >= max_items:
@@ -236,16 +316,16 @@ def _generar_repertorizacion_local(contexto):
 
     if motivo:
         tpc.append(f"MOTIVO DE CONSULTA: {motivo.upper()}")
-    tpc.extend(_extraer_items_repertorizacion(enfermedad_actual, max_items=3))
-    tpc.extend(_extraer_items_repertorizacion(revision, max_items=3))
-    tpc.extend(_extraer_items_repertorizacion(examen, max_items=3))
+    tpc.extend(_extraer_items_repertorizacion(enfermedad_actual, max_items=4, excluir_negativos=True))
+    tpc.extend(_extraer_items_repertorizacion(revision, max_items=2, preservar_etiqueta=True, excluir_negativos=True))
+    tpc.extend(_extraer_items_repertorizacion(examen, max_items=3, preservar_etiqueta=True, excluir_negativos=True))
     if paraclinicos:
-        tpc.extend(_extraer_items_repertorizacion(paraclinicos, max_items=2))
+        tpc.extend(_extraer_items_repertorizacion(paraclinicos, max_items=2, preservar_etiqueta=True, excluir_negativos=True))
 
-    tsc.extend(_extraer_items_repertorizacion(sintomas_mentales, max_items=4))
-    tsc.extend(_extraer_items_repertorizacion(sintomas_generales, max_items=4))
-    tsc.extend(_extraer_items_repertorizacion(biopatografica, max_items=3))
-    tsc.extend(_extraer_items_repertorizacion(antecedentes, max_items=2))
+    tsc.extend(_extraer_items_repertorizacion(sintomas_mentales, max_items=4, preservar_etiqueta=True, excluir_negativos=True))
+    tsc.extend(_extraer_items_repertorizacion(sintomas_generales, max_items=4, preservar_etiqueta=True, excluir_negativos=True))
+    tsc.extend(_extraer_items_repertorizacion(biopatografica, max_items=3, preservar_etiqueta=True, excluir_negativos=True))
+    tsc.extend(_extraer_items_repertorizacion(antecedentes, max_items=1, preservar_etiqueta=True, excluir_negativos=True))
 
     def _deduplicar(items):
         salida = []
@@ -270,18 +350,6 @@ def _generar_repertorizacion_local(contexto):
     lineas.append("2) TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC)")
     lineas.extend(f"- {item}" for item in (tsc or ["SIN DATOS SUFICIENTES."]))
     return "\n".join(lineas).strip()
-
-
-def _normalizar_texto_simple(texto):
-    return (
-        str(texto or "")
-        .upper()
-        .replace("Á", "A")
-        .replace("É", "E")
-        .replace("Í", "I")
-        .replace("Ó", "O")
-        .replace("Ú", "U")
-    )
 
 
 def _revision_homeopatia_pediatrica_desde_enfermedad_actual(enfermedad_actual):
@@ -660,6 +728,7 @@ def render_consulta_externa(
     es_pediatrica=False,
     mostrar_neurodesarrollo=False,
     antecedentes_default=None,
+    examen_default=None,
     plan_default=None,
     mostrar_modalidad_consulta=True,
     mostrar_pb=None,
@@ -683,6 +752,10 @@ def render_consulta_externa(
     instrucciones_analisis_ia=None,
     instrucciones_plan_ia=None,
     usar_plan_urgencias_primera_vez=True,
+    mostrar_diagnosticos_principales=True,
+    usar_ia_analisis=True,
+    usar_ia_plan=True,
+    usar_ia_observacion_dx=True,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -690,6 +763,7 @@ def render_consulta_externa(
         antecedentes_default = antecedentes_default or (ANTECEDENTES_DEFAULT if es_pediatrica else ANTECEDENTES_ADULTO_DEFAULT)
     if plan_default is None:
         plan_default = "" if modo_homeopatia_pediatrica_ia else PLAN_DEFAULT
+    examen_default = examen_default or EXAMEN_DEFAULT
     revision_default = revision_default or "NIEGA OTROS SINTOMAS/SIGNOS A LOS YA MENCIONADOS."
     sintomas_generales_default = sintomas_generales_default or ""
     biopatografica_default = biopatografica_default or ""
@@ -733,7 +807,7 @@ def render_consulta_externa(
         f"{prefix}_pc": "",
         f"{prefix}_imc_adulto": "",
         f"{prefix}_neuro": "",
-        f"{prefix}_examen": EXAMEN_DEFAULT,
+        f"{prefix}_examen": examen_default,
         f"{prefix}_paraclinicos_texto": "",
         f"{prefix}_paraclinicos_auto": "",
         f"{prefix}_paraclinicos_pdf_sig": "",
@@ -1178,11 +1252,15 @@ def render_consulta_externa(
                 "Eres un médico homeópata pediátrico experto en repertorización clínica. "
                 "Usa únicamente la información entregada y no inventes síntomas ni antecedentes. "
                 "Responde en MAYÚSCULAS. "
-                "Debes organizar la respuesta exactamente en dos apartados: "
-                "1) TOTALIDAD PATOLÓGICA CARACTERÍSTICA (TPC) y "
-                "2) TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC). "
-                "En cada apartado resume de forma precisa los hallazgos más individualizantes del caso y, cuando sea útil, añade RUBROS / EJES REPERTORIALES SUGERIDOS. "
-                "Prioriza la semiología pediátrica y el material clínico realmente consignado en la historia."
+                "Debes construir una REPERTORIZACIÓN CON LENGUAJE REPERTORIAL, NO UN RESUMEN NARRATIVO. "
+                "La salida debe seguir este esquema exacto cuando haya datos suficientes: "
+                "TOTALIDAD SINTOMÁTICA CARACTERÍSTICA (TSC), luego el subtítulo SÍNTOMAS MENTALES., luego una lista numerada de rubros repertoriales; "
+                "después el subtítulo SÍNTOMAS GENERALES., luego una lista numerada; "
+                "después el subtítulo SÍNTOMAS PARTICULARES., luego una lista numerada. "
+                "Cada línea debe escribirse como RUBRO REPERTORIAL BREVE, por ejemplo: MENTE, ABANDONO, SENSACIÓN DE; GENERALES, FRÍO, AGRAVA; NARIZ, RINORREA, HIALINA. "
+                "No redactes frases largas, no copies párrafos clínicos, no incluyas textos guía de la plantilla, no incluyas placeholders como XX o #, y no pongas síntomas negativos salvo que sean altamente individualizantes. "
+                "Si no hay datos suficientes para un subtítulo, escribe NO HAY DATOS SUFICIENTES. "
+                "Prioriza primero síntomas mentales característicos, luego generales y después particulares."
             )
             instrucciones_analisis_homeo = (
                 "Eres un médico homeópata pediátrico con experiencia en análisis clínico y repertorización. "
@@ -1244,12 +1322,6 @@ def render_consulta_externa(
                     st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
                     st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
                     repertorizacion = repertorizacion_generada
-                else:
-                    repertorizacion_generada = _generar_repertorizacion_local(contexto_repertorizacion_ia)
-                    if repertorizacion_generada:
-                        st.session_state[f"{prefix}_repertorizacion"] = repertorizacion_generada
-                        st.session_state[f"{prefix}_repertorizacion_base"] = repertorizacion_generada
-                        repertorizacion = repertorizacion_generada
 
                 analisis_generado = str(paquete_homeo_ia.get("analisis") or "").strip()
                 if analisis_generado:
@@ -1273,6 +1345,7 @@ def render_consulta_externa(
                 error_repert = obtener_error_ia("repertorizacion")
                 if error_repert:
                     st.error(f"No fue posible generar la repertorización con IA: {error_repert}")
+                    st.caption("No se completó una repertorización automática para evitar mostrar un resultado incoherente.")
                 else:
                     st.warning("No fue posible generar la repertorización con la información actual.")
 
@@ -1327,25 +1400,26 @@ def render_consulta_externa(
         fingerprint_analisis_ia = hashlib.md5(
             json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
-        analisis_default = complementar_analisis_con_ia(
-            analisis_default,
-            contexto_analisis_ia,
-            fingerprint_analisis_ia,
-            instrucciones=(
-                instrucciones_analisis_ia
-                or (
-                    "Eres un asistente clínico que redacta análisis médicos en español. "
-                    "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-                    "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-                    "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-                    "Integra antecedentes relevantes cuando aporten al caso clínico. "
-                    "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
-                    "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-                    "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-                    "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
-                )
-            ),
-        )
+        if usar_ia_analisis:
+            analisis_default = complementar_analisis_con_ia(
+                analisis_default,
+                contexto_analisis_ia,
+                fingerprint_analisis_ia,
+                instrucciones=(
+                    instrucciones_analisis_ia
+                    or (
+                        "Eres un asistente clínico que redacta análisis médicos en español. "
+                        "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                        "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                        "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                        "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                        "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
+                        "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                        "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                        "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
+                    )
+                ),
+            )
 
     st.subheader("Análisis")
     if permitir_generacion_analisis and st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
@@ -1376,6 +1450,8 @@ def render_consulta_externa(
     st.subheader("Diagnósticos")
     if usar_modo_urgencias:
         diagnosticos = _construir_diagnostico_cie10(prefix)
+    elif not mostrar_diagnosticos_principales:
+        diagnosticos = st.session_state.get(f"{prefix}_diagnosticos", "")
     else:
         diagnosticos = st.text_area("Diagnósticos", key=f"{prefix}_diagnosticos", height=120)
     observacion_dx = ""
@@ -1398,11 +1474,12 @@ def render_consulta_externa(
         fingerprint_obs_dx_ia = hashlib.md5(
             json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
-        obs_dx_default = complementar_observacion_diagnostica_con_ia(
-            obs_dx_default,
-            contexto_obs_dx_ia,
-            fingerprint_obs_dx_ia,
-        )
+        if usar_ia_observacion_dx:
+            obs_dx_default = complementar_observacion_diagnostica_con_ia(
+                obs_dx_default,
+                contexto_obs_dx_ia,
+                fingerprint_obs_dx_ia,
+            )
         if st.session_state.get(f"{prefix}_obs_dx_base") != obs_dx_default:
             if st.session_state.get(f"{prefix}_obs_dx", "") == st.session_state.get(f"{prefix}_obs_dx_base", ""):
                 st.session_state[f"{prefix}_obs_dx"] = obs_dx_default
@@ -1453,12 +1530,15 @@ def render_consulta_externa(
         fingerprint_plan_ia = hashlib.md5(
             json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
-        plan_sugerido = complementar_plan_con_ia(
-            plan_base_local,
-            contexto_plan_ia,
-            fingerprint_plan_ia,
-            instrucciones=instrucciones_plan_ia,
-        )
+        if usar_ia_plan:
+            plan_sugerido = complementar_plan_con_ia(
+                plan_base_local,
+                contexto_plan_ia,
+                fingerprint_plan_ia,
+                instrucciones=instrucciones_plan_ia,
+            )
+        else:
+            plan_sugerido = plan_base_local
     if st.session_state.get(f"{prefix}_plan_base") != plan_sugerido:
         if st.session_state.get(f"{prefix}_plan", "") == st.session_state.get(f"{prefix}_plan_base", ""):
             st.session_state[f"{prefix}_plan"] = plan_sugerido
