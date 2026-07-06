@@ -756,6 +756,7 @@ def render_consulta_externa(
     usar_ia_analisis=True,
     usar_ia_plan=True,
     usar_ia_observacion_dx=True,
+    mostrar_boton_ejemplo=True,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -832,20 +833,21 @@ def render_consulta_externa(
     _init_state(defaults)
 
     st.header(titulo)
-    col_acc_1, col_acc_2 = st.columns(2)
-    if col_acc_1.button("Ver ejemplo", key=f"{prefix}_ver_ejemplo", use_container_width=True):
-        _cargar_ejemplo_consulta_externa(
-            prefix,
-            defaults,
-            es_pediatrica=es_pediatrica,
-            mostrar_neurodesarrollo=mostrar_neurodesarrollo,
-            mostrar_sintomas_generales=mostrar_sintomas_generales,
-            mostrar_biopatografica=mostrar_biopatografica,
-            mostrar_sintomas_mentales=mostrar_sintomas_mentales,
-            mostrar_pb=mostrar_pb,
-            mostrar_modalidad_consulta=mostrar_modalidad_consulta,
-        )
-        st.rerun()
+    if mostrar_boton_ejemplo:
+        col_acc_1, col_acc_2 = st.columns(2)
+        if col_acc_1.button("Ver ejemplo", key=f"{prefix}_ver_ejemplo", use_container_width=True):
+            _cargar_ejemplo_consulta_externa(
+                prefix,
+                defaults,
+                es_pediatrica=es_pediatrica,
+                mostrar_neurodesarrollo=mostrar_neurodesarrollo,
+                mostrar_sintomas_generales=mostrar_sintomas_generales,
+                mostrar_biopatografica=mostrar_biopatografica,
+                mostrar_sintomas_mentales=mostrar_sintomas_mentales,
+                mostrar_pb=mostrar_pb,
+                mostrar_modalidad_consulta=mostrar_modalidad_consulta,
+            )
+            st.rerun()
 
     modalidad_consulta = modalidad_consulta_forzada
     if modalidad_consulta_forzada is not None:
@@ -901,7 +903,7 @@ def render_consulta_externa(
         )
     with col6:
         informante = st.text_input(
-            "Informante / acompañante",
+            "Informante (parentesco - edad - ocupacion)",
             key=f"{prefix}_informante",
         )
 
@@ -1596,7 +1598,7 @@ DOCUMENTO: {documento}
 FECHA DE NACIMIENTO: {fecha_str}
 EPS: {eps}
 TELEFONO: {telefono}
-INFORMANTE / ACOMPAÑANTE: {informante}
+INFORMANTE: {informante}
 
 MOTIVO DE CONSULTA:
 {_motivo_reporte(motivo)}
@@ -1684,7 +1686,7 @@ PLAN:
 
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
-            ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE / ACOMPAÑANTE: {informante}"),
+            ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE: {informante}"),
             ("MOTIVO DE CONSULTA", _motivo_reporte(motivo)),
             ("ENFERMEDAD ACTUAL", enfermedad_actual_historia),
         ]
