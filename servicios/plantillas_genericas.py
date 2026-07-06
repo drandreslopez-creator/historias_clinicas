@@ -88,6 +88,8 @@ def render_consulta_neonatologia():
         usar_ia_plan=False,
         usar_ia_observacion_dx=False,
         mostrar_boton_ejemplo=False,
+        generar_analisis_automatico=False,
+        generar_plan_automatico=False,
     )
 
 

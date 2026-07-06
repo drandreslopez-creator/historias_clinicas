@@ -757,6 +757,8 @@ def render_consulta_externa(
     usar_ia_plan=True,
     usar_ia_observacion_dx=True,
     mostrar_boton_ejemplo=True,
+    generar_analisis_automatico=True,
+    generar_plan_automatico=True,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -1357,7 +1359,7 @@ def render_consulta_externa(
             height=240,
         )
 
-    if permitir_generacion_analisis and not modo_homeopatia_pediatrica_ia:
+    if permitir_generacion_analisis and not modo_homeopatia_pediatrica_ia and generar_analisis_automatico:
         analisis_default = generar_analisis_asistido_urgencias(
             enfermedad_auto,
             resumen_antecedentes_analisis,
@@ -1424,7 +1426,7 @@ def render_consulta_externa(
             )
 
     st.subheader("Análisis")
-    if permitir_generacion_analisis and st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
+    if generar_analisis_automatico and permitir_generacion_analisis and st.session_state.get(f"{prefix}_analisis_base") != analisis_default:
         if st.session_state.get(f"{prefix}_analisis") == st.session_state.get(f"{prefix}_analisis_base", ""):
             st.session_state[f"{prefix}_analisis"] = analisis_default
         else:
@@ -1501,6 +1503,8 @@ def render_consulta_externa(
     plan_base_local = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
     if modo_homeopatia_pediatrica_ia:
         plan_sugerido = plan_generado_homeo
+    elif not generar_plan_automatico:
+        plan_sugerido = st.session_state.get(f"{prefix}_plan", "")
     else:
         contexto_plan_ia = {
             "titulo": titulo,
