@@ -576,6 +576,10 @@ def _historia_path(nombre_archivo):
     return BASE_DIR / "data" / nombre_archivo
 
 
+def _draft_path(prefix):
+    return BASE_DIR / "data" / f"borrador_{prefix}.json"
+
+
 def _init_state(defaults):
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -588,6 +592,99 @@ def _clear_state(prefix, defaults):
         st.session_state.pop(key, None)
     for key, value in defaults.items():
         st.session_state[key] = value
+
+
+def _cargar_borrador_consulta(prefix):
+    draft_path = _draft_path(prefix)
+    if not draft_path.exists():
+        return {}
+    try:
+        with draft_path.open("r", encoding="utf-8") as f:
+            payload = json.load(f)
+        data = payload.get("data", {}) if isinstance(payload, dict) else {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _borrar_borrador_consulta(prefix):
+    try:
+        draft_path = _draft_path(prefix)
+        if draft_path.exists():
+            draft_path.unlink()
+    except Exception:
+        pass
+    st.session_state.pop(f"_{prefix}_borrador_hash", None)
+
+
+def _snapshot_borrador_consulta(defaults):
+    snapshot = {}
+    for key, default in defaults.items():
+        snapshot[key] = st.session_state.get(key, default)
+    return snapshot
+
+
+def _formulario_consulta_vacio(defaults):
+    for key, default in defaults.items():
+        actual = st.session_state.get(key, default)
+        if actual != default:
+            return False
+    return True
+
+
+def _restaurar_borrador_consulta_si_aplica(prefix, defaults):
+    restored_key = f"_{prefix}_borrador_restaurado"
+    notice_key = f"_{prefix}_borrador_notice"
+
+    if st.session_state.get(restored_key):
+        return
+
+    if not _formulario_consulta_vacio(defaults):
+        st.session_state[restored_key] = True
+        return
+
+    data = _cargar_borrador_consulta(prefix)
+    if not data:
+        st.session_state[restored_key] = True
+        return
+
+    for key in defaults.keys():
+        if key in data:
+            st.session_state[key] = data[key]
+
+    st.session_state[restored_key] = True
+    st.session_state[notice_key] = "Borrador restaurado automáticamente."
+
+
+def _guardar_borrador_consulta(prefix, defaults):
+    snapshot = _snapshot_borrador_consulta(defaults)
+    tiene_contenido = any(
+        snapshot.get(key) != default
+        for key, default in defaults.items()
+    )
+    if not tiene_contenido:
+        _borrar_borrador_consulta(prefix)
+        return
+
+    fingerprint = hashlib.md5(
+        json.dumps(snapshot, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()
+    hash_key = f"_{prefix}_borrador_hash"
+    if st.session_state.get(hash_key) == fingerprint:
+        return
+
+    payload = {
+        "updated_at": datetime.now(BOGOTA_TZ).isoformat(),
+        "data": snapshot,
+    }
+    try:
+        draft_path = _draft_path(prefix)
+        draft_path.parent.mkdir(parents=True, exist_ok=True)
+        with draft_path.open("w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+        st.session_state[hash_key] = fingerprint
+    except Exception:
+        pass
 
 
 def _cargar_ejemplo_consulta_externa(
@@ -829,12 +926,23 @@ def render_consulta_externa(
     }
 
     if st.session_state.pop(f"{prefix}_clear_requested", False):
+        _borrar_borrador_consulta(prefix)
         _clear_state(prefix, defaults)
         st.rerun()
 
     _init_state(defaults)
+    _restaurar_borrador_consulta_si_aplica(prefix, defaults)
+    if st.session_state.pop(f"_{prefix}_borrador_notice", ""):
+        st.caption("Borrador restaurado automáticamente.")
 
     st.header(titulo)
+    edicion_rapida = st.toggle(
+        "Edición rápida",
+        value=True,
+        key=f"{prefix}_modo_edicion_rapida",
+        help="Reduce la espera mientras escribes. La IA fuerte se aplica al generar la historia clínica.",
+    )
+    refinar_ia_en_vivo = not edicion_rapida
     if mostrar_boton_ejemplo:
         col_acc_1, col_acc_2 = st.columns(2)
         if col_acc_1.button("Ver ejemplo", key=f"{prefix}_ver_ejemplo", use_container_width=True):
@@ -1404,7 +1512,7 @@ def render_consulta_externa(
         fingerprint_analisis_ia = hashlib.md5(
             json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
-        if usar_ia_analisis:
+        if usar_ia_analisis and refinar_ia_en_vivo:
             analisis_default = complementar_analisis_con_ia(
                 analisis_default,
                 contexto_analisis_ia,
@@ -1478,7 +1586,7 @@ def render_consulta_externa(
         fingerprint_obs_dx_ia = hashlib.md5(
             json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
-        if usar_ia_observacion_dx:
+        if usar_ia_observacion_dx and refinar_ia_en_vivo:
             obs_dx_default = complementar_observacion_diagnostica_con_ia(
                 obs_dx_default,
                 contexto_obs_dx_ia,
@@ -1536,7 +1644,7 @@ def render_consulta_externa(
         fingerprint_plan_ia = hashlib.md5(
             json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
-        if usar_ia_plan:
+        if usar_ia_plan and refinar_ia_en_vivo:
             plan_sugerido = complementar_plan_con_ia(
                 plan_base_local,
                 contexto_plan_ia,
@@ -1560,6 +1668,78 @@ def render_consulta_externa(
         st.rerun()
 
     if generar:
+        if permitir_generacion_analisis and not modo_homeopatia_pediatrica_ia:
+            with st.spinner("Actualizando análisis, impresión diagnóstica y plan..."):
+                analisis_default_final = analisis_default
+                if generar_analisis_automatico:
+                    analisis_default_final = generar_analisis_asistido_urgencias(
+                        enfermedad_auto,
+                        resumen_antecedentes_analisis,
+                        resumen_examen_analisis,
+                        resumen_signos_analisis,
+                        resumen_paraclinicos_analisis,
+                        conducta_final_texto,
+                        destinatario_informacion,
+                    )
+                    if usar_ia_analisis:
+                        analisis_default_final = complementar_analisis_con_ia(
+                            analisis_default_final,
+                            contexto_analisis_ia,
+                            fingerprint_analisis_ia,
+                            instrucciones=(
+                                instrucciones_analisis_ia
+                                or (
+                                    "Eres un asistente clínico que redacta análisis médicos en español. "
+                                    "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                                    "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                                    "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                                    "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                                    "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
+                                    "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                                    "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                                    "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR."
+                                )
+                            ),
+                            forzar=True,
+                        )
+                    if st.session_state.get(f"{prefix}_analisis", "") in ("", st.session_state.get(f"{prefix}_analisis_base", "")):
+                        st.session_state[f"{prefix}_analisis"] = analisis_default_final
+                    st.session_state[f"{prefix}_analisis_base"] = analisis_default_final
+                    analisis = st.session_state.get(f"{prefix}_analisis", analisis_default_final)
+
+                obs_dx_default_final = construir_observacion_diagnostica_base(
+                    diagnosticos,
+                    analisis_default_final,
+                    antecedentes,
+                    "",
+                )
+                if usar_ia_observacion_dx:
+                    obs_dx_default_final = complementar_observacion_diagnostica_con_ia(
+                        obs_dx_default_final,
+                        contexto_obs_dx_ia,
+                        fingerprint_obs_dx_ia,
+                        forzar=True,
+                    )
+                if st.session_state.get(f"{prefix}_obs_dx", "") in ("", st.session_state.get(f"{prefix}_obs_dx_base", "")):
+                    st.session_state[f"{prefix}_obs_dx"] = obs_dx_default_final
+                st.session_state[f"{prefix}_obs_dx_base"] = obs_dx_default_final
+                observacion_dx = st.session_state.get(f"{prefix}_obs_dx", obs_dx_default_final)
+
+                if generar_plan_automatico:
+                    plan_sugerido_final = plan_base_local
+                    if usar_ia_plan:
+                        plan_sugerido_final = complementar_plan_con_ia(
+                            plan_base_local,
+                            contexto_plan_ia,
+                            fingerprint_plan_ia,
+                            instrucciones=instrucciones_plan_ia,
+                            forzar=True,
+                        )
+                    if st.session_state.get(f"{prefix}_plan", "") in ("", st.session_state.get(f"{prefix}_plan_base", "")):
+                        st.session_state[f"{prefix}_plan"] = plan_sugerido_final
+                    st.session_state[f"{prefix}_plan_base"] = plan_sugerido_final
+                    plan = st.session_state.get(f"{prefix}_plan", plan_sugerido_final)
+
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         paraclinicos_reporte = _texto_reporte_bloque(paraclinicos_texto, "NO HAY LABORATORIOS POR REPORTAR")
         imagenes_reporte = _texto_reporte_bloque(imagenes_texto, "NO HAY IMAGENES POR REPORTAR")
@@ -1780,6 +1960,7 @@ PLAN:
                 "drive_webview_link": resultado_drive.get("webViewLink"),
             },
         )
+        _borrar_borrador_consulta(prefix)
         render_informe_html(titulo.upper(), secciones, historia.upper())
 
     st.divider()
@@ -1809,3 +1990,5 @@ PLAN:
                         st.warning(resultado_eliminacion.get("message", "No se pudo eliminar la historia."))
         else:
             st.info("Aún no hay historias guardadas.")
+
+    _guardar_borrador_consulta(prefix, defaults)

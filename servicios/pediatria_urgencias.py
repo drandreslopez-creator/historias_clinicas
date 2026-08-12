@@ -3293,10 +3293,10 @@ def construir_observacion_diagnostica_base(
     return "\n".join(lineas)
 
 
-def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fingerprint):
+def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fingerprint, forzar=False):
     if not ia_analisis_configurada():
         return base_observacion
-    if not debe_refinar_con_ia("obs_dx", fingerprint):
+    if not forzar and not debe_refinar_con_ia("obs_dx", fingerprint):
         return base_observacion
 
     cache_key = "obs_dx_ia_cache"
@@ -4676,6 +4676,13 @@ def render():
     if col_acc_1.button("Ver ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
         cargar_ejemplo_urgencias()
         st.rerun()
+    edicion_rapida = st.toggle(
+        "Edición rápida",
+        value=True,
+        key="modo_edicion_rapida_urgencias",
+        help="Reduce la espera mientras escribes. La IA fuerte se aplica al generar la historia clínica.",
+    )
+    refinar_ia_en_vivo = not edicion_rapida
 
     col1, col2 = st.columns(2)
 
@@ -4985,24 +4992,25 @@ def render():
         fingerprint_analisis_ia = hashlib.md5(
             json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
-        analisis_default = complementar_analisis_con_ia(
-            analisis_default,
-            contexto_analisis_ia,
-            fingerprint_analisis_ia,
-            instrucciones=(
-                "Eres un asistente clínico que redacta análisis médicos en español. "
-                "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-                "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-                "Mantén un estilo médico parecido al de una historia clínica colombiana. "
-                "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-                "Integra antecedentes relevantes cuando aporten al caso clínico. "
-                "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de manera coherente con la historia, "
-                "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-                "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-                "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
-                "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
-            ),
-        )
+        if refinar_ia_en_vivo:
+            analisis_default = complementar_analisis_con_ia(
+                analisis_default,
+                contexto_analisis_ia,
+                fingerprint_analisis_ia,
+                instrucciones=(
+                    "Eres un asistente clínico que redacta análisis médicos en español. "
+                    "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                    "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                    "Mantén un estilo médico parecido al de una historia clínica colombiana. "
+                    "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                    "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                    "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de manera coherente con la historia, "
+                    "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                    "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                    "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
+                    "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
+                ),
+            )
 
     st.subheader("Análisis")
 
@@ -5107,11 +5115,12 @@ def render():
     fingerprint_obs_dx_ia = hashlib.md5(
         json.dumps(contexto_obs_dx_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
-    obs_dx_default = complementar_observacion_diagnostica_con_ia(
-        obs_dx_default,
-        contexto_obs_dx_ia,
-        fingerprint_obs_dx_ia,
-    )
+    if refinar_ia_en_vivo:
+        obs_dx_default = complementar_observacion_diagnostica_con_ia(
+            obs_dx_default,
+            contexto_obs_dx_ia,
+            fingerprint_obs_dx_ia,
+        )
     if "obs_dx_base" not in st.session_state:
         st.session_state["obs_dx"] = obs_dx_default
         st.session_state["obs_dx_base"] = obs_dx_default
@@ -5154,10 +5163,14 @@ def render():
     fingerprint_plan_ia = hashlib.md5(
         json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
     ).hexdigest()
-    plan_sugerido = complementar_plan_con_ia(
-        plan_base_local,
-        contexto_plan_ia,
-        fingerprint_plan_ia,
+    plan_sugerido = (
+        complementar_plan_con_ia(
+            plan_base_local,
+            contexto_plan_ia,
+            fingerprint_plan_ia,
+        )
+        if refinar_ia_en_vivo
+        else plan_base_local
     )
 
     if "plan" not in st.session_state:
@@ -5398,6 +5411,68 @@ def render():
     )
 
     if generar_historia:
+        if permitir_generacion_analisis:
+            with st.spinner("Actualizando análisis, impresión diagnóstica y plan..."):
+                analisis_default_final = generar_analisis_asistido_urgencias(
+                    enfermedad_auto,
+                    resumen_antecedentes_analisis,
+                    resumen_examen_analisis,
+                    resumen_signos_analisis,
+                    resumen_paraclinicos_analisis,
+                    conducta_final_texto,
+                    destinatario_informacion,
+                )
+                analisis_default_final = complementar_analisis_con_ia(
+                    analisis_default_final,
+                    contexto_analisis_ia,
+                    fingerprint_analisis_ia,
+                    instrucciones=(
+                        "Eres un asistente clínico que redacta análisis médicos en español. "
+                        "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
+                        "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
+                        "Mantén un estilo médico parecido al de una historia clínica colombiana. "
+                        "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
+                        "Integra antecedentes relevantes cuando aporten al caso clínico. "
+                        "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de manera coherente con la historia, "
+                        "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
+                        "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
+                        "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
+                        "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
+                    ),
+                    forzar=True,
+                )
+                if st.session_state.get("analisis") in ("", st.session_state.get("analisis_base", "")):
+                    st.session_state["analisis"] = analisis_default_final
+                st.session_state["analisis_base"] = analisis_default_final
+                analisis = st.session_state.get("analisis", analisis_default_final)
+
+                obs_dx_default_final = construir_observacion_diagnostica_base(
+                    diagnostico_seleccionado,
+                    analisis_default_final,
+                    antecedentes,
+                    dx_nutricional,
+                )
+                obs_dx_default_final = complementar_observacion_diagnostica_con_ia(
+                    obs_dx_default_final,
+                    contexto_obs_dx_ia,
+                    fingerprint_obs_dx_ia,
+                    forzar=True,
+                )
+                if st.session_state.get("obs_dx") in ("", st.session_state.get("obs_dx_base", "")):
+                    st.session_state["obs_dx"] = obs_dx_default_final
+                st.session_state["obs_dx_base"] = obs_dx_default_final
+                observacion_diagnostico = st.session_state.get("obs_dx", obs_dx_default_final)
+
+                plan_sugerido_final = complementar_plan_con_ia(
+                    plan_base_local,
+                    contexto_plan_ia,
+                    fingerprint_plan_ia,
+                    forzar=True,
+                )
+                if st.session_state.get("plan") in ("", st.session_state.get("plan_base", "")):
+                    st.session_state["plan"] = plan_sugerido_final
+                st.session_state["plan_base"] = plan_sugerido_final
+                plan = st.session_state.get("plan", plan_sugerido_final)
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         diagnostico_final = diagnostico_seleccionado or ""
