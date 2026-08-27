@@ -182,6 +182,11 @@ APOYOS_AIEPI = {
 }
 
 
+def obtener_apoyo_aiepi(clave: str) -> dict:
+    """Devuelve la definición del apoyo AIEPI seleccionado, si existe."""
+    return APOYOS_AIEPI.get(clave, {})
+
+
 def _apoyo_sin_ruta_gpc(diagnostico: object) -> tuple[str, tuple[str, ...]]:
     texto = _normalizar(diagnostico)
     if any(termino in texto for termino in ("RINOFARING", "RESFRIADO", "INFECCION RESPIRATORIA ALTA", "IRA ALTA")):
