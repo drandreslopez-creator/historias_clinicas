@@ -139,7 +139,9 @@ RUTAS_GPC = {
 
 
 def detectar_ruta_gpc(diagnostico: object, texto_clinico: object = "") -> str:
-    texto = _normalizar(f"{diagnostico or ''} {texto_clinico or ''}")
+    # La ruta se activa por el diagnóstico registrado, no por síntomas aislados
+    # que pueden estar negados dentro de la revisión por sistemas.
+    texto = _normalizar(diagnostico)
     codigo = _normalizar(diagnostico).split(" ", 1)[0]
     for clave, ruta in RUTAS_GPC.items():
         if any(codigo.startswith(prefijo) for prefijo in ruta["codigos"]):
@@ -162,12 +164,17 @@ def resumen_gpc_para_ia(clave: str) -> str:
     return f"RUTA GPC: {ruta['nombre']}. DEBE DOCUMENTAR: {items}. {alertas}"
 
 
-def construir_trazabilidad_gpc(clave: str, texto_clinico: object, justificacion: object = "") -> str:
+def construir_trazabilidad_gpc(
+    clave: str,
+    texto_clinico: object,
+    justificacion: object = "",
+    registro_complementario: object = "",
+) -> str:
     ruta = obtener_ruta_gpc(clave)
     if not ruta:
         return "NO SE DETECTÓ RUTA GPC ESPECÍFICA PARA EL DIAGNÓSTICO REGISTRADO."
 
-    texto = _normalizar(texto_clinico)
+    texto = _normalizar(f"{texto_clinico or ''}\n{registro_complementario or ''}")
     lineas = [
         f"RUTA APLICADA: {ruta['nombre']}",
         f"FUENTE: {ruta['fuente']}",
@@ -176,36 +183,85 @@ def construir_trazabilidad_gpc(clave: str, texto_clinico: object, justificacion:
         "ELEMENTOS DE TRAZABILIDAD:",
     ]
     for etiqueta, terminos in ruta["verificaciones"].items():
-        estado = "DOCUMENTADO" if any(termino in texto for termino in terminos) else "PENDIENTE DE VERIFICAR"
+        estado = "DOCUMENTADO" if any(_normalizar(termino) in texto for termino in terminos) else "PENDIENTE DE VERIFICAR"
         lineas.append(f"- {etiqueta}: {estado}")
+    if str(registro_complementario or "").strip():
+        lineas.append("REGISTRO CLÍNICO COMPLEMENTARIO GPC:")
+        lineas.append(str(registro_complementario).strip())
     if str(justificacion or "").strip():
         lineas.append("JUSTIFICACIÓN CLÍNICA DE APARTAMIENTO O INDIVIDUALIZACIÓN:")
         lineas.append(str(justificacion).strip())
     return "\n".join(lineas)
 
 
-def render_trazabilidad_gpc(st, *, clave: str, texto_clinico: object, justificacion_key: str) -> tuple[str, str]:
-    ruta = obtener_ruta_gpc(clave)
-    st.subheader("Trazabilidad GPC")
+def render_trazabilidad_gpc(
+    st,
+    *,
+    clave: str,
+    texto_clinico: object,
+    justificacion_key: str,
+    registro_key: str,
+    selector_key: str,
+) -> tuple[str, str, str, str]:
+    opciones = [""] + list(RUTAS_GPC)
+    clave_actual = st.session_state.get(selector_key, clave)
+    if clave_actual not in opciones:
+        clave_actual = clave
+    ruta_seleccionada = st.selectbox(
+        "Ruta GPC aplicable",
+        opciones,
+        index=opciones.index(clave_actual),
+        key=selector_key,
+        format_func=lambda opcion: (
+            "SIN RUTA GPC ESPECÍFICA" if not opcion else RUTAS_GPC[opcion]["nombre"]
+        ),
+        help="Confirma la ruta según el diagnóstico clínico. La sugerencia automática se basa únicamente en el diagnóstico registrado.",
+    )
+    ruta = obtener_ruta_gpc(ruta_seleccionada)
+    st.subheader("Apoyo GPC")
     if not ruta:
-        st.caption("No se detectó una ruta GPC específica con el diagnóstico actual. Puede completar el plan clínico y documentar la fuente institucional cuando corresponda.")
-        return "", ""
+        st.caption("Seleccione una ruta cuando exista una guía aplicable. El análisis no incluirá referencias GPC automáticamente.")
+        return "", "", "", ""
 
     st.caption(f"Ruta detectada: {ruta['nombre']}")
     st.caption(f"Fuente: {ruta['fuente']}")
     st.link_button("Consultar fuente de la ruta", ruta["url"], use_container_width=False)
+    st.caption("Para esta ruta, deje documentado según corresponda:")
+    for item in ruta["documentacion"]:
+        st.caption(f"- {item}")
     for alerta in ruta["alertas"]:
         st.info(alerta)
 
-    texto = _normalizar(texto_clinico)
+    registro_previo = str(st.session_state.get(registro_key, "") or "")
+    texto = _normalizar(f"{texto_clinico or ''}\n{registro_previo}")
     for etiqueta, terminos in ruta["verificaciones"].items():
-        estado = "DOCUMENTADO" if any(termino in texto for termino in terminos) else "PENDIENTE DE VERIFICAR"
+        estado = "DOCUMENTADO" if any(_normalizar(termino) in texto for termino in terminos) else "PENDIENTE DE VERIFICAR"
         st.caption(f"{etiqueta}: {estado}")
 
+    registro_complementario = st.text_area(
+        "Registro clínico complementario GPC",
+        key=registro_key,
+        height=110,
+        placeholder=(
+            "Documente aquí los elementos pendientes: severidad, revaloración, "
+            "tolerancia oral, diuresis, educación de signos de alarma u otros hallazgos relevantes."
+        ),
+        help="Este registro se integra al análisis, al plan y al informe final.",
+    )
     justificacion = st.text_area(
         "Justificación clínica si se individualiza o se aparta de la ruta",
         key=justificacion_key,
         height=90,
         help="Registre el motivo clínico, contraindicación, comorbilidad o decisión individual que modifique la conducta sugerida.",
     )
-    return construir_trazabilidad_gpc(clave, texto_clinico, justificacion), resumen_gpc_para_ia(clave)
+    return (
+        ruta_seleccionada,
+        construir_trazabilidad_gpc(
+            ruta_seleccionada,
+            f"{texto_clinico or ''}\n{registro_complementario or ''}",
+            justificacion,
+            registro_complementario,
+        ),
+        resumen_gpc_para_ia(ruta_seleccionada),
+        registro_complementario,
+    )
