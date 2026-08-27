@@ -1001,10 +1001,44 @@ def construir_texto_busqueda(code, description, label):
 
 @st.cache_data(show_spinner=False)
 def traducir_cie10_descripcion(descripcion):
+    texto_original = str(descripcion or "").strip()
     try:
-        return GoogleTranslator(source="en", target="es").translate(str(descripcion))
+        texto_traducido = GoogleTranslator(source="en", target="es").translate(texto_original)
+        if texto_traducido and texto_traducido.strip().lower() != texto_original.lower():
+            return texto_traducido
     except Exception:
-        return str(descripcion)
+        pass
+    return traducir_diagnostico_local(texto_original)
+
+
+TRADUCCIONES_DIAGNOSTICO_LOCAL = {
+    "acute nasopharyngitis [common cold]": "RINOFARINGITIS AGUDA [RESFRIADO COMÚN]",
+    "pneumonia, organism unspecified": "NEUMONÍA, ORGANISMO NO ESPECIFICADO",
+    "asthma": "ASMA",
+    "predominantly allergic asthma": "ASMA PREDOMINANTEMENTE ALÉRGICA",
+    "acute bronchiolitis": "BRONQUIOLITIS AGUDA",
+    "bronchiolitis, unspecified": "BRONQUIOLITIS, NO ESPECIFICADA",
+    "acute tonsillitis, unspecified": "AMIGDALITIS AGUDA, NO ESPECIFICADA",
+    "acute laryngitis": "LARINGITIS AGUDA",
+    "acute gastroenteritis": "GASTROENTERITIS AGUDA",
+    "gastroenteritis and colitis of unspecified origin": "GASTROENTERITIS Y COLITIS DE ORIGEN NO ESPECIFICADO",
+    "otitis media, unspecified": "OTITIS MEDIA, NO ESPECIFICADA",
+}
+
+
+def traducir_diagnostico_local(texto):
+    """Respaldo sin internet para que el selector nunca muestre el CIE-10 en inglés."""
+    clave = str(texto or "").strip().lower()
+    return TRADUCCIONES_DIAGNOSTICO_LOCAL.get(clave, str(texto or "").strip())
+
+
+def normalizar_diagnostico_espanol(texto):
+    """Corrige términos CIE-10 frecuentes si un modelo los devuelve en inglés."""
+    salida = str(texto or "")
+    reemplazos = sorted(TRADUCCIONES_DIAGNOSTICO_LOCAL.items(), key=lambda item: len(item[0]), reverse=True)
+    for ingles, espanol in reemplazos:
+        salida = re.sub(re.escape(ingles), espanol, salida, flags=re.IGNORECASE)
+    return salida
 
 
 @st.cache_data(show_spinner=False)
@@ -3285,8 +3319,8 @@ def extraer_descripcion_principal_diagnostico(diagnostico):
     if not texto:
         return ""
     if " - " in texto:
-        return limpiar_fragmento_analisis(texto.split(" - ", 1)[1])
-    return limpiar_fragmento_analisis(texto)
+        return limpiar_fragmento_analisis(normalizar_diagnostico_espanol(texto.split(" - ", 1)[1]))
+    return limpiar_fragmento_analisis(normalizar_diagnostico_espanol(texto))
 
 
 def construir_observacion_diagnostica_base(
@@ -3348,7 +3382,7 @@ def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fing
     instrucciones = (
         "Eres un asistente clínico que redacta la IMPRESIÓN DIAGNÓSTICA de una historia médica en español. "
         "Usa únicamente la información entregada. No inventes diagnósticos ni hallazgos. "
-        "Debes responder en MAYÚSCULAS y en formato de lista numerada precedida por el título IMPRESIÓN DIAGNÓSTICA:. "
+        "Debes responder exclusivamente en español, en MAYÚSCULAS y en formato de lista numerada precedida por el título IMPRESIÓN DIAGNÓSTICA:. "
         "El diagnóstico CIE-10 principal, si existe, debe quedar en el punto 1 y ser el más importante. "
         "Luego ordena diagnósticos sindromáticos, antecedentes clínicos relevantes y diagnóstico nutricional si aporta al caso. "
         "Máximo 4 ítems. No agregues explicaciones extras."
@@ -3378,7 +3412,7 @@ def complementar_observacion_diagnostica_con_ia(base_observacion, contexto, fing
         response.raise_for_status()
         texto = extraer_texto_respuesta_openai(response.json())
         if texto:
-            texto = texto.strip()
+            texto = normalizar_diagnostico_espanol(texto.strip())
             cache = {"fingerprint": fingerprint, "texto": texto}
             st.session_state[cache_key] = cache
             return texto
@@ -3707,6 +3741,7 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
         "Devuelve exclusivamente un objeto JSON válido con las claves analisis y plan. "
         "analisis debe ser un único párrafo profesional en MAYÚSCULAS. "
         "plan debe ser una lista de indicaciones clínicas en MAYÚSCULAS, una por línea. "
+        "Toda la salida debe estar exclusivamente en español. "
         "Usa únicamente los datos suministrados; no inventes diagnósticos, hallazgos, tratamientos, dosis ni paraclínicos. "
         "Respeta la conducta final registrada y las recomendaciones clínicas entregadas como apoyo. "
         "Integra de manera natural los hallazgos, clasificación, conducta, educación, signos de alarma y control registrados en los apoyos clínicos. "

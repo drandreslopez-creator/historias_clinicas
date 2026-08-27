@@ -1647,7 +1647,7 @@ def render_consulta_externa(
             diagnosticos,
             analisis_default,
             antecedentes,
-            "",
+            dx_nutricional,
         )
         contexto_obs_dx_ia = {
             "diagnostico_cie10_principal": diagnosticos,
@@ -1848,7 +1848,7 @@ def render_consulta_externa(
                     diagnosticos,
                     analisis_default_final,
                     antecedentes,
-                    "",
+                    dx_nutricional,
                 )
                 if st.session_state.get(f"{prefix}_obs_dx", "") in ("", st.session_state.get(f"{prefix}_obs_dx_base", "")):
                     observacion_dx = obs_dx_default_final
