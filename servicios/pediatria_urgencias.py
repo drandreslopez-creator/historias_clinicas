@@ -2741,6 +2741,27 @@ def limpiar_fragmento_analisis(texto):
     return texto.upper()
 
 
+def contiene_hallazgo_positivo(texto, hallazgos):
+    """Distingue hallazgos presentes de los que están explícitamente negados."""
+    texto_limpio = limpiar_fragmento_analisis(texto)
+    for hallazgo in hallazgos:
+        termino = limpiar_fragmento_analisis(hallazgo)
+        for coincidencia in re.finditer(re.escape(termino), texto_limpio):
+            inicio_oracion = max(
+                texto_limpio.rfind(".", 0, coincidencia.start()),
+                texto_limpio.rfind(";", 0, coincidencia.start()),
+                texto_limpio.rfind("\n", 0, coincidencia.start()),
+            ) + 1
+            contexto_previo = texto_limpio[inicio_oracion:coincidencia.start()]
+            negado = re.search(
+                r"\b(SIN|NIEGA|NO PRESENTA|NO HAY|AUSENCIA DE|NEGATIVO)\b[^.;:\n]{0,90}$",
+                contexto_previo,
+            )
+            if not negado:
+                return True
+    return False
+
+
 def extraer_resumen_examen_para_analisis(examen):
     if not examen:
         return ""
@@ -2788,9 +2809,17 @@ def extraer_resumen_examen_para_analisis(examen):
         match = re.search(r"(RINORREA[^.,;]*)", nariz)
         resumen.append(match.group(1).strip() if match else nariz)
 
+    sin_dificultad_toracica = (
+        "SIN TIRAJES" in torax
+        and not contiene_hallazgo_positivo(torax, ("TIRAJES", "RETRACCIONES", "ALETEO"))
+    )
+    sin_hallazgos_respiratorios = not contiene_hallazgo_positivo(
+        cardio,
+        ("AGREGADOS PULMONARES", "CREPITANTES", "SIBILANCIAS", "RONCUS"),
+    )
     cardio_normal = (
         "SIN SOPLOS" in cardio
-        and "SIN AGREGADOS PULMONARES" in cardio
+        and sin_hallazgos_respiratorios
         and ("OXIMETRIAS ADECUADAS" in cardio or "OXIMETRÍAS ADECUADAS" in cardio)
     )
     hemodinamica_estable = (
@@ -2799,12 +2828,14 @@ def extraer_resumen_examen_para_analisis(examen):
     if hemodinamica_estable:
         resumen.append("HEMODINÁMICAMENTE ESTABLE")
 
-    if cardio_normal and "SIN TIRAJES" in torax:
+    if cardio_normal and sin_dificultad_toracica:
         resumen.append("BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO")
     else:
-        if any(x in torax for x in ["TIRAJES", "RETRACCIONES", "ALETEO"]):
+        if contiene_hallazgo_positivo(torax, ("TIRAJES", "RETRACCIONES", "ALETEO")):
             resumen.append("CON DIFICULTAD RESPIRATORIA")
-        if any(x in cardio for x in ["AGREGADOS PULMONARES", "CREPITANTES", "SIBILANCIAS", "RONCUS"]):
+        elif sin_dificultad_toracica and sin_hallazgos_respiratorios:
+            resumen.append("BUEN PATRÓN RESPIRATORIO, SIN SIGNOS DE DIFICULTAD RESPIRATORIA")
+        if contiene_hallazgo_positivo(cardio, ("AGREGADOS PULMONARES", "CREPITANTES", "SIBILANCIAS", "RONCUS")):
             resumen.append("CON HALLAZGOS RESPIRATORIOS AL EXAMEN")
 
     if "SIN SIGNOS DE IRRITACIÓN PERITONEAL" in abdomen or "SIN SIGNOS DE IRRITACION PERITONEAL" in abdomen:
@@ -2835,7 +2866,11 @@ def extraer_resumen_examen_para_analisis(examen):
         if match_piel:
             resumen.append(match_piel.group(1).strip())
 
-    if any(x in orofaringe for x in ["ERITEMA", "HIPEREMIA", "EXUDADO", "PLACAS", "VESICULAS", "VESÍCULAS"]):
+    if "FARINGE" in orofaringe and "ERITEM" in orofaringe:
+        match_faringe = re.search(r"(FARINGE[^.,;]*)", orofaringe)
+        if match_faringe:
+            resumen.append(match_faringe.group(1).strip())
+    elif any(x in orofaringe for x in ["ERITEMA", "HIPEREMIA", "EXUDADO", "PLACAS", "VESICULAS", "VESÍCULAS"]):
         match_oro = re.search(r"(ERITEMA[^.,;]*|HIPEREMIA[^.,;]*|EXUDADO[^.,;]*|PLACAS[^.,;]*|VES[IÍ]CULAS?[^.,;]*)", orofaringe)
         if match_oro:
             resumen.append(f"OROFARINGE CON {match_oro.group(1).strip()}")
@@ -2947,7 +2982,10 @@ def construir_conducta_sugerida_analisis(enfermedad_actual, examen, paraclinicos
     if any(x in texto for x in ["DESHIDRAT", "EMESIS", "VOMIT", "DIARRE", "NO TOLERA LA VIA ORAL", "NO TOLERA LA VÍA ORAL"]):
         conducta.append("SE INDICA MANEJO INTRAHOSPITALARIO CON HIDRATACIÓN Y VIGILANCIA CLÍNICA SEGÚN EVOLUCIÓN")
 
-    if any(x in texto for x in ["SIBILAN", "BRONCOESPAS", "DIFICULTAD RESPIRATORIA", "TIRAJES", "HIPOXEMIA", "REQUERIMIENTO DE O2"]):
+    if contiene_hallazgo_positivo(
+        texto,
+        ("SIBILAN", "BRONCOESPAS", "DIFICULTAD RESPIRATORIA", "TIRAJES", "HIPOXEMIA", "REQUERIMIENTO DE O2"),
+    ):
         conducta.append("SE INDICA VIGILANCIA RESPIRATORIA Y REVALORACIÓN SEGÚN RESPUESTA CLÍNICA")
 
     if any(x in texto for x in ["PCR ELEVADA", "LEUCOCITOSIS", "NEUTROFILIA", "HIPONATREMIA", "HIPERPOTASEMIA", "HIPOXEMIA"]):
@@ -3743,6 +3781,7 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
         "plan debe ser una lista de indicaciones clínicas en MAYÚSCULAS, una por línea. "
         "Toda la salida debe estar exclusivamente en español. "
         "Usa únicamente los datos suministrados; no inventes diagnósticos, hallazgos, tratamientos, dosis ni paraclínicos. "
+        "Respeta las negaciones clínicas textuales: un síntoma o signo documentado como NIEGA, SIN o AUSENTE no puede transformarse en un hallazgo presente. "
         "Respeta la conducta final registrada y las recomendaciones clínicas entregadas como apoyo. "
         "Integra de manera natural los hallazgos, clasificación, conducta, educación, signos de alarma y control registrados en los apoyos clínicos. "
         "Si el contexto contiene FUNDAMENTO DE GUÍAS DOCUMENTADO, inclúyelo una sola vez como una frase breve dentro del análisis; "
