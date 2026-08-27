@@ -102,6 +102,7 @@ def render_hospitalizacion_ingreso():
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=False,
         mostrar_pb=True,
+        habilitar_trazabilidad_gpc=True,
     )
 
 
@@ -114,6 +115,7 @@ def render_hospitalizacion_evolucion():
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=False,
         mostrar_pb=True,
+        habilitar_trazabilidad_gpc=True,
     )
 
 
@@ -126,6 +128,7 @@ def render_hospitalizacion_interconsulta():
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=False,
         mostrar_pb=True,
+        habilitar_trazabilidad_gpc=True,
     )
 
 

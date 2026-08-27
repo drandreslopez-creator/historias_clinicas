@@ -18,6 +18,11 @@ from herramientas.oms_full import (
     zscore_talla_edad,
 )
 from herramientas.diagnostico_nutricional import diagnostico_mayor_5, diagnostico_menor_5
+from herramientas.rutas_gpc_pediatria import (
+    detectar_ruta_gpc,
+    render_trazabilidad_gpc,
+    resumen_gpc_para_ia,
+)
 from servicios.pediatria_urgencias import (
     ANTECEDENTES_DEFAULT as ANTECEDENTES_URGENCIAS_DEFAULT,
     EXAMEN_DEFAULT as EXAMEN_URGENCIAS_DEFAULT,
@@ -856,6 +861,7 @@ def render_consulta_externa(
     mostrar_boton_ejemplo=True,
     generar_analisis_automatico=True,
     generar_plan_automatico=True,
+    habilitar_trazabilidad_gpc=False,
 ):
     if modo_pediatrico_urgencias_primera_vez and es_pediatrica:
         antecedentes_default = antecedentes_default or ANTECEDENTES_URGENCIAS_DEFAULT
@@ -921,6 +927,7 @@ def render_consulta_externa(
         f"{prefix}_plan": plan_default,
         f"{prefix}_plan_base": plan_default,
         f"{prefix}_conducta_final_analisis": "PENDIENTE DEFINIR",
+        f"{prefix}_gpc_justificacion": "",
         f"{prefix}_historia_consulta_id": None,
         f"{prefix}_modalidad_consulta": modalidad_consulta_forzada or "PRIMERA VEZ",
     }
@@ -1566,6 +1573,7 @@ def render_consulta_externa(
         diagnosticos = st.session_state.get(f"{prefix}_diagnosticos", "")
     else:
         diagnosticos = st.text_area("Diagnósticos", key=f"{prefix}_diagnosticos", height=120)
+    ruta_gpc_clave = detectar_ruta_gpc(diagnosticos, enfermedad_actual) if habilitar_trazabilidad_gpc else ""
     observacion_dx = ""
     if not modo_homeopatia_pediatrica_ia:
         obs_dx_default = construir_observacion_diagnostica_base(
@@ -1641,6 +1649,8 @@ def render_consulta_externa(
             "paraclinicos": paraclinicos_texto,
             "imagenes": imagenes_texto,
         }
+        if ruta_gpc_clave:
+            contexto_plan_ia["ruta_gpc"] = resumen_gpc_para_ia(ruta_gpc_clave)
         fingerprint_plan_ia = hashlib.md5(
             json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
@@ -1660,6 +1670,20 @@ def render_consulta_externa(
             st.session_state[f"{prefix}_plan"] = plan_sugerido
         st.session_state[f"{prefix}_plan_base"] = plan_sugerido
     plan = st.text_area("Plan", key=f"{prefix}_plan", height=220)
+
+    trazabilidad_gpc = ""
+    if habilitar_trazabilidad_gpc:
+        trazabilidad_gpc, instrucciones_gpc_ia = render_trazabilidad_gpc(
+            st,
+            clave=ruta_gpc_clave,
+            texto_clinico="\n".join([
+                enfermedad_actual, examen, analisis, diagnosticos,
+                observacion_dx, plan,
+            ]),
+            justificacion_key=f"{prefix}_gpc_justificacion",
+        )
+        if instrucciones_gpc_ia:
+            contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
 
     col_btn_1, col_btn_2 = st.columns(2)
     generar = col_btn_1.button("Generar Historia Clínica", key=f"{prefix}_generar", use_container_width=True)
@@ -1867,6 +1891,8 @@ PLAN:
                 f"\nOBSERVACIÓN DIAGNÓSTICA:\n{observacion_dx}\n\nPLAN:\n{plan}\n",
                 1,
             )
+        if trazabilidad_gpc:
+            historia += f"\nTRAZABILIDAD GPC:\n{trazabilidad_gpc}\n"
 
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
@@ -1910,6 +1936,8 @@ PLAN:
                 ("PLAN", plan),
             ]
         )
+        if trazabilidad_gpc:
+            secciones.append(("TRAZABILIDAD GPC", trazabilidad_gpc))
 
         st.success("Historia clínica generada")
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")

@@ -41,6 +41,10 @@ from herramientas.diagnostico_nutricional import (
     diagnostico_menor_5,
     diagnostico_mayor_5
 )
+from herramientas.rutas_gpc_pediatria import (
+    detectar_ruta_gpc,
+    render_trazabilidad_gpc,
+)
 from utils.google_drive_oauth import subir_docx_con_oauth
 from utils.google_drive_oauth import eliminar_archivo_drive_con_oauth
 
@@ -800,6 +804,7 @@ FORM_DEFAULTS = {
     "plan": PLAN_DEFAULT,
     "plan_base": PLAN_DEFAULT,
     "conducta_final_analisis": "PENDIENTE DEFINIR",
+    "gpc_justificacion": "",
     "paraclinicos_texto": "",
     "paraclinicos_auto": "",
     "paraclinicos_pdf_sig": "",
@@ -5187,6 +5192,20 @@ def render():
         height=200
     )
 
+    ruta_gpc_clave = detectar_ruta_gpc(diagnostico_seleccionado, enfermedad_input)
+    trazabilidad_gpc, instrucciones_gpc_ia = render_trazabilidad_gpc(
+        st,
+        clave=ruta_gpc_clave,
+        texto_clinico="\n".join([
+            enfermedad_input, examen, analisis, diagnostico_seleccionado,
+            observacion_diagnostico, plan,
+        ]),
+        justificacion_key="gpc_justificacion",
+    )
+    if instrucciones_gpc_ia:
+        contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
+        contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
+
     st.subheader("Código trauma")
     st.caption("Opcional. Este bloque no se incorpora a la historia clínica; solo sirve para copiar y reportar al grupo.")
     activar_codigo_trauma = st.checkbox(
@@ -5545,6 +5564,9 @@ DIAGNÓSTICO NUTRICIONAL:
 
 PLAN:
 {plan}
+
+TRAZABILIDAD GPC:
+{trazabilidad_gpc}
 """
 
         st.success("Historia clínica generada")
@@ -5566,6 +5588,7 @@ PLAN:
             ("OBSERVACIÓN DIAGNÓSTICA", observacion_diagnostico),
             ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
             ("PLAN", plan),
+            *(((("TRAZABILIDAD GPC", trazabilidad_gpc),) if trazabilidad_gpc else ())),
         ]
         docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
