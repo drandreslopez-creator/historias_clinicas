@@ -43,6 +43,7 @@ from herramientas.diagnostico_nutricional import (
 )
 from herramientas.rutas_gpc_pediatria import (
     detectar_ruta_gpc,
+    render_apoyo_aiepi,
     render_trazabilidad_gpc,
     resumen_gpc_para_ia,
 )
@@ -1142,7 +1143,7 @@ def cargar_ejemplo_urgencias():
         "proveniente_1": "SOGAMOSO",
         "motivo_1": "FIEBRE Y TOS",
         "enfermedad_1": "CUADRO CLÍNICO DE 3 DÍAS DE EVOLUCIÓN CONSISTENTE EN TOS HÚMEDA, RINORREA HIALINA, FIEBRE SUBJETIVA Y DISMINUCIÓN DEL APETITO. NIEGA VÓMITO, DIARREA O DIFICULTAD RESPIRATORIA.",
-        "antecedentes_1": ANTECEDENTES_DEFAULT,
+        "antecedentes_1": """NEONATALES: PRODUCTO DE SEGUNDA GESTACION, MADRE DE 29 ANOS, EMBARAZO CONTROLADO, SIN COMPLICACIONES, ECOGRAFIAS ANTENATALES NORMALES. NACE VIA VAGINAL A LAS 39 SEMANAS, PESO 3200 GR, TALLA 50 CM. NO REQUIRIO OXIGENO SUPLEMENTARIO NI HOSPITALIZACION, EGRESO CONJUNTO.\nINMUNOLOGICOS: VACUNAS AL DIA SEGUN PAI, SIN REACCIONES ATRIBUIDAS A VACUNAS.\nALIMENTACION: ACORDE A LA EDAD.\nPATOLOGICOS: NIEGA.\nHOSPITALARIOS: NIEGA.\nFARMACOLOGICOS: NIEGA USO CRONICO.\nTRAUMATICOS: NIEGA.\nTOXICOLOGICOS: NIEGA EXPOSICION A HUMO DE LENA O CIGARRILLO.\nALERGICOS: NIEGA.\nTRANSFUSIONALES: NIEGA.\nQUIRURGICOS: NIEGA.\nFAMILIARES: PADRE Y MADRE SANOS, NO CONSANGUINEOS, UN HERMANO SANO.\nHEMOCLASIFICACION: O POSITIVO.\nPSICOSOCIALES: VIVIENDA CON TODOS LOS SERVICIOS, SIN EXPOSICIONES DE RIESGO RELEVANTES.\nESCOLARIDAD: ASISTE A PREESCOLAR, CON BUEN RENDIMIENTO ACADEMICO.""",
         "neuro_1": "",
         "neuro_prev": None,
         "revision": REVISION_DEFAULT,
@@ -5214,22 +5215,35 @@ def render():
     ruta_gpc_clave, trazabilidad_gpc, instrucciones_gpc_ia, registro_gpc = render_trazabilidad_gpc(
         st,
         clave=ruta_gpc_sugerida,
+        diagnostico=diagnostico_seleccionado,
         texto_clinico="\n".join(
             str(valor or "")
             for valor in [
                 enfermedad_input, examen, analisis, diagnostico_seleccionado,
                 observacion_diagnostico, plan,
+                f"TA {ta} FC {fc} FR {fr} SPO2 {sat} TEMPERATURA {temp} GLUCOMETRÍA {glucometria}",
             ]
         ),
         justificacion_key="gpc_justificacion",
         registro_key="gpc_registro",
         selector_key="gpc_ruta",
     )
+    apoyo_aiepi_clave, trazabilidad_aiepi, instrucciones_aiepi_ia = render_apoyo_aiepi(
+        st,
+        diagnostico=diagnostico_seleccionado,
+        texto_clinico=enfermedad_input,
+        selector_key="aiepi_apoyo",
+        registro_key="aiepi_registro",
+    )
     if instrucciones_gpc_ia:
         instrucciones_gpc_ia += f" REGISTRO CLÍNICO COMPLEMENTARIO GPC: {registro_gpc or 'SIN REGISTRO ADICIONAL.'}"
         if permitir_generacion_analisis:
             contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
         contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
+    if instrucciones_aiepi_ia:
+        if permitir_generacion_analisis:
+            contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
+        contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
 
     st.subheader("Código trauma")
     st.caption("Opcional. Este bloque no se incorpora a la historia clínica; solo sirve para copiar y reportar al grupo.")
@@ -5487,9 +5501,10 @@ def render():
                     forzar=True,
                 )
                 if st.session_state.get("analisis") in ("", st.session_state.get("analisis_base", "")):
-                    st.session_state["analisis"] = analisis_default_final
+                    analisis = analisis_default_final
+                else:
+                    analisis = st.session_state.get("analisis", analisis_default_final)
                 st.session_state["analisis_base"] = analisis_default_final
-                analisis = st.session_state.get("analisis", analisis_default_final)
 
                 obs_dx_default_final = construir_observacion_diagnostica_base(
                     diagnostico_seleccionado,
@@ -5504,9 +5519,10 @@ def render():
                     forzar=True,
                 )
                 if st.session_state.get("obs_dx") in ("", st.session_state.get("obs_dx_base", "")):
-                    st.session_state["obs_dx"] = obs_dx_default_final
+                    observacion_diagnostico = obs_dx_default_final
+                else:
+                    observacion_diagnostico = st.session_state.get("obs_dx", obs_dx_default_final)
                 st.session_state["obs_dx_base"] = obs_dx_default_final
-                observacion_diagnostico = st.session_state.get("obs_dx", obs_dx_default_final)
 
                 plan_sugerido_final = complementar_plan_con_ia(
                     plan_base_local,
@@ -5515,9 +5531,10 @@ def render():
                     forzar=True,
                 )
                 if st.session_state.get("plan") in ("", st.session_state.get("plan_base", "")):
-                    st.session_state["plan"] = plan_sugerido_final
+                    plan = plan_sugerido_final
+                else:
+                    plan = st.session_state.get("plan", plan_sugerido_final)
                 st.session_state["plan_base"] = plan_sugerido_final
-                plan = st.session_state.get("plan", plan_sugerido_final)
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         diagnostico_final = diagnostico_seleccionado or ""
@@ -5591,8 +5608,11 @@ DIAGNÓSTICO NUTRICIONAL:
 PLAN:
 {plan}
 
-TRAZABILIDAD GPC:
+{"TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO"}:
 {trazabilidad_gpc}
+
+APOYO AIEPI:
+{trazabilidad_aiepi}
 """
 
         st.success("Historia clínica generada")
@@ -5614,7 +5634,8 @@ TRAZABILIDAD GPC:
             ("OBSERVACIÓN DIAGNÓSTICA", observacion_diagnostico),
             ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
             ("PLAN", plan),
-            *(((("TRAZABILIDAD GPC", trazabilidad_gpc),) if trazabilidad_gpc else ())),
+            *(((("TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO", trazabilidad_gpc),) if trazabilidad_gpc else ())),
+            *(((("APOYO AIEPI", trazabilidad_aiepi),) if trazabilidad_aiepi else ())),
         ]
         docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")

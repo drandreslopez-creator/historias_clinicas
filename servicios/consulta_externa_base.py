@@ -20,6 +20,7 @@ from herramientas.oms_full import (
 from herramientas.diagnostico_nutricional import diagnostico_mayor_5, diagnostico_menor_5
 from herramientas.rutas_gpc_pediatria import (
     detectar_ruta_gpc,
+    render_apoyo_aiepi,
     render_trazabilidad_gpc,
     resumen_gpc_para_ia,
 )
@@ -710,6 +711,34 @@ def _cargar_ejemplo_consulta_externa(
     fecha_nacimiento = date(2022, 3, 15) if es_pediatrica else date(1992, 8, 21)
     sexo = "Femenino" if es_pediatrica else "Masculino"
     modalidad = "PRIMERA VEZ" if mostrar_modalidad_consulta else defaults.get(f"{prefix}_modalidad_consulta", "PRIMERA VEZ")
+    antecedentes_ejemplo = (
+        """NEONATALES: PRODUCTO DE SEGUNDA GESTACION, MADRE DE 29 ANOS, EMBARAZO CONTROLADO, SIN COMPLICACIONES, ECOGRAFIAS ANTENATALES NORMALES. NACE VIA VAGINAL A LAS 39 SEMANAS, PESO 3200 GR, TALLA 50 CM. NO REQUIRIO OXIGENO SUPLEMENTARIO NI HOSPITALIZACION, EGRESO CONJUNTO.
+INMUNOLOGICOS: VACUNAS AL DIA SEGUN PAI, SIN REACCIONES ATRIBUIDAS A VACUNAS.
+ALIMENTACION: ACORDE A LA EDAD.
+PATOLOGICOS: RINITIS ALERGICA INTERMITENTE, SIN TRATAMIENTO DE BASE.
+HOSPITALARIOS: NIEGA.
+FARMACOLOGICOS: LORATADINA OCASIONAL.
+TRAUMATICOS: NIEGA.
+TOXICOLOGICOS: NIEGA EXPOSICION A HUMO DE LENA O CIGARRILLO.
+ALERGICOS: NIEGA ALERGIAS MEDICAMENTOSAS.
+TRANSFUSIONALES: NIEGA.
+QUIRURGICOS: NIEGA.
+FAMILIARES: MADRE CON RINITIS ALERGICA; PADRE SANO, NO CONSANGUINEOS, UN HERMANO SANO.
+HEMOCLASIFICACION: O POSITIVO.
+PSICOSOCIALES: VIVIENDA CON TODOS LOS SERVICIOS, SIN EXPOSICIONES DE RIESGO RELEVANTES.
+ESCOLARIDAD: ASISTE A PREESCOLAR, CON BUEN RENDIMIENTO ACADEMICO."""
+        if es_pediatrica
+        else """PATOLOGICOS: RINITIS ALERGICA ESTACIONAL, SIN OTROS ANTECEDENTES RELEVANTES.
+HOSPITALARIOS: NIEGA.
+FARMACOLOGICOS: LORATADINA OCASIONAL.
+ALERGICOS: NIEGA ALERGIAS MEDICAMENTOSAS.
+QUIRURGICOS: APENDICECTOMIA SIN COMPLICACIONES HACE 10 ANOS.
+TRAUMATICOS: NIEGA.
+TOXICOLOGICOS: NIEGA TABAQUISMO, ALCOHOL DE RIESGO O EXPOSICIONES OCUPACIONALES RELEVANTES.
+TRANSFUSIONALES: NIEGA.
+FAMILIARES: PADRES VIVOS, SIN ANTECEDENTES FAMILIARES DE IMPORTANCIA PARA EL CUADRO ACTUAL.
+PSICOSOCIALES: VIVE CON SU PAREJA, CON TODOS LOS SERVICIOS PUBLICOS."""
+    )
 
     ejemplo = {
         f"{prefix}_nombre": "MARIA JOSE GOMEZ" if es_pediatrica else "CARLOS EDUARDO PEREZ",
@@ -734,7 +763,7 @@ def _cargar_ejemplo_consulta_externa(
             if es_pediatrica
             else "CUADRO CLÍNICO DE 2 DÍAS DE EVOLUCIÓN CONSISTENTE EN CEFALEA HOLOCRANEANA, MALESTAR GENERAL Y CONGESTIÓN NASAL, SIN SIGNOS DE ALARMA."
         ),
-        f"{prefix}_antecedentes": defaults.get(f"{prefix}_antecedentes", ""),
+        f"{prefix}_antecedentes": antecedentes_ejemplo,
         f"{prefix}_revision": (
             "-SÍNTOMAS CARDIOVASCULARES: NIEGA CANSANCIO, NO FATIGA AL COMER, NO CIANOSIS.\n-DIGESTIVO: SIN NAUSEA NI EMESIS, DEPOSICIONES 1-2 VECES AL DÍA, BRISTOL 3.\n-ALIMENTARIOS: ADECUADA PARA LA EDAD.\n-URINARIO: HÁBITO NORMAL, SIN COLURIA, SIN HEMATURIA.\n-SÍNTOMAS RESPIRATORIOS ALTOS: ESTORNUDO 5/7, RINORREA 5/7, CONGESTIÓN 3/7, PRURITO NASAL 4/7.\n-SÍNTOMAS RESPIRATORIOS BAJOS: TOS NOCTURNA 4/7, TOS CON EL FRÍO 5/7."
             if es_homeopatia_pediatrica
@@ -1690,24 +1719,38 @@ def render_consulta_externa(
     plan = st.text_area("Plan", key=f"{prefix}_plan", height=220)
 
     trazabilidad_gpc = ""
+    trazabilidad_aiepi = ""
     if habilitar_trazabilidad_gpc:
         ruta_gpc_clave, trazabilidad_gpc, instrucciones_gpc_ia, registro_gpc = render_trazabilidad_gpc(
             st,
             clave=ruta_gpc_clave,
+            diagnostico=diagnosticos,
             texto_clinico="\n".join(
                 str(valor or "")
                 for valor in [
                     enfermedad_actual, examen, analisis, diagnosticos,
                     observacion_dx, plan,
+                    f"TA {ta} FC {fc} FR {fr} SPO2 {sat} TEMPERATURA {temp} GLUCOMETRÍA {glucometria}",
                 ]
             ),
             justificacion_key=f"{prefix}_gpc_justificacion",
             registro_key=f"{prefix}_gpc_registro",
             selector_key=f"{prefix}_gpc_ruta",
         )
+        apoyo_aiepi_clave, trazabilidad_aiepi, instrucciones_aiepi_ia = render_apoyo_aiepi(
+            st,
+            diagnostico=diagnosticos,
+            texto_clinico=enfermedad_actual,
+            selector_key=f"{prefix}_aiepi_apoyo",
+            registro_key=f"{prefix}_aiepi_registro",
+        )
         if instrucciones_gpc_ia:
             instrucciones_gpc_ia += f" REGISTRO CLÍNICO COMPLEMENTARIO GPC: {registro_gpc or 'SIN REGISTRO ADICIONAL.'}"
             contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
+        if instrucciones_aiepi_ia:
+            if permitir_generacion_analisis:
+                contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
+            contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
 
     col_btn_1, col_btn_2 = st.columns(2)
     generar = col_btn_1.button("Generar Historia Clínica", key=f"{prefix}_generar", use_container_width=True)
@@ -1752,9 +1795,10 @@ def render_consulta_externa(
                             forzar=True,
                         )
                     if st.session_state.get(f"{prefix}_analisis", "") in ("", st.session_state.get(f"{prefix}_analisis_base", "")):
-                        st.session_state[f"{prefix}_analisis"] = analisis_default_final
+                        analisis = analisis_default_final
+                    else:
+                        analisis = st.session_state.get(f"{prefix}_analisis", analisis_default_final)
                     st.session_state[f"{prefix}_analisis_base"] = analisis_default_final
-                    analisis = st.session_state.get(f"{prefix}_analisis", analisis_default_final)
 
                 obs_dx_default_final = construir_observacion_diagnostica_base(
                     diagnosticos,
@@ -1770,9 +1814,10 @@ def render_consulta_externa(
                         forzar=True,
                     )
                 if st.session_state.get(f"{prefix}_obs_dx", "") in ("", st.session_state.get(f"{prefix}_obs_dx_base", "")):
-                    st.session_state[f"{prefix}_obs_dx"] = obs_dx_default_final
+                    observacion_dx = obs_dx_default_final
+                else:
+                    observacion_dx = st.session_state.get(f"{prefix}_obs_dx", obs_dx_default_final)
                 st.session_state[f"{prefix}_obs_dx_base"] = obs_dx_default_final
-                observacion_dx = st.session_state.get(f"{prefix}_obs_dx", obs_dx_default_final)
 
                 if generar_plan_automatico:
                     plan_sugerido_final = plan_base_local
@@ -1785,9 +1830,10 @@ def render_consulta_externa(
                             forzar=True,
                         )
                     if st.session_state.get(f"{prefix}_plan", "") in ("", st.session_state.get(f"{prefix}_plan_base", "")):
-                        st.session_state[f"{prefix}_plan"] = plan_sugerido_final
+                        plan = plan_sugerido_final
+                    else:
+                        plan = st.session_state.get(f"{prefix}_plan", plan_sugerido_final)
                     st.session_state[f"{prefix}_plan_base"] = plan_sugerido_final
-                    plan = st.session_state.get(f"{prefix}_plan", plan_sugerido_final)
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         paraclinicos_reporte = _texto_reporte_bloque(paraclinicos_texto, "NO HAY LABORATORIOS POR REPORTAR")
@@ -1917,7 +1963,10 @@ PLAN:
                 1,
             )
         if trazabilidad_gpc:
-            historia += f"\nTRAZABILIDAD GPC:\n{trazabilidad_gpc}\n"
+            titulo_apoyo_gpc = "TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO"
+            historia += f"\n{titulo_apoyo_gpc}:\n{trazabilidad_gpc}\n"
+        if trazabilidad_aiepi:
+            historia += f"\nAPOYO AIEPI:\n{trazabilidad_aiepi}\n"
 
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
@@ -1962,7 +2011,9 @@ PLAN:
             ]
         )
         if trazabilidad_gpc:
-            secciones.append(("TRAZABILIDAD GPC", trazabilidad_gpc))
+            secciones.append(("TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO", trazabilidad_gpc))
+        if trazabilidad_aiepi:
+            secciones.append(("APOYO AIEPI", trazabilidad_aiepi))
 
         st.success("Historia clínica generada")
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
