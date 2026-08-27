@@ -262,14 +262,10 @@ def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, select
         placeholder="Registre clasificación, hallazgos, conducta, consejería, signos de alarma y control.",
         help="Este registro se usa para apoyar la coherencia del análisis y plan, y se conserva como sección independiente del informe.",
     )
-    trazabilidad = "\n".join(
-        [
-            f"APOYO AIEPI: {apoyo['nombre']}",
-            "ELEMENTOS A CONSIDERAR:",
-            *(f"- {criterio}" for criterio in apoyo["criterios"]),
-            "REGISTRO CLÍNICO AIEPI:",
-            registro.strip() or "NO REGISTRADO",
-        ]
+    trazabilidad = (
+        f"CLASIFICACIÓN AIEPI: {apoyo['nombre']}\n{registro.strip()}"
+        if registro.strip()
+        else ""
     )
     instrucciones = (
         f"APOYO AIEPI APLICABLE: {apoyo['nombre']}. "
@@ -323,27 +319,19 @@ def construir_trazabilidad_gpc(
         if str(respuesta or "").strip()
     )
     texto = _normalizar(f"{texto_clinico or ''}\n{registro_complementario or ''}\n{respuestas_texto}")
-    lineas = [
-        f"RUTA APLICADA: {ruta['nombre']}",
-        f"FUENTE: {ruta['fuente']}",
-        f"REFERENCIA: {ruta['url']}",
-        f"VERSIÓN/REVISIÓN: {ruta['version']}",
-        "ELEMENTOS DE TRAZABILIDAD:",
-    ]
-    for etiqueta, terminos in ruta["verificaciones"].items():
-        estado = "DOCUMENTADO" if any(_normalizar(termino) in texto for termino in terminos) else "PENDIENTE DE VERIFICAR"
-        lineas.append(f"- {etiqueta}: {estado}")
-    lineas.append("REGISTRO POR CRITERIOS GPC:")
+    lineas = []
     for etiqueta in ruta["verificaciones"]:
         respuesta = str(respuestas_criterios.get(etiqueta, "") or "").strip()
-        lineas.append(f"- {etiqueta}: {respuesta or 'NO REGISTRADO'}")
+        if respuesta:
+            lineas.append(f"{etiqueta}: {respuesta}")
     if str(registro_complementario or "").strip():
-        lineas.append("REGISTRO CLÍNICO COMPLEMENTARIO GPC:")
         lineas.append(str(registro_complementario).strip())
     if str(justificacion or "").strip():
         lineas.append("JUSTIFICACIÓN CLÍNICA DE APARTAMIENTO O INDIVIDUALIZACIÓN:")
         lineas.append(str(justificacion).strip())
-    return "\n".join(lineas)
+    if not lineas:
+        return ""
+    return "\n".join([f"RUTA GPC APLICADA: {ruta['nombre']}", *lineas])
 
 
 def render_trazabilidad_gpc(
@@ -390,19 +378,15 @@ def render_trazabilidad_gpc(
             key=justificacion_key,
             height=90,
         )
-        trazabilidad = "\n".join(
-            [
-                f"APOYO CLÍNICO SIN RUTA GPC ESPECÍFICA: {nombre_apoyo}",
-                "ELEMENTOS A CONSIDERAR:",
-                *(f"- {recomendacion}" for recomendacion in recomendaciones),
-                "REGISTRO CLÍNICO:",
-                registro_complementario.strip() or "NO REGISTRADO",
-                *(
-                    ["JUSTIFICACIÓN CLÍNICA:", justificacion.strip()]
-                    if justificacion.strip()
-                    else []
-                ),
-            ]
+        lineas_registro = []
+        if registro_complementario.strip():
+            lineas_registro.append(registro_complementario.strip())
+        if justificacion.strip():
+            lineas_registro.extend(["JUSTIFICACIÓN CLÍNICA:", justificacion.strip()])
+        trazabilidad = (
+            "\n".join([f"APOYO CLÍNICO: {nombre_apoyo}", *lineas_registro])
+            if lineas_registro
+            else ""
         )
         instrucciones = (
             f"APOYO CLÍNICO SIN RUTA GPC ESPECÍFICA: {nombre_apoyo}. "
