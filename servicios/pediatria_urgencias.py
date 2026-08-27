@@ -5206,7 +5206,8 @@ def render():
         justificacion_key="gpc_justificacion",
     )
     if instrucciones_gpc_ia:
-        contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
+        if permitir_generacion_analisis:
+            contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
         contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
 
     st.subheader("Código trauma")
