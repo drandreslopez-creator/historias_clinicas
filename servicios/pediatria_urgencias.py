@@ -3662,6 +3662,59 @@ def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucci
     return base_analisis
 
 
+def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fingerprint, instrucciones_analisis=None, instrucciones_plan=None):
+    """Genera análisis y plan en una sola solicitud para evitar esperas acumuladas."""
+    if not ia_analisis_configurada():
+        return base_analisis, base_plan
+
+    cache_key = "documento_final_ia_cache"
+    cache = st.session_state.get(cache_key, {})
+    if cache.get("fingerprint") == fingerprint:
+        return cache.get("analisis", base_analisis), cache.get("plan", base_plan)
+
+    model = obtener_secret_app("openai_model", "gpt-4o-mini")
+    instrucciones = (
+        "Eres un asistente clínico pediátrico que redacta una historia médica en español. "
+        "Devuelve exclusivamente un objeto JSON válido con las claves analisis y plan. "
+        "analisis debe ser un único párrafo profesional en MAYÚSCULAS. "
+        "plan debe ser una lista de indicaciones clínicas en MAYÚSCULAS, una por línea. "
+        "Usa únicamente los datos suministrados; no inventes diagnósticos, hallazgos, tratamientos, dosis ni paraclínicos. "
+        "Respeta la conducta final registrada y las recomendaciones clínicas entregadas como apoyo. "
+        "Integra de manera natural los hallazgos, clasificación, conducta, educación, signos de alarma y control registrados en los apoyos clínicos. "
+        "No crees apartados separados ni menciones IA, GPC, AIEPI, trazabilidad, fuentes o listas de verificación. "
+        f"INSTRUCCIONES PARA ANÁLISIS: {instrucciones_analisis or 'INTEGRA EL CONTEXTO CLÍNICO DE FORMA COHERENTE.'} "
+        f"INSTRUCCIONES PARA PLAN: {instrucciones_plan or 'PROPÓN SOLO CONDUCTAS SUSTENTADAS POR EL CONTEXTO.'}"
+    )
+    prompt = {
+        "borrador_analisis": base_analisis,
+        "borrador_plan": base_plan,
+        "contexto_clinico": contexto,
+    }
+    try:
+        data = solicitar_respuesta_openai(
+            model,
+            {
+                "model": model,
+                "input": json.dumps(prompt, ensure_ascii=False),
+                "instructions": instrucciones,
+                "temperature": 0.15,
+                "max_output_tokens": 750,
+            },
+            timeout=25,
+            max_reintentos=1,
+        )
+        resultado = extraer_json_desde_texto(extraer_texto_respuesta_openai(data))
+        analisis = str(resultado.get("analisis") or "").strip() or base_analisis
+        plan = str(resultado.get("plan") or "").strip() or base_plan
+        st.session_state[cache_key] = {"fingerprint": fingerprint, "analisis": analisis, "plan": plan}
+        limpiar_error_ia("analisis")
+        limpiar_error_ia("plan")
+        return analisis, plan
+    except Exception as error:
+        registrar_error_ia("analisis", error)
+        return base_analisis, base_plan
+
+
 def fusionar_analisis_editado_con_base_nueva(analisis_actual, base_anterior, base_nueva, fingerprint, instrucciones=None):
     analisis_actual = str(analisis_actual or "").strip()
     base_anterior = str(base_anterior or "").strip()
@@ -5480,25 +5533,22 @@ def render():
                     conducta_final_texto,
                     destinatario_informacion,
                 )
-                analisis_default_final = complementar_analisis_con_ia(
+                contexto_documento_ia = {
+                    "analisis": contexto_analisis_ia,
+                    "plan": contexto_plan_ia,
+                }
+                fingerprint_documento_ia = hashlib.md5(
+                    json.dumps(contexto_documento_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                ).hexdigest()
+                analisis_default_final, plan_sugerido_final = complementar_analisis_y_plan_con_ia(
                     analisis_default_final,
-                    contexto_analisis_ia,
-                    fingerprint_analisis_ia,
-                    instrucciones=(
-                        "Eres un asistente clínico que redacta análisis médicos en español. "
-                        "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-                        "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-                        "Mantén un estilo médico parecido al de una historia clínica colombiana. "
-                        "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-                        "Integra antecedentes relevantes cuando aporten al caso clínico. "
-                        "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de manera coherente con la historia, "
-                        "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-                        "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-                        "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
-                        "Usa las recomendaciones GPC y el registro clínico solo para mantener coherencia clínica; no menciones GPC, trazabilidad, fuentes ni listas de verificación dentro del análisis. "
-                        "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
+                    plan_base_local,
+                    contexto_documento_ia,
+                    fingerprint_documento_ia,
+                    instrucciones_analisis=(
+                        "INTEGRA LOS DATOS CLÍNICOS, ANTECEDENTES, SIGNOS VITALES, EXAMEN, PARACLÍNICOS Y CONDUCTA FINAL. "
+                        "SI LA CONDUCTA FINAL ESTÁ PENDIENTE DEFINIR, NO INVENTES UNA DECISIÓN FINAL."
                     ),
-                    forzar=True,
                 )
                 if st.session_state.get("analisis") in ("", st.session_state.get("analisis_base", "")):
                     analisis = analisis_default_final
@@ -5512,24 +5562,12 @@ def render():
                     antecedentes,
                     dx_nutricional,
                 )
-                obs_dx_default_final = complementar_observacion_diagnostica_con_ia(
-                    obs_dx_default_final,
-                    contexto_obs_dx_ia,
-                    fingerprint_obs_dx_ia,
-                    forzar=True,
-                )
                 if st.session_state.get("obs_dx") in ("", st.session_state.get("obs_dx_base", "")):
                     observacion_diagnostico = obs_dx_default_final
                 else:
                     observacion_diagnostico = st.session_state.get("obs_dx", obs_dx_default_final)
                 st.session_state["obs_dx_base"] = obs_dx_default_final
 
-                plan_sugerido_final = complementar_plan_con_ia(
-                    plan_base_local,
-                    contexto_plan_ia,
-                    fingerprint_plan_ia,
-                    forzar=True,
-                )
                 if st.session_state.get("plan") in ("", st.session_state.get("plan_base", "")):
                     plan = plan_sugerido_final
                 else:
@@ -5609,12 +5647,6 @@ PLAN:
 {plan}
 """
 
-        if trazabilidad_gpc:
-            titulo_apoyo_gpc = "TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO"
-            historia += f"\n{titulo_apoyo_gpc}:\n{trazabilidad_gpc}\n"
-        if trazabilidad_aiepi:
-            historia += f"\nAPOYO AIEPI:\n{trazabilidad_aiepi}\n"
-
         st.success("Historia clínica generada")
         secciones_informe = [
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nINFORMANTE: {informante}\nEPS: {eps}\nTELEFONO: {telefono}\nPROVENIENTE: {proveniente}"),
@@ -5634,8 +5666,6 @@ PLAN:
             ("OBSERVACIÓN DIAGNÓSTICA", observacion_diagnostico),
             ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
             ("PLAN", plan),
-            *(((("TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO", trazabilidad_gpc),) if trazabilidad_gpc else ())),
-            *(((("APOYO AIEPI", trazabilidad_aiepi),) if trazabilidad_aiepi else ())),
         ]
         docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")

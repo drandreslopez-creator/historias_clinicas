@@ -34,6 +34,7 @@ from servicios.pediatria_urgencias import (
     cargar_cie10,
     coincide_grupos,
     complementar_analisis_con_ia,
+    complementar_analisis_y_plan_con_ia,
     complementar_plan_con_ia,
     complementar_repertorizacion_con_ia,
     construir_conducta_final_analisis,
@@ -1762,6 +1763,7 @@ def render_consulta_externa(
         if permitir_generacion_analisis and not modo_homeopatia_pediatrica_ia:
             with st.spinner("Actualizando análisis, impresión diagnóstica y plan..."):
                 analisis_default_final = analisis_default
+                plan_sugerido_final = plan_base_local
                 if generar_analisis_automatico:
                     analisis_default_final = generar_analisis_asistido_urgencias(
                         enfermedad_auto,
@@ -1772,27 +1774,21 @@ def render_consulta_externa(
                         conducta_final_texto,
                         destinatario_informacion,
                     )
-                    if usar_ia_analisis:
-                        analisis_default_final = complementar_analisis_con_ia(
+                    if usar_ia_analisis or (generar_plan_automatico and usar_ia_plan):
+                        contexto_documento_ia = {
+                            "analisis": contexto_analisis_ia,
+                            "plan": contexto_plan_ia,
+                        }
+                        fingerprint_documento_ia = hashlib.md5(
+                            json.dumps(contexto_documento_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
+                        ).hexdigest()
+                        analisis_default_final, plan_sugerido_final = complementar_analisis_y_plan_con_ia(
                             analisis_default_final,
-                            contexto_analisis_ia,
-                            fingerprint_analisis_ia,
-                            instrucciones=(
-                                instrucciones_analisis_ia
-                                or (
-                                    "Eres un asistente clínico que redacta análisis médicos en español. "
-                                    "Usa únicamente la información entregada. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
-                                    "Redacta un solo párrafo claro, coherente y profesional, en MAYÚSCULAS. "
-                                    "Debes tomar como fuente principal todo el contexto clínico ya consignado antes del análisis. "
-                                    "Integra antecedentes relevantes cuando aporten al caso clínico. "
-                                    "Si existe una conducta final definida en el contexto, úsala como marco principal del cierre y constrúyela de forma coherente con la historia, "
-                                    "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
-                                    "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
-                                    "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
-                                    "Usa las recomendaciones GPC y el registro clínico solo para mantener coherencia clínica; no menciones GPC, trazabilidad, fuentes ni listas de verificación dentro del análisis."
-                                )
-                            ),
-                            forzar=True,
+                            plan_base_local,
+                            contexto_documento_ia,
+                            fingerprint_documento_ia,
+                            instrucciones_analisis=instrucciones_analisis_ia,
+                            instrucciones_plan=instrucciones_plan_ia,
                         )
                     if st.session_state.get(f"{prefix}_analisis", "") in ("", st.session_state.get(f"{prefix}_analisis_base", "")):
                         analisis = analisis_default_final
@@ -1806,13 +1802,6 @@ def render_consulta_externa(
                     antecedentes,
                     "",
                 )
-                if usar_ia_observacion_dx:
-                    obs_dx_default_final = complementar_observacion_diagnostica_con_ia(
-                        obs_dx_default_final,
-                        contexto_obs_dx_ia,
-                        fingerprint_obs_dx_ia,
-                        forzar=True,
-                    )
                 if st.session_state.get(f"{prefix}_obs_dx", "") in ("", st.session_state.get(f"{prefix}_obs_dx_base", "")):
                     observacion_dx = obs_dx_default_final
                 else:
@@ -1820,15 +1809,6 @@ def render_consulta_externa(
                 st.session_state[f"{prefix}_obs_dx_base"] = obs_dx_default_final
 
                 if generar_plan_automatico:
-                    plan_sugerido_final = plan_base_local
-                    if usar_ia_plan:
-                        plan_sugerido_final = complementar_plan_con_ia(
-                            plan_base_local,
-                            contexto_plan_ia,
-                            fingerprint_plan_ia,
-                            instrucciones=instrucciones_plan_ia,
-                            forzar=True,
-                        )
                     if st.session_state.get(f"{prefix}_plan", "") in ("", st.session_state.get(f"{prefix}_plan_base", "")):
                         plan = plan_sugerido_final
                     else:
@@ -1962,12 +1942,6 @@ PLAN:
                 f"\nOBSERVACIÓN DIAGNÓSTICA:\n{observacion_dx}\n\nPLAN:\n{plan}\n",
                 1,
             )
-        if trazabilidad_gpc:
-            titulo_apoyo_gpc = "TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO"
-            historia += f"\n{titulo_apoyo_gpc}:\n{trazabilidad_gpc}\n"
-        if trazabilidad_aiepi:
-            historia += f"\nAPOYO AIEPI:\n{trazabilidad_aiepi}\n"
-
         secciones = [
             ("MODALIDAD DE LA CONSULTA", modalidad_consulta or ""),
             ("DATOS DE IDENTIFICACIÓN", f"NOMBRES Y APELLIDOS: {nombre}\nTIPO DE DOCUMENTO: {tipo_documento}\nDOCUMENTO: {documento}\nFECHA DE NACIMIENTO: {fecha_str}\nEPS: {eps}\nTELEFONO: {telefono}\nINFORMANTE: {informante}"),
@@ -2010,11 +1984,6 @@ PLAN:
                 ("PLAN", plan),
             ]
         )
-        if trazabilidad_gpc:
-            secciones.append(("TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO", trazabilidad_gpc))
-        if trazabilidad_aiepi:
-            secciones.append(("APOYO AIEPI", trazabilidad_aiepi))
-
         st.success("Historia clínica generada")
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         docx_bytes = generar_docx_informe(titulo.upper(), secciones)
