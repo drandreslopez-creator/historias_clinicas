@@ -19,11 +19,8 @@ from herramientas.oms_full import (
 )
 from herramientas.diagnostico_nutricional import diagnostico_mayor_5, diagnostico_menor_5
 from herramientas.rutas_gpc_pediatria import (
+    construir_apoyo_gpc_aiepi_automatico,
     detectar_ruta_gpc,
-    obtener_apoyo_aiepi,
-    obtener_ruta_gpc,
-    render_apoyo_aiepi,
-    render_trazabilidad_gpc,
     resumen_gpc_para_ia,
 )
 from servicios.pediatria_urgencias import (
@@ -1379,8 +1376,8 @@ def render_consulta_externa(
         if not modo_homeopatia_pediatrica_ia
         else ""
     )
-    registro_gpc_previo = str(st.session_state.get(f"{prefix}_gpc_registro", "") or "").strip()
-    ruta_gpc_previa = st.session_state.get(f"{prefix}_gpc_ruta", "") or detectar_ruta_gpc(
+    registro_gpc_previo = ""
+    ruta_gpc_previa = detectar_ruta_gpc(
         st.session_state.get(f"{prefix}_diagnosticos", ""),
     )
     repertorizacion = st.session_state.get(f"{prefix}_repertorizacion", "")
@@ -1740,55 +1737,25 @@ def render_consulta_externa(
         st.session_state[f"{prefix}_plan_base"] = plan_sugerido
     plan = st.text_area("Plan", key=f"{prefix}_plan", height=220)
 
-    trazabilidad_gpc = ""
-    trazabilidad_aiepi = ""
     fundamento_guias_analisis = ""
     if habilitar_trazabilidad_gpc:
-        ruta_gpc_clave, trazabilidad_gpc, instrucciones_gpc_ia, registro_gpc = render_trazabilidad_gpc(
-            st,
-            clave=ruta_gpc_clave,
-            diagnostico=diagnosticos,
-            texto_clinico="\n".join(
+        apoyo_guias_automatico = construir_apoyo_gpc_aiepi_automatico(
+            diagnosticos,
+            "\n".join(
                 str(valor or "")
                 for valor in [
-                    enfermedad_actual, examen, analisis, diagnosticos,
-                    observacion_dx, plan,
+                    enfermedad_actual, antecedentes, revision, examen, analisis,
+                    diagnosticos, observacion_dx, plan,
                     f"TA {ta} FC {fc} FR {fr} SPO2 {sat} TEMPERATURA {temp} GLUCOMETRÍA {glucometria}",
                 ]
             ),
-            justificacion_key=f"{prefix}_gpc_justificacion",
-            registro_key=f"{prefix}_gpc_registro",
-            selector_key=f"{prefix}_gpc_ruta",
         )
-        apoyo_aiepi_clave, trazabilidad_aiepi, instrucciones_aiepi_ia = render_apoyo_aiepi(
-            st,
-            diagnostico=diagnosticos,
-            texto_clinico=enfermedad_actual,
-            selector_key=f"{prefix}_aiepi_apoyo",
-            registro_key=f"{prefix}_aiepi_registro",
-        )
-        fundamentos_guias = []
-        if ruta_gpc_clave and trazabilidad_gpc:
-            nombre_ruta = obtener_ruta_gpc(ruta_gpc_clave).get("nombre", "")
-            if nombre_ruta:
-                fundamentos_guias.append(
-                    f"EL MANEJO SE JUSTIFICA DE ACUERDO CON LA RUTA GPC DE {nombre_ruta}, "
-                    "EN CORRELACIÓN CON LOS HALLAZGOS CLÍNICOS DOCUMENTADOS."
-                )
-        if apoyo_aiepi_clave and trazabilidad_aiepi:
-            nombre_aiepi = obtener_apoyo_aiepi(apoyo_aiepi_clave).get("nombre", "")
-            if nombre_aiepi:
-                fundamentos_guias.append(
-                    f"SE INTEGRÓ LA {nombre_aiepi} SEGÚN LA VALORACIÓN Y CLASIFICACIÓN CLÍNICA REGISTRADAS."
-                )
-        fundamento_guias_analisis = " ".join(fundamentos_guias)
-        if instrucciones_gpc_ia:
-            instrucciones_gpc_ia += f" REGISTRO CLÍNICO COMPLEMENTARIO GPC: {registro_gpc or 'SIN REGISTRO ADICIONAL.'}"
-            contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
-        if instrucciones_aiepi_ia:
-            if permitir_generacion_analisis:
-                contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
-            contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
+        fundamento_guias_analisis = apoyo_guias_automatico["fundamento"]
+        contexto_plan_ia["ruta_gpc"] = apoyo_guias_automatico["instrucciones_gpc"]
+        contexto_plan_ia["apoyo_aiepi"] = apoyo_guias_automatico["instrucciones_aiepi"]
+        if permitir_generacion_analisis:
+            contexto_analisis_ia["ruta_gpc"] = apoyo_guias_automatico["instrucciones_gpc"]
+            contexto_analisis_ia["apoyo_aiepi"] = apoyo_guias_automatico["instrucciones_aiepi"]
         if fundamento_guias_analisis and permitir_generacion_analisis:
             contexto_analisis_ia["fundamento_guias_documentado"] = fundamento_guias_analisis
 
