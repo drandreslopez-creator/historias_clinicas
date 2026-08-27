@@ -5196,10 +5196,13 @@ def render():
     trazabilidad_gpc, instrucciones_gpc_ia = render_trazabilidad_gpc(
         st,
         clave=ruta_gpc_clave,
-        texto_clinico="\n".join([
-            enfermedad_input, examen, analisis, diagnostico_seleccionado,
-            observacion_diagnostico, plan,
-        ]),
+        texto_clinico="\n".join(
+            str(valor or "")
+            for valor in [
+                enfermedad_input, examen, analisis, diagnostico_seleccionado,
+                observacion_diagnostico, plan,
+            ]
+        ),
         justificacion_key="gpc_justificacion",
     )
     if instrucciones_gpc_ia:

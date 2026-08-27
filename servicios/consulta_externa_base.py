@@ -1676,10 +1676,13 @@ def render_consulta_externa(
         trazabilidad_gpc, instrucciones_gpc_ia = render_trazabilidad_gpc(
             st,
             clave=ruta_gpc_clave,
-            texto_clinico="\n".join([
-                enfermedad_actual, examen, analisis, diagnosticos,
-                observacion_dx, plan,
-            ]),
+            texto_clinico="\n".join(
+                str(valor or "")
+                for valor in [
+                    enfermedad_actual, examen, analisis, diagnosticos,
+                    observacion_dx, plan,
+                ]
+            ),
             justificacion_key=f"{prefix}_gpc_justificacion",
         )
         if instrucciones_gpc_ia:
