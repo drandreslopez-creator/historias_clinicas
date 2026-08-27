@@ -20,6 +20,8 @@ from herramientas.oms_full import (
 from herramientas.diagnostico_nutricional import diagnostico_mayor_5, diagnostico_menor_5
 from herramientas.rutas_gpc_pediatria import (
     detectar_ruta_gpc,
+    obtener_apoyo_aiepi,
+    obtener_ruta_gpc,
     render_apoyo_aiepi,
     render_trazabilidad_gpc,
     resumen_gpc_para_ia,
@@ -40,6 +42,7 @@ from servicios.pediatria_urgencias import (
     construir_conducta_final_analisis,
     construir_observacion_diagnostica_base,
     construir_conducta_sugerida_analisis,
+    ajustar_plan_a_conducta_final,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
@@ -50,6 +53,7 @@ from servicios.pediatria_urgencias import (
     extraer_resumen_antecedentes_para_analisis,
     extraer_resumen_examen_para_analisis,
     fusionar_analisis_editado_con_base_nueva,
+    integrar_fundamento_guias_en_analisis,
     complementar_observacion_diagnostica_con_ia,
     generar_docx_informe,
     generar_analisis_asistido_urgencias,
@@ -191,6 +195,21 @@ def _float_or_none(valor):
 def _texto_reporte_valor(valor, default="NO EVALUADO"):
     texto = str(valor or "").strip()
     return texto if texto else default
+
+
+def _construir_signos_vitales_reporte(ta, fc, sat, fr, temp, glucometria="", pb="", mostrar_pb=False):
+    partes = [
+        f"TA {_texto_reporte_valor(ta)} mmHg",
+        f"FC: {_texto_reporte_valor(fc)} lpm",
+        f"SpO2: {_texto_reporte_valor(sat)}%",
+        f"FR: {_texto_reporte_valor(fr)} rpm",
+        f"T: {_texto_reporte_valor(temp)} °C",
+    ]
+    if str(glucometria or "").strip():
+        partes.append(f"GLUCOMETRÍA: {glucometria} mg/dl")
+    if mostrar_pb and str(pb or "").strip():
+        partes.append(f"PB: {pb} cm")
+    return " ".join(partes)
 
 
 def _motivo_reporte(texto):
@@ -1665,6 +1684,8 @@ def render_consulta_externa(
     ):
         st.session_state[f"{prefix}_plan"] = PLAN_URGENCIAS_DEFAULT
     plan_base_local = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
+    if usar_modo_urgencias:
+        plan_base_local = ajustar_plan_a_conducta_final(plan_base_local, conducta_final_analisis)
     if modo_homeopatia_pediatrica_ia:
         plan_sugerido = plan_generado_homeo
     elif not generar_plan_automatico:
@@ -1721,6 +1742,7 @@ def render_consulta_externa(
 
     trazabilidad_gpc = ""
     trazabilidad_aiepi = ""
+    fundamento_guias_analisis = ""
     if habilitar_trazabilidad_gpc:
         ruta_gpc_clave, trazabilidad_gpc, instrucciones_gpc_ia, registro_gpc = render_trazabilidad_gpc(
             st,
@@ -1745,6 +1767,21 @@ def render_consulta_externa(
             selector_key=f"{prefix}_aiepi_apoyo",
             registro_key=f"{prefix}_aiepi_registro",
         )
+        fundamentos_guias = []
+        if ruta_gpc_clave and trazabilidad_gpc:
+            nombre_ruta = obtener_ruta_gpc(ruta_gpc_clave).get("nombre", "")
+            if nombre_ruta:
+                fundamentos_guias.append(
+                    f"EL MANEJO SE JUSTIFICA DE ACUERDO CON LA RUTA GPC DE {nombre_ruta}, "
+                    "EN CORRELACIÓN CON LOS HALLAZGOS CLÍNICOS DOCUMENTADOS."
+                )
+        if apoyo_aiepi_clave and trazabilidad_aiepi:
+            nombre_aiepi = obtener_apoyo_aiepi(apoyo_aiepi_clave).get("nombre", "")
+            if nombre_aiepi:
+                fundamentos_guias.append(
+                    f"SE INTEGRÓ LA {nombre_aiepi} SEGÚN LA VALORACIÓN Y CLASIFICACIÓN CLÍNICA REGISTRADAS."
+                )
+        fundamento_guias_analisis = " ".join(fundamentos_guias)
         if instrucciones_gpc_ia:
             instrucciones_gpc_ia += f" REGISTRO CLÍNICO COMPLEMENTARIO GPC: {registro_gpc or 'SIN REGISTRO ADICIONAL.'}"
             contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
@@ -1752,6 +1789,8 @@ def render_consulta_externa(
             if permitir_generacion_analisis:
                 contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
             contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
+        if fundamento_guias_analisis and permitir_generacion_analisis:
+            contexto_analisis_ia["fundamento_guias_documentado"] = fundamento_guias_analisis
 
     col_btn_1, col_btn_2 = st.columns(2)
     generar = col_btn_1.button("Generar Historia Clínica", key=f"{prefix}_generar", use_container_width=True)
@@ -1790,6 +1829,15 @@ def render_consulta_externa(
                             instrucciones_analisis=instrucciones_analisis_ia,
                             instrucciones_plan=instrucciones_plan_ia,
                         )
+                        analisis_default_final = integrar_fundamento_guias_en_analisis(
+                            analisis_default_final,
+                            fundamento_guias_analisis,
+                        )
+                        if usar_modo_urgencias:
+                            plan_sugerido_final = ajustar_plan_a_conducta_final(
+                                plan_sugerido_final,
+                                conducta_final_analisis,
+                            )
                     if st.session_state.get(f"{prefix}_analisis", "") in ("", st.session_state.get(f"{prefix}_analisis_base", "")):
                         analisis = analisis_default_final
                     else:
@@ -1889,11 +1937,8 @@ ENFERMEDAD ACTUAL:
 NEURODESARROLLO:
 {neuro}
 """
-        signos_vitales_linea = (
-            f"TA {_texto_reporte_valor(ta)} mmHg FC: {_texto_reporte_valor(fc)} lpm "
-            f"SpO2: {_texto_reporte_valor(sat)}% FR: {_texto_reporte_valor(fr)} rpm "
-            f"GLUCOMETRÍA: {_texto_reporte_valor(glucometria)} mg/dl T: {_texto_reporte_valor(temp)} °C"
-            + (f" PB: {_texto_reporte_valor(pb)} cm" if mostrar_pb else "")
+        signos_vitales_linea = _construir_signos_vitales_reporte(
+            ta, fc, sat, fr, temp, glucometria, pb, mostrar_pb
         )
         historia += f"""
 
@@ -1972,7 +2017,9 @@ PLAN:
             secciones.append(("NEURODESARROLLO", neuro))
         secciones.extend(
             [
-                ("SIGNOS VITALES", f"TA {_texto_reporte_valor(ta)} mmHg FC: {_texto_reporte_valor(fc)} lpm SpO2: {_texto_reporte_valor(sat)}% FR: {_texto_reporte_valor(fr)} rpm GLUCOMETRÍA: {_texto_reporte_valor(glucometria)} mg/dl T: {_texto_reporte_valor(temp)} °C" + (f" PB: {_texto_reporte_valor(pb)} cm" if mostrar_pb else "")),
+                ("SIGNOS VITALES", _construir_signos_vitales_reporte(
+                    ta, fc, sat, fr, temp, glucometria, pb, mostrar_pb
+                )),
                 ("ANTROPOMETRÍA", f"PESO: {_texto_reporte_valor(peso)} kg TALLA: {_texto_reporte_valor(talla)} cm" + (f" PC: {_texto_reporte_valor(pc)} cm" if es_pediatrica else (f" IMC: {_texto_reporte_valor(imc_adulto)} kg/m²" if imc_adulto else ""))),
                 ("EXAMEN FÍSICO", examen),
                 ("PARACLÍNICOS", paraclinicos_reporte),

@@ -43,6 +43,8 @@ from herramientas.diagnostico_nutricional import (
 )
 from herramientas.rutas_gpc_pediatria import (
     detectar_ruta_gpc,
+    obtener_apoyo_aiepi,
+    obtener_ruta_gpc,
     render_apoyo_aiepi,
     render_trazabilidad_gpc,
     resumen_gpc_para_ia,
@@ -63,6 +65,23 @@ BOGOTA_TZ = ZoneInfo("America/Bogota")
 def texto_reporte_valor(valor, default="NO EVALUADO"):
     texto = str(valor or "").strip()
     return texto if texto else default
+
+
+def construir_signos_vitales_reporte(ta, fc, sat, fr, temp, glucometria="", pb="", scq_pct=""):
+    partes = [
+        f"TA {texto_reporte_valor(ta)} mmHg",
+        f"FC: {texto_reporte_valor(fc)} lpm",
+        f"SpO2: {texto_reporte_valor(sat)}%",
+        f"FR: {texto_reporte_valor(fr)} rpm",
+        f"T: {texto_reporte_valor(temp)} °C",
+    ]
+    if str(glucometria or "").strip():
+        partes.append(f"GLUCOMETRÍA: {glucometria} mg/dl")
+    if str(pb or "").strip():
+        partes.append(f"PB: {pb} cm")
+    if str(scq_pct or "").strip():
+        partes.append(f"SUPERFICIE CORPORAL QUEMADA: {scq_pct}%")
+    return " ".join(partes)
 
 
 def motivo_reporte(texto):
@@ -2767,12 +2786,12 @@ def extraer_resumen_examen_para_analisis(examen):
     if "SIN EDEMAS" in extremidades:
         resumen.append("SIN EDEMAS")
 
-    if ("SIN DÉFICIT" in neuro or "SIN DEFICIT" in neuro) and "NO FOCALIZACIONES" in neuro:
+    if "NO FOCALIZACIONES" in neuro or "SIN FOCALIZACIONES" in neuro:
         if "IRRITABLE" in primera:
             resumen.append("IRRITABLE PERO SIN DÉFICIT NEUROLÓGICO")
         else:
             resumen.append("SIN DÉFICIT NEUROLÓGICO")
-    elif any(x in neuro for x in ["MENINGISMO", "FOCALIZACIONES", "CONVULS", "LETARGO", "SOMNOLIENT", "HIPOACTIVO"]):
+    elif any(x in neuro for x in ["MENINGISMO", "CONVULS", "LETARGO", "SOMNOLIENT", "HIPOACTIVO"]):
         resumen.append("CON HALLAZGOS NEUROLÓGICOS A CORRELACIONAR")
 
     if "BIEN PERFUNDIDA" in piel and "SIN LESIONES" in piel:
@@ -2785,7 +2804,7 @@ def extraer_resumen_examen_para_analisis(examen):
     if any(x in orofaringe for x in ["ERITEMA", "HIPEREMIA", "EXUDADO", "PLACAS", "VESICULAS", "VESÍCULAS"]):
         match_oro = re.search(r"(ERITEMA[^.,;]*|HIPEREMIA[^.,;]*|EXUDADO[^.,;]*|PLACAS[^.,;]*|VES[IÍ]CULAS?[^.,;]*)", orofaringe)
         if match_oro:
-            resumen.append(match_oro.group(1).strip())
+            resumen.append(f"OROFARINGE CON {match_oro.group(1).strip()}")
 
     if any(x in oidos for x in ["OTORREA", "HIPEREMIA", "ABOMBAMIENTO", "ERITEMA"]):
         match_oido = re.search(r"(OTORREA[^.,;]*|HIPEREMIA[^.,;]*|ABOMBAMIENTO[^.,;]*|ERITEMA[^.,;]*)", oidos)
@@ -3077,6 +3096,10 @@ def generar_analisis_asistido_urgencias(
     destinatario_informacion="FAMILIAR",
 ):
     partes = []
+    compromiso_respiratorio = any(
+        hallazgo in f"{resumen_examen_analisis} {resumen_signos_analisis}"
+        for hallazgo in ("DIFICULTAD RESPIRATORIA", "HIPOXEMIA", "TAQUIPNEICA")
+    )
     if enfermedad_auto:
         texto_base = limpiar_fragmento_analisis(enfermedad_auto).rstrip(".")
         if resumen_antecedentes_analisis:
@@ -3094,6 +3117,12 @@ def generar_analisis_asistido_urgencias(
     cuerpo_texto = ", ".join(
         item.strip(" ,.;") for item in cuerpo if item and item.strip(" ,.;")
     )
+    if compromiso_respiratorio:
+        cuerpo_texto = re.sub(
+            r"PACIENTE LUCE EN BUEN ESTADO GENERAL,?\s*",
+            "",
+            cuerpo_texto,
+        )
     if cuerpo_texto:
         partes.append(f"AL INGRESO {cuerpo_texto}.")
 
@@ -3681,7 +3710,9 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
         "Usa únicamente los datos suministrados; no inventes diagnósticos, hallazgos, tratamientos, dosis ni paraclínicos. "
         "Respeta la conducta final registrada y las recomendaciones clínicas entregadas como apoyo. "
         "Integra de manera natural los hallazgos, clasificación, conducta, educación, signos de alarma y control registrados en los apoyos clínicos. "
-        "No crees apartados separados ni menciones IA, GPC, AIEPI, trazabilidad, fuentes o listas de verificación. "
+        "Si el contexto contiene FUNDAMENTO DE GUÍAS DOCUMENTADO, inclúyelo una sola vez como una frase breve dentro del análisis; "
+        "no inventes ni menciones una guía no registrada. "
+        "No crees apartados separados ni menciones IA, trazabilidad, fuentes o listas de verificación. "
         f"INSTRUCCIONES PARA ANÁLISIS: {instrucciones_analisis or 'INTEGRA EL CONTEXTO CLÍNICO DE FORMA COHERENTE.'} "
         f"INSTRUCCIONES PARA PLAN: {instrucciones_plan or 'PROPÓN SOLO CONDUCTAS SUSTENTADAS POR EL CONTEXTO.'}"
     )
@@ -3713,6 +3744,17 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
     except Exception as error:
         registrar_error_ia("analisis", error)
         return base_analisis, base_plan
+
+
+def integrar_fundamento_guias_en_analisis(analisis, fundamento_guias=""):
+    """Añade al análisis una constancia auditable solo cuando hubo registro real."""
+    texto = str(analisis or "").strip()
+    fundamento = str(fundamento_guias or "").strip().upper()
+    if not texto or not fundamento:
+        return texto
+    if fundamento in texto.upper():
+        return texto
+    return f"{texto.rstrip('.')} . {fundamento}".replace(". .", ".")
 
 
 def fusionar_analisis_editado_con_base_nueva(analisis_actual, base_anterior, base_nueva, fingerprint, instrucciones=None):
@@ -4499,6 +4541,27 @@ def generar_plan_sugerido(diagnostico, peso, edad_meses):
     return "\n".join(lineas)
 
 
+def ajustar_plan_a_conducta_final(plan, conducta_final):
+    """Evita que el plan automático contradiga el sitio de manejo elegido."""
+    conducta = limpiar_fragmento_analisis(conducta_final)
+    lineas = [linea for linea in str(plan or "").splitlines() if linea.strip()]
+    if conducta == "OBSERVACIÓN":
+        lineas = [
+            "- OBSERVACIÓN PEDIÁTRICA Y REVALORACIÓN CLÍNICA SEGÚN EVOLUCIÓN"
+            if "HOSPITALIZACION PEDIATRICA" in limpiar_fragmento_analisis(linea)
+            else linea
+            for linea in lineas
+        ]
+    elif conducta == "HOSPITALIZACIÓN":
+        lineas = [
+            "- HOSPITALIZACIÓN PEDIÁTRICA"
+            if "OBSERVACION PEDIATRICA" in limpiar_fragmento_analisis(linea)
+            else linea
+            for linea in lineas
+        ]
+    return "\n".join(lineas)
+
+
 def generar_docx_informe(titulo, secciones):
     doc = Document()
     section = doc.sections[0]
@@ -5213,7 +5276,10 @@ def render():
 
     edad_meses_actual = edad_en_meses(fecha_nacimiento) if fecha_nacimiento else None
     diagnostico_plan = diagnostico_seleccionado or ""
-    plan_base_local = generar_plan_sugerido(diagnostico_plan, peso_num, edad_meses_actual)
+    plan_base_local = ajustar_plan_a_conducta_final(
+        generar_plan_sugerido(diagnostico_plan, peso_num, edad_meses_actual),
+        conducta_final_analisis,
+    )
     contexto_plan_ia = {
         "diagnostico_cie10_principal": diagnostico_seleccionado,
         "observacion_diagnostica": obs_dx_default,
@@ -5288,6 +5354,21 @@ def render():
         selector_key="aiepi_apoyo",
         registro_key="aiepi_registro",
     )
+    fundamentos_guias = []
+    if ruta_gpc_clave and trazabilidad_gpc:
+        nombre_ruta = obtener_ruta_gpc(ruta_gpc_clave).get("nombre", "")
+        if nombre_ruta:
+            fundamentos_guias.append(
+                f"EL MANEJO SE JUSTIFICA DE ACUERDO CON LA RUTA GPC DE {nombre_ruta}, "
+                "EN CORRELACIÓN CON LOS HALLAZGOS CLÍNICOS DOCUMENTADOS."
+            )
+    if apoyo_aiepi_clave and trazabilidad_aiepi:
+        nombre_aiepi = obtener_apoyo_aiepi(apoyo_aiepi_clave).get("nombre", "")
+        if nombre_aiepi:
+            fundamentos_guias.append(
+                f"SE INTEGRÓ LA {nombre_aiepi} SEGÚN LA VALORACIÓN Y CLASIFICACIÓN CLÍNICA REGISTRADAS."
+            )
+    fundamento_guias_analisis = " ".join(fundamentos_guias)
     if instrucciones_gpc_ia:
         instrucciones_gpc_ia += f" REGISTRO CLÍNICO COMPLEMENTARIO GPC: {registro_gpc or 'SIN REGISTRO ADICIONAL.'}"
         if permitir_generacion_analisis:
@@ -5297,6 +5378,8 @@ def render():
         if permitir_generacion_analisis:
             contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
         contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
+    if fundamento_guias_analisis and permitir_generacion_analisis:
+        contexto_analisis_ia["fundamento_guias_documentado"] = fundamento_guias_analisis
 
     st.subheader("Código trauma")
     st.caption("Opcional. Este bloque no se incorpora a la historia clínica; solo sirve para copiar y reportar al grupo.")
@@ -5550,6 +5633,14 @@ def render():
                         "SI LA CONDUCTA FINAL ESTÁ PENDIENTE DEFINIR, NO INVENTES UNA DECISIÓN FINAL."
                     ),
                 )
+                analisis_default_final = integrar_fundamento_guias_en_analisis(
+                    analisis_default_final,
+                    fundamento_guias_analisis,
+                )
+                plan_sugerido_final = ajustar_plan_a_conducta_final(
+                    plan_sugerido_final,
+                    conducta_final_analisis,
+                )
                 if st.session_state.get("analisis") in ("", st.session_state.get("analisis_base", "")):
                     analisis = analisis_default_final
                 else:
@@ -5609,7 +5700,7 @@ NEURODESARROLLO:
 {neuro_editable}
 
 SIGNOS VITALES:
-TA {texto_reporte_valor(ta)} mmHg FC: {texto_reporte_valor(fc)} lpm SpO2: {texto_reporte_valor(sat)}% FR: {texto_reporte_valor(fr)} rpm GLUCOMETRÍA: {texto_reporte_valor(glucometria)} mg/dl T: {texto_reporte_valor(temp)} °C PB: {texto_reporte_valor(pb)} cm
+{construir_signos_vitales_reporte(ta, fc, sat, fr, temp, glucometria, pb, scq_pct)}
 
 ANTROPOMETRÍA:
 PESO: {texto_reporte_valor(peso)} kg TALLA: {texto_reporte_valor(talla)} cm PC: {texto_reporte_valor(pc)} cm
@@ -5655,7 +5746,7 @@ PLAN:
             ("REVISIÓN POR SISTEMAS", revision),
             ("ANTECEDENTES PERSONALES Y FAMILIARES", antecedentes),
             ("NEURODESARROLLO", neuro_editable),
-            ("SIGNOS VITALES", f"TA {texto_reporte_valor(ta)} mmHg FC: {texto_reporte_valor(fc)} lpm SpO2: {texto_reporte_valor(sat)}% FR: {texto_reporte_valor(fr)} rpm GLUCOMETRÍA: {texto_reporte_valor(glucometria)} mg/dl T: {texto_reporte_valor(temp)} °C PB: {texto_reporte_valor(pb)} cm"),
+            ("SIGNOS VITALES", construir_signos_vitales_reporte(ta, fc, sat, fr, temp, glucometria, pb, scq_pct)),
             ("ANTROPOMETRÍA", f"PESO: {texto_reporte_valor(peso)} kg TALLA: {texto_reporte_valor(talla)} cm PC: {texto_reporte_valor(pc)} cm\nP/E Z: {z_pe}\nT/E Z: {z_te}\nP/T Z: {z_pt}\nIMC/E Z: {z_imc}\nPC/E Z: {z_pc}"),
             ("EXAMEN FÍSICO", examen),
             ("LABORATORIOS", paraclinicos_final),
