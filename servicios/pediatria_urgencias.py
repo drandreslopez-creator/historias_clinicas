@@ -44,6 +44,7 @@ from herramientas.diagnostico_nutricional import (
 from herramientas.rutas_gpc_pediatria import (
     detectar_ruta_gpc,
     render_trazabilidad_gpc,
+    resumen_gpc_para_ia,
 )
 from utils.google_drive_oauth import subir_docx_con_oauth
 from utils.google_drive_oauth import eliminar_archivo_drive_con_oauth
@@ -805,6 +806,8 @@ FORM_DEFAULTS = {
     "plan_base": PLAN_DEFAULT,
     "conducta_final_analisis": "PENDIENTE DEFINIR",
     "gpc_justificacion": "",
+    "gpc_registro": "",
+    "gpc_ruta": "",
     "paraclinicos_texto": "",
     "paraclinicos_auto": "",
     "paraclinicos_pdf_sig": "",
@@ -4909,8 +4912,11 @@ def render():
         "Conducta final",
         ["PENDIENTE DEFINIR", "OBSERVACIÓN", "HOSPITALIZACIÓN", "EGRESO", "REMISIÓN"],
         key="conducta_final_analisis",
+        on_change=lambda: st.session_state.__setitem__("analisis_actualizar_por_conducta", True),
     )
     permitir_generacion_analisis = conducta_final_analisis != "PENDIENTE DEFINIR"
+    if not permitir_generacion_analisis:
+        st.caption("Seleccione una conducta final para generar automáticamente el análisis clínico.")
 
     # =========================
     # ANÁLISIS
@@ -4956,6 +4962,10 @@ def render():
         conducta_final_analisis,
         conducta_sugerida_analisis,
     )
+    registro_gpc_previo = str(st.session_state.get("gpc_registro", "") or "").strip()
+    ruta_gpc_previa = st.session_state.get("gpc_ruta", "") or detectar_ruta_gpc(
+        st.session_state.get("dx_cie10", ""),
+    )
     analisis_default = ""
 
     if permitir_generacion_analisis:
@@ -4993,7 +5003,10 @@ def render():
             },
             "examen_fisico": examen,
             "paraclinicos": paraclinicos_texto,
+            "registro_clinico_gpc": registro_gpc_previo,
         }
+        if ruta_gpc_previa:
+            contexto_analisis_ia["recomendaciones_clinicas_gpc"] = resumen_gpc_para_ia(ruta_gpc_previa)
         fingerprint_analisis_ia = hashlib.md5(
             json.dumps(contexto_analisis_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
         ).hexdigest()
@@ -5013,6 +5026,7 @@ def render():
                     "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
                     "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
                     "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
+                    "Usa las recomendaciones GPC y el registro clínico solo para mantener coherencia clínica; no menciones GPC, trazabilidad, fuentes ni listas de verificación dentro del análisis. "
                     "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
                 ),
             )
@@ -5024,7 +5038,10 @@ def render():
     if "analisis" not in st.session_state:
         st.session_state["analisis"] = analisis_default
         st.session_state["analisis_base"] = analisis_default
-    elif permitir_generacion_analisis and st.session_state.get("analisis_base") != analisis_default:
+    elif permitir_generacion_analisis and (
+        st.session_state.get("analisis_base") != analisis_default
+        or st.session_state.pop("analisis_actualizar_por_conducta", False)
+    ):
         if st.session_state.get("analisis") == st.session_state.get("analisis_base"):
             st.session_state["analisis"] = analisis_default
         else:
@@ -5164,6 +5181,7 @@ def render():
         "examen_fisico": examen,
         "paraclinicos": paraclinicos_texto,
         "imagenes": imagenes_texto,
+        "registro_clinico_gpc": registro_gpc_previo,
     }
     fingerprint_plan_ia = hashlib.md5(
         json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -5192,10 +5210,10 @@ def render():
         height=200
     )
 
-    ruta_gpc_clave = detectar_ruta_gpc(diagnostico_seleccionado, enfermedad_input)
-    trazabilidad_gpc, instrucciones_gpc_ia = render_trazabilidad_gpc(
+    ruta_gpc_sugerida = detectar_ruta_gpc(diagnostico_seleccionado, enfermedad_input)
+    ruta_gpc_clave, trazabilidad_gpc, instrucciones_gpc_ia, registro_gpc = render_trazabilidad_gpc(
         st,
-        clave=ruta_gpc_clave,
+        clave=ruta_gpc_sugerida,
         texto_clinico="\n".join(
             str(valor or "")
             for valor in [
@@ -5204,8 +5222,11 @@ def render():
             ]
         ),
         justificacion_key="gpc_justificacion",
+        registro_key="gpc_registro",
+        selector_key="gpc_ruta",
     )
     if instrucciones_gpc_ia:
+        instrucciones_gpc_ia += f" REGISTRO CLÍNICO COMPLEMENTARIO GPC: {registro_gpc or 'SIN REGISTRO ADICIONAL.'}"
         if permitir_generacion_analisis:
             contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
         contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
@@ -5460,6 +5481,7 @@ def render():
                         "el examen físico, los signos vitales y los paraclínicos, sin contradecirla ni duplicar frases genéricas. "
                         "Si la conducta final está PENDIENTE DEFINIR, no inventes una decisión final. "
                         "En el cierre, usa el parentesco del acompañante si está disponible; si no, usa FAMILIAR. "
+                        "Usa las recomendaciones GPC y el registro clínico solo para mantener coherencia clínica; no menciones GPC, trazabilidad, fuentes ni listas de verificación dentro del análisis. "
                         "Redacta el análisis final con coherencia global usando los datos ya consignados en la historia."
                     ),
                     forzar=True,
