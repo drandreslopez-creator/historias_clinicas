@@ -5607,13 +5607,13 @@ DIAGNÓSTICO NUTRICIONAL:
 
 PLAN:
 {plan}
-
-{"TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO"}:
-{trazabilidad_gpc}
-
-APOYO AIEPI:
-{trazabilidad_aiepi}
 """
+
+        if trazabilidad_gpc:
+            titulo_apoyo_gpc = "TRAZABILIDAD GPC" if ruta_gpc_clave else "APOYO CLÍNICO"
+            historia += f"\n{titulo_apoyo_gpc}:\n{trazabilidad_gpc}\n"
+        if trazabilidad_aiepi:
+            historia += f"\nAPOYO AIEPI:\n{trazabilidad_aiepi}\n"
 
         st.success("Historia clínica generada")
         secciones_informe = [
