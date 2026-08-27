@@ -138,6 +138,147 @@ RUTAS_GPC = {
 }
 
 
+APOYOS_AIEPI = {
+    "RESPIRATORIO": {
+        "nombre": "EVALUACIÓN AIEPI: TOS O DIFICULTAD RESPIRATORIA",
+        "criterios": (
+            "SIGNOS GENERALES DE PELIGRO",
+            "FRECUENCIA RESPIRATORIA Y TRABAJO RESPIRATORIO",
+            "TIRAJE SUBCOSTAL, ESTRIDOR O SIBILANCIAS SEGÚN CORRESPONDA",
+            "OXIMETRÍA Y RESPUESTA CLÍNICA",
+            "CLASIFICACIÓN, SITIO DE MANEJO Y RECONSULTA",
+        ),
+    },
+    "DIARREA": {
+        "nombre": "EVALUACIÓN AIEPI: DIARREA / DESHIDRATACIÓN",
+        "criterios": (
+            "SIGNOS GENERALES DE PELIGRO",
+            "DURACIÓN, CARACTERÍSTICAS DE LAS DEPOSICIONES Y SANGRE EN HECES",
+            "ESTADO DE HIDRATACIÓN, TOLERANCIA ORAL Y DIURESIS",
+            "PLAN DE HIDRATACIÓN, ALIMENTACIÓN Y REVALORACIÓN",
+            "SIGNOS DE ALARMA Y RECONSULTA",
+        ),
+    },
+    "FIEBRE": {
+        "nombre": "EVALUACIÓN AIEPI: FIEBRE",
+        "criterios": (
+            "SIGNOS GENERALES DE PELIGRO Y ESTADO GENERAL",
+            "TIEMPO DE EVOLUCIÓN, TEMPERATURA Y FOCO CLÍNICO",
+            "EXANTEMA, RIGIDEZ DE CUELLO, PETEQUIAS U OTROS SIGNOS DE ALARMA SI APLICAN",
+            "EXÁMENES COMPLEMENTARIOS O JUSTIFICACIÓN DE NO SOLICITARLOS",
+            "CONDUCTA, SIGNOS DE ALARMA Y CONTROL",
+        ),
+    },
+    "INTEGRAL": {
+        "nombre": "EVALUACIÓN AIEPI INTEGRAL",
+        "criterios": (
+            "SIGNOS GENERALES DE PELIGRO Y ESTADO GENERAL",
+            "ALIMENTACIÓN, HIDRATACIÓN Y DIURESIS",
+            "CRECIMIENTO, DESARROLLO Y ESTADO NUTRICIONAL CUANDO APLIQUE",
+            "INMUNIZACIÓN, CONSEJERÍA Y MEDIDAS DE PREVENCIÓN",
+            "SIGNOS DE ALARMA, CONTROL Y RECONSULTA",
+        ),
+    },
+}
+
+
+def _apoyo_sin_ruta_gpc(diagnostico: object) -> tuple[str, tuple[str, ...]]:
+    texto = _normalizar(diagnostico)
+    if any(termino in texto for termino in ("RINOFARING", "RESFRIADO", "INFECCION RESPIRATORIA ALTA", "IRA ALTA")):
+        return (
+            "INFECCIÓN RESPIRATORIA ALTA / RINOFARINGITIS",
+            (
+                "DURACIÓN DEL CUADRO, ESTADO GENERAL Y TOLERANCIA A LA VÍA ORAL",
+                "AUSENCIA O PRESENCIA DE SIGNOS DE DIFICULTAD RESPIRATORIA Y HALLAZGOS FOCALES",
+                "JUSTIFICACIÓN CLÍNICA DE ANTIBIÓTICOS, PARACLÍNICOS O IMÁGENES SI SE INDICAN",
+                "MANEJO SINTOMÁTICO, MEDIDAS GENERALES, SIGNOS DE ALARMA Y CONTROL",
+            ),
+        )
+    if any(termino in texto for termino in ("FARING", "AMIGDAL", "ODINOFAG")):
+        return (
+            "FARINGITIS / FARINGOAMIGDALITIS",
+            (
+                "CRITERIOS CLÍNICOS, TOLERANCIA ORAL Y SIGNOS DE ALARMA",
+                "EXPLORACIÓN DE EXUDADO, ADENOPATÍAS, EXANTEMA Y HALLAZGOS DIFERENCIALES",
+                "JUSTIFICACIÓN DE PRUEBAS O ANTIBIÓTICO CUANDO APLIQUE",
+                "ANALGESIA, HIDRATACIÓN, CONTROL Y RECONSULTA",
+            ),
+        )
+    if any(termino in texto for termino in ("OTITIS", "OTALGIA")):
+        return (
+            "OTALGIA / OTITIS",
+            (
+                "OTOSCOPIA Y LATERALIDAD",
+                "SEVERIDAD DEL DOLOR, FIEBRE, OTORREA Y ESTADO GENERAL",
+                "JUSTIFICACIÓN DE OBSERVACIÓN O ANTIBIÓTICO CUANDO APLIQUE",
+                "ANALGESIA, SIGNOS DE ALARMA Y CONTROL",
+            ),
+        )
+    return (
+        "APOYO CLÍNICO SEGÚN DIAGNÓSTICO",
+        (
+            "DIAGNÓSTICO PRINCIPAL, DIFERENCIALES Y HALLAZGOS QUE LO SUSTENTAN",
+            "SEVERIDAD, ESTADO GENERAL, SIGNOS VITALES Y SIGNOS DE ALARMA",
+            "CONDUCTA, TRATAMIENTO CON DOSIS/VÍA/DURACIÓN CUANDO APLIQUE Y JUSTIFICACIÓN CLÍNICA",
+            "EDUCACIÓN, CONTROL Y CRITERIOS DE RECONSULTA",
+        ),
+    )
+
+
+def detectar_apoyo_aiepi(diagnostico: object, texto_clinico: object = "") -> str:
+    texto = _normalizar(f"{diagnostico or ''} {texto_clinico or ''}")
+    if any(termino in texto for termino in ("DIARREA", "GASTROENTERITIS", "DESHIDRAT")):
+        return "DIARREA"
+    if any(termino in texto for termino in ("FIEBRE", "FEBRIL", "EXANTEMA")):
+        return "FIEBRE"
+    if any(termino in texto for termino in ("TOS", "RINOFARING", "BRONQUI", "NEUMON", "ASMA", "CRUP", "ESTRIDOR", "SIBILAN")):
+        return "RESPIRATORIO"
+    return "INTEGRAL"
+
+
+def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, selector_key: str, registro_key: str) -> tuple[str, str, str]:
+    sugerido = detectar_apoyo_aiepi(diagnostico, texto_clinico)
+    opciones = list(APOYOS_AIEPI)
+    actual = st.session_state.get(selector_key, sugerido)
+    if actual not in opciones:
+        actual = sugerido
+    seleccionado = st.selectbox(
+        "Apoyo AIEPI aplicable",
+        opciones,
+        index=opciones.index(actual),
+        key=selector_key,
+        format_func=lambda opcion: APOYOS_AIEPI[opcion]["nombre"],
+        help="Apoyo para organizar la valoración pediátrica. Confirme siempre con AIEPI y el protocolo institucional vigente.",
+    )
+    apoyo = APOYOS_AIEPI[seleccionado]
+    st.subheader("Apoyo AIEPI")
+    st.caption("Registre los elementos clínicos que apliquen al caso:")
+    for criterio in apoyo["criterios"]:
+        st.caption(f"- {criterio}")
+    registro = st.text_area(
+        "Registro clínico AIEPI",
+        key=registro_key,
+        height=110,
+        placeholder="Registre clasificación, hallazgos, conducta, consejería, signos de alarma y control.",
+        help="Este registro se usa para apoyar la coherencia del análisis y plan, y se conserva como sección independiente del informe.",
+    )
+    trazabilidad = "\n".join(
+        [
+            f"APOYO AIEPI: {apoyo['nombre']}",
+            "ELEMENTOS A CONSIDERAR:",
+            *(f"- {criterio}" for criterio in apoyo["criterios"]),
+            "REGISTRO CLÍNICO AIEPI:",
+            registro.strip() or "NO REGISTRADO",
+        ]
+    )
+    instrucciones = (
+        f"APOYO AIEPI APLICABLE: {apoyo['nombre']}. "
+        f"CONSIDERAR: {'; '.join(apoyo['criterios'])}. "
+        f"REGISTRO AIEPI: {registro.strip() or 'SIN REGISTRO ADICIONAL.'}"
+    )
+    return seleccionado, trazabilidad, instrucciones
+
+
 def detectar_ruta_gpc(diagnostico: object, texto_clinico: object = "") -> str:
     # La ruta se activa por el diagnóstico registrado, no por síntomas aislados
     # que pueden estar negados dentro de la revisión por sistemas.
@@ -169,12 +310,19 @@ def construir_trazabilidad_gpc(
     texto_clinico: object,
     justificacion: object = "",
     registro_complementario: object = "",
+    respuestas_criterios: dict[str, str] | None = None,
 ) -> str:
     ruta = obtener_ruta_gpc(clave)
     if not ruta:
         return "NO SE DETECTÓ RUTA GPC ESPECÍFICA PARA EL DIAGNÓSTICO REGISTRADO."
 
-    texto = _normalizar(f"{texto_clinico or ''}\n{registro_complementario or ''}")
+    respuestas_criterios = respuestas_criterios or {}
+    respuestas_texto = "\n".join(
+        str(respuesta or "")
+        for respuesta in respuestas_criterios.values()
+        if str(respuesta or "").strip()
+    )
+    texto = _normalizar(f"{texto_clinico or ''}\n{registro_complementario or ''}\n{respuestas_texto}")
     lineas = [
         f"RUTA APLICADA: {ruta['nombre']}",
         f"FUENTE: {ruta['fuente']}",
@@ -185,6 +333,10 @@ def construir_trazabilidad_gpc(
     for etiqueta, terminos in ruta["verificaciones"].items():
         estado = "DOCUMENTADO" if any(_normalizar(termino) in texto for termino in terminos) else "PENDIENTE DE VERIFICAR"
         lineas.append(f"- {etiqueta}: {estado}")
+    lineas.append("REGISTRO POR CRITERIOS GPC:")
+    for etiqueta in ruta["verificaciones"]:
+        respuesta = str(respuestas_criterios.get(etiqueta, "") or "").strip()
+        lineas.append(f"- {etiqueta}: {respuesta or 'NO REGISTRADO'}")
     if str(registro_complementario or "").strip():
         lineas.append("REGISTRO CLÍNICO COMPLEMENTARIO GPC:")
         lineas.append(str(registro_complementario).strip())
@@ -198,6 +350,7 @@ def render_trazabilidad_gpc(
     st,
     *,
     clave: str,
+    diagnostico: object = "",
     texto_clinico: object,
     justificacion_key: str,
     registro_key: str,
@@ -220,8 +373,43 @@ def render_trazabilidad_gpc(
     ruta = obtener_ruta_gpc(ruta_seleccionada)
     st.subheader("Apoyo GPC")
     if not ruta:
-        st.caption("Seleccione una ruta cuando exista una guía aplicable. El análisis no incluirá referencias GPC automáticamente.")
-        return "", "", "", ""
+        nombre_apoyo, recomendaciones = _apoyo_sin_ruta_gpc(diagnostico)
+        st.caption(f"No hay una ruta GPC específica seleccionada. Apoyo sugerido: {nombre_apoyo}.")
+        st.caption("Registre los elementos que correspondan al diagnóstico y al protocolo institucional:")
+        for recomendacion in recomendaciones:
+            st.caption(f"- {recomendacion}")
+        registro_complementario = st.text_area(
+            "Registro clínico complementario",
+            key=registro_key,
+            height=110,
+            placeholder="Documente hallazgos, conducta, recomendaciones, signos de alarma, control o justificación clínica.",
+            help="Este registro apoya la coherencia del análisis y el plan, sin presentarse como una ruta GPC específica.",
+        )
+        justificacion = st.text_area(
+            "Justificación clínica si se individualiza la conducta",
+            key=justificacion_key,
+            height=90,
+        )
+        trazabilidad = "\n".join(
+            [
+                f"APOYO CLÍNICO SIN RUTA GPC ESPECÍFICA: {nombre_apoyo}",
+                "ELEMENTOS A CONSIDERAR:",
+                *(f"- {recomendacion}" for recomendacion in recomendaciones),
+                "REGISTRO CLÍNICO:",
+                registro_complementario.strip() or "NO REGISTRADO",
+                *(
+                    ["JUSTIFICACIÓN CLÍNICA:", justificacion.strip()]
+                    if justificacion.strip()
+                    else []
+                ),
+            ]
+        )
+        instrucciones = (
+            f"APOYO CLÍNICO SIN RUTA GPC ESPECÍFICA: {nombre_apoyo}. "
+            f"CONSIDERAR: {'; '.join(recomendaciones)}. "
+            f"REGISTRO CLÍNICO: {registro_complementario.strip() or 'SIN REGISTRO ADICIONAL.'}"
+        )
+        return "", trazabilidad, instrucciones, registro_complementario.strip()
 
     st.caption(f"Ruta detectada: {ruta['nombre']}")
     st.caption(f"Fuente: {ruta['fuente']}")
@@ -232,11 +420,19 @@ def render_trazabilidad_gpc(
     for alerta in ruta["alertas"]:
         st.info(alerta)
 
-    registro_previo = str(st.session_state.get(registro_key, "") or "")
-    texto = _normalizar(f"{texto_clinico or ''}\n{registro_previo}")
-    for etiqueta, terminos in ruta["verificaciones"].items():
-        estado = "DOCUMENTADO" if any(_normalizar(termino) in texto for termino in terminos) else "PENDIENTE DE VERIFICAR"
-        st.caption(f"{etiqueta}: {estado}")
+    respuestas_criterios = {}
+    st.caption("Registro por criterios GPC:")
+    for indice, etiqueta in enumerate(ruta["verificaciones"]):
+        col_etiqueta, col_respuesta = st.columns([1.35, 2])
+        with col_etiqueta:
+            st.caption(etiqueta)
+        with col_respuesta:
+            respuestas_criterios[etiqueta] = st.text_input(
+                etiqueta,
+                key=f"{registro_key}_criterio_{indice}",
+                label_visibility="collapsed",
+                placeholder="REGISTRE HALLAZGOS, CONDUCTA O JUSTIFICACIÓN",
+            )
 
     registro_complementario = st.text_area(
         "Registro clínico complementario GPC",
@@ -258,10 +454,16 @@ def render_trazabilidad_gpc(
         ruta_seleccionada,
         construir_trazabilidad_gpc(
             ruta_seleccionada,
-            f"{texto_clinico or ''}\n{registro_complementario or ''}",
+            texto_clinico,
             justificacion,
             registro_complementario,
+            respuestas_criterios,
         ),
         resumen_gpc_para_ia(ruta_seleccionada),
-        registro_complementario,
+        "\n".join(
+            [
+                *(f"{etiqueta}: {respuesta}" for etiqueta, respuesta in respuestas_criterios.items() if respuesta.strip()),
+                registro_complementario.strip(),
+            ]
+        ).strip(),
     )
