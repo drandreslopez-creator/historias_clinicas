@@ -241,6 +241,54 @@ def detectar_apoyo_aiepi(diagnostico: object, texto_clinico: object = "") -> str
     return "INTEGRAL"
 
 
+def construir_apoyo_gpc_aiepi_automatico(
+    diagnostico: object,
+    texto_clinico: object,
+) -> dict[str, str]:
+    """Construye el contexto clínico automático para la redacción asistida.
+
+    No emite una clasificación clínica nueva: orienta al modelo para que use
+    exclusivamente los datos ya consignados en la historia.
+    """
+    ruta_clave = detectar_ruta_gpc(diagnostico, texto_clinico)
+    apoyo_clave = detectar_apoyo_aiepi(diagnostico, texto_clinico)
+    ruta = obtener_ruta_gpc(ruta_clave)
+    apoyo = obtener_apoyo_aiepi(apoyo_clave)
+
+    if ruta:
+        instrucciones_gpc = resumen_gpc_para_ia(ruta_clave)
+        fundamento_gpc = (
+            f"SE REALIZÓ VALORACIÓN CLÍNICA ORIENTADA POR LA RUTA GPC DE {ruta['nombre']}, "
+            "CON BASE EN LOS HALLAZGOS DOCUMENTADOS."
+        )
+    else:
+        nombre_apoyo, recomendaciones = _apoyo_sin_ruta_gpc(diagnostico)
+        instrucciones_gpc = (
+            f"APOYO CLÍNICO AUTOMÁTICO SIN RUTA GPC ESPECÍFICA: {nombre_apoyo}. "
+            f"CONSIDERAR: {'; '.join(recomendaciones)}. "
+            "USA SOLO DATOS DOCUMENTADOS Y NO AFIRMES CUMPLIMIENTO DE UNA GPC ESPECÍFICA."
+        )
+        fundamento_gpc = ""
+
+    criterios_aiepi = "; ".join(apoyo.get("criterios", ()))
+    instrucciones_aiepi = (
+        f"APOYO AIEPI AUTOMÁTICO: {apoyo.get('nombre', 'EVALUACIÓN PEDIÁTRICA INTEGRAL')}. "
+        f"VALORA, SOLO CON LOS DATOS DOCUMENTADOS: {criterios_aiepi}. "
+        "RESPETA LOS HALLAZGOS NEGADOS Y NO INVENTES CLASIFICACIONES, SIGNOS NI TRATAMIENTOS."
+    )
+    fundamento_aiepi = (
+        f"SE INTEGRÓ LA {apoyo.get('nombre', 'EVALUACIÓN AIEPI INTEGRAL')} "
+        "AL ANÁLISIS CLÍNICO SEGÚN LA INFORMACIÓN REGISTRADA."
+    )
+    return {
+        "ruta_gpc": ruta_clave,
+        "apoyo_aiepi": apoyo_clave,
+        "instrucciones_gpc": instrucciones_gpc,
+        "instrucciones_aiepi": instrucciones_aiepi,
+        "fundamento": " ".join(item for item in (fundamento_gpc, fundamento_aiepi) if item),
+    }
+
+
 def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, selector_key: str, registro_key: str) -> tuple[str, str, str]:
     sugerido = detectar_apoyo_aiepi(diagnostico, texto_clinico)
     opciones = list(APOYOS_AIEPI)
