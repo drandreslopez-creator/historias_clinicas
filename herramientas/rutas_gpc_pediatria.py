@@ -289,7 +289,7 @@ def construir_apoyo_gpc_aiepi_automatico(
     }
 
 
-def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, selector_key: str, registro_key: str) -> tuple[str, str, str]:
+def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, selector_key: str, registro_key: str) -> tuple[str, str, str, str]:
     sugerido = detectar_apoyo_aiepi(diagnostico, texto_clinico)
     opciones = list(APOYOS_AIEPI)
     actual = st.session_state.get(selector_key, sugerido)
@@ -305,27 +305,44 @@ def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, select
     )
     apoyo = APOYOS_AIEPI[seleccionado]
     st.subheader("Apoyo AIEPI")
-    st.caption("Registre los elementos clínicos que apliquen al caso:")
-    for criterio in apoyo["criterios"]:
-        st.caption(f"- {criterio}")
+    st.caption("Registre cada criterio como PRESENTE, AUSENTE o con el hallazgo y conducta correspondiente.")
+    respuestas_criterios = {}
+    for indice, criterio in enumerate(apoyo["criterios"]):
+        col_criterio, col_respuesta = st.columns([1.35, 2])
+        with col_criterio:
+            st.caption(criterio)
+        with col_respuesta:
+            respuestas_criterios[criterio] = st.text_input(
+                criterio,
+                key=f"{registro_key}_criterio_{indice}",
+                label_visibility="collapsed",
+                placeholder="PRESENTE, AUSENTE O HALLAZGO / CONDUCTA",
+            )
     registro = st.text_area(
         "Registro clínico AIEPI",
         key=registro_key,
         height=110,
-        placeholder="Registre clasificación, hallazgos, conducta, consejería, signos de alarma y control.",
-        help="Este registro se usa para apoyar la coherencia del análisis y plan, y se conserva como sección independiente del informe.",
+        placeholder="Amplíe clasificación, conducta, consejería, signos de alarma o control si es necesario.",
+        help="Los registros AIEPI se integran de forma clínica al análisis y al plan final.",
     )
+    lineas_registro = [
+        f"{criterio}: {respuesta.strip()}"
+        for criterio, respuesta in respuestas_criterios.items()
+        if respuesta.strip()
+    ]
+    if registro.strip():
+        lineas_registro.append(registro.strip())
     trazabilidad = (
-        f"CLASIFICACIÓN AIEPI: {apoyo['nombre']}\n{registro.strip()}"
-        if registro.strip()
+        "\n".join([f"CLASIFICACIÓN AIEPI: {apoyo['nombre']}", *lineas_registro])
+        if lineas_registro
         else ""
     )
     instrucciones = (
         f"APOYO AIEPI APLICABLE: {apoyo['nombre']}. "
         f"CONSIDERAR: {'; '.join(apoyo['criterios'])}. "
-        f"REGISTRO AIEPI: {registro.strip() or 'SIN REGISTRO ADICIONAL.'}"
+        f"REGISTRO AIEPI POR CRITERIOS: {'; '.join(lineas_registro) or 'SIN REGISTRO ADICIONAL.'}"
     )
-    return seleccionado, trazabilidad, instrucciones
+    return seleccionado, trazabilidad, instrucciones, "\n".join(lineas_registro)
 
 
 def detectar_ruta_gpc(diagnostico: object, texto_clinico: object = "") -> str:
