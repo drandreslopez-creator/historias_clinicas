@@ -1260,6 +1260,8 @@ def cargar_ejemplo_guia_urgencias(nombre_ejemplo):
         "conducta_final_analisis": caso.get("conducta", "PENDIENTE DEFINIR"),
         "plan": caso.get("plan", ""),
         "plan_base": caso.get("plan", ""),
+        "_analisis_ejemplo_pendiente": caso.get("analisis", ""),
+        "_plan_ejemplo_pendiente": caso.get("plan", ""),
         "gpc_ruta": caso.get("gpc", ""),
         "aiepi_apoyo": caso.get("aiepi", "INTEGRAL"),
     }
@@ -4915,15 +4917,21 @@ def render():
     )
 
     st.header(titulo_historia)
-    col_acc_1, col_acc_2 = st.columns([2, 1])
-    ejemplo_guia = col_acc_1.selectbox(
+    col_acc_1, col_acc_2, col_acc_3 = st.columns([1, 2, 1])
+    nivel_ejemplo = col_acc_1.selectbox(
+        "Sitio de manejo del ejemplo",
+        ["", "EGRESO", "OBSERVACIÓN", "HOSPITALIZACIÓN"],
+        format_func=lambda opcion: "Todos" if not opcion else opcion.title(),
+        key="nivel_ejemplo_urgencias",
+    )
+    ejemplo_guia = col_acc_2.selectbox(
         "Ejemplo clínico guiado",
-        [""] + nombres_ejemplos("pediatria"),
+        [""] + nombres_ejemplos("pediatria", nivel_ejemplo or None),
         format_func=lambda opcion: "Seleccione una patología" if not opcion else opcion,
         key="ejemplo_guia_urgencias",
         help="Carga un caso docente editable con los criterios GPC y AIEPI ya documentados.",
     )
-    if col_acc_2.button("Cargar ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
+    if col_acc_3.button("Cargar ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
         if ejemplo_guia:
             cargar_ejemplo_guia_urgencias(ejemplo_guia)
         else:
@@ -5278,6 +5286,13 @@ def render():
 
     st.subheader("Análisis")
 
+    # Conserva el análisis docente del ejemplo; en cambios posteriores el
+    # mecanismo existente lo trata como texto editable del profesional.
+    analisis_ejemplo = st.session_state.pop("_analisis_ejemplo_pendiente", "")
+    if analisis_ejemplo:
+        st.session_state["analisis"] = analisis_ejemplo
+        st.session_state["analisis_base"] = analisis_default
+
     # Carga el análisis por defecto una sola vez y solo lo refresca si el
     # contenido previo seguía siendo el automático.
     if "analisis" not in st.session_state:
@@ -5452,6 +5467,12 @@ def render():
         if refinar_ia_en_vivo
         else plan_base_local
     )
+
+    # Evita que el recalculador sustituya el plan completo del caso docente.
+    plan_ejemplo = st.session_state.pop("_plan_ejemplo_pendiente", "")
+    if plan_ejemplo:
+        st.session_state["plan"] = plan_ejemplo
+        st.session_state["plan_base"] = plan_sugerido
 
     if "plan" not in st.session_state:
         st.session_state["plan"] = plan_sugerido

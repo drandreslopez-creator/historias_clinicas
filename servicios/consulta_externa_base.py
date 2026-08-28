@@ -910,6 +910,8 @@ def _cargar_ejemplo_guia_consulta_externa(
         f"{prefix}_conducta_final_analisis": caso.get("conducta", "PENDIENTE DEFINIR"),
         f"{prefix}_plan": caso.get("plan", ""),
         f"{prefix}_plan_base": caso.get("plan", ""),
+        f"_{prefix}_analisis_ejemplo_pendiente": caso.get("analisis", ""),
+        f"_{prefix}_plan_ejemplo_pendiente": caso.get("plan", ""),
         f"{prefix}_gpc_ruta": caso.get("gpc", ""),
         f"{prefix}_aiepi_apoyo": caso.get("aiepi", "INTEGRAL"),
     }
@@ -1712,6 +1714,10 @@ def render_consulta_externa(
             )
 
     st.subheader("Análisis")
+    analisis_ejemplo = st.session_state.pop(f"_{prefix}_analisis_ejemplo_pendiente", "")
+    if analisis_ejemplo:
+        st.session_state[f"{prefix}_analisis"] = analisis_ejemplo
+        st.session_state[f"{prefix}_analisis_base"] = analisis_default
     if generar_analisis_automatico and permitir_generacion_analisis and (
         st.session_state.get(f"{prefix}_analisis_base") != analisis_default
         or st.session_state.pop(f"{prefix}_analisis_actualizar_por_conducta", False)
@@ -1839,6 +1845,10 @@ def render_consulta_externa(
             )
         else:
             plan_sugerido = plan_base_local
+    plan_ejemplo = st.session_state.pop(f"_{prefix}_plan_ejemplo_pendiente", "")
+    if plan_ejemplo:
+        st.session_state[f"{prefix}_plan"] = plan_ejemplo
+        st.session_state[f"{prefix}_plan_base"] = plan_sugerido
     if st.session_state.get(f"{prefix}_plan_base") != plan_sugerido:
         if st.session_state.get(f"{prefix}_plan", "") == st.session_state.get(f"{prefix}_plan_base", ""):
             st.session_state[f"{prefix}_plan"] = plan_sugerido
