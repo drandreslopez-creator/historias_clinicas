@@ -43,6 +43,8 @@ def render_telemedicina_pediatria():
         mostrar_neurodesarrollo=True,
         mostrar_modalidad_consulta=True,
         mostrar_pb=True,
+        habilitar_trazabilidad_gpc=True,
+        familia_ejemplos="pediatria",
     )
 
 
@@ -87,9 +89,10 @@ def render_consulta_neonatologia():
         usar_ia_analisis=False,
         usar_ia_plan=False,
         usar_ia_observacion_dx=False,
-        mostrar_boton_ejemplo=False,
+        mostrar_boton_ejemplo=True,
         generar_analisis_automatico=False,
         generar_plan_automatico=False,
+        familia_ejemplos="neonatal",
     )
 
 
@@ -103,6 +106,7 @@ def render_hospitalizacion_ingreso():
         mostrar_modalidad_consulta=False,
         mostrar_pb=True,
         habilitar_trazabilidad_gpc=True,
+        familia_ejemplos="pediatria",
     )
 
 
@@ -116,6 +120,7 @@ def render_hospitalizacion_evolucion():
         mostrar_modalidad_consulta=False,
         mostrar_pb=True,
         habilitar_trazabilidad_gpc=True,
+        familia_ejemplos="pediatria",
     )
 
 
@@ -129,6 +134,7 @@ def render_hospitalizacion_interconsulta():
         mostrar_modalidad_consulta=False,
         mostrar_pb=True,
         habilitar_trazabilidad_gpc=True,
+        familia_ejemplos="pediatria",
     )
 
 
@@ -141,6 +147,7 @@ def render_neonatologia_evolucion_alojamiento():
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
         mostrar_pb=False,
+        familia_ejemplos="neonatal",
     )
 
 
@@ -153,6 +160,7 @@ def render_neonatologia_interconsulta():
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
         mostrar_pb=False,
+        familia_ejemplos="neonatal",
     )
 
 
@@ -165,6 +173,7 @@ def render_neonatologia_evolucion_urgencias():
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
         mostrar_pb=False,
+        familia_ejemplos="neonatal",
     )
 
 
@@ -177,6 +186,7 @@ def render_neonatologia_ingreso_unidad():
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
         mostrar_pb=False,
+        familia_ejemplos="neonatal",
     )
 
 
@@ -189,4 +199,5 @@ def render_neonatologia_evolucion_ucin():
         mostrar_neurodesarrollo=False,
         mostrar_modalidad_consulta=False,
         mostrar_pb=False,
+        familia_ejemplos="neonatal",
     )

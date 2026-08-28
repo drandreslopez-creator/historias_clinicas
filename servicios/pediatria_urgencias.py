@@ -44,8 +44,13 @@ from herramientas.diagnostico_nutricional import (
 from herramientas.rutas_gpc_pediatria import (
     construir_apoyo_gpc_aiepi_automatico,
     detectar_ruta_gpc,
+    obtener_apoyo_aiepi,
+    obtener_ruta_gpc,
+    render_apoyo_aiepi,
+    render_trazabilidad_gpc,
     resumen_gpc_para_ia,
 )
+from herramientas.ejemplos_guias_pediatria import nombres_ejemplos, obtener_ejemplo
 from utils.google_drive_oauth import subir_docx_con_oauth
 from utils.google_drive_oauth import eliminar_archivo_drive_con_oauth
 
@@ -1227,6 +1232,46 @@ def cargar_ejemplo_urgencias():
     }
     for key, value in ejemplo.items():
         st.session_state[key] = value
+    borrar_borrador_urgencias()
+
+
+def cargar_ejemplo_guia_urgencias(nombre_ejemplo):
+    """Carga un caso docente completo que el médico puede sobreescribir."""
+    caso = obtener_ejemplo(nombre_ejemplo, "pediatria")
+    if not caso:
+        return
+
+    cargar_ejemplo_urgencias()
+    for key in list(st.session_state):
+        if key.startswith(("gpc_registro_criterio_", "aiepi_registro_criterio_")):
+            st.session_state.pop(key, None)
+
+    signos = caso.get("signos", {})
+    valores = {
+        "motivo_1": caso.get("motivo", ""),
+        "fecha_1": caso.get("fecha_nacimiento", date(2022, 3, 15)),
+        "sexo_1": caso.get("sexo", "Femenino"),
+        "enfermedad_1": caso.get("enfermedad", ""),
+        "antecedentes_1": caso.get("antecedentes", ANTECEDENTES_DEFAULT),
+        "revision": caso.get("revision", REVISION_DEFAULT),
+        "examen": caso.get("examen", EXAMEN_DEFAULT),
+        "busqueda_cie10": caso.get("busqueda_cie10", ""),
+        "dx_cie10_pendiente": caso.get("diagnostico", ""),
+        "conducta_final_analisis": caso.get("conducta", "PENDIENTE DEFINIR"),
+        "plan": caso.get("plan", ""),
+        "plan_base": caso.get("plan", ""),
+        "gpc_ruta": caso.get("gpc", ""),
+        "aiepi_apoyo": caso.get("aiepi", "INTEGRAL"),
+    }
+    for campo in ("ta", "fc", "fr", "sat", "temp", "peso", "talla", "pc", "pb"):
+        valores[campo] = signos.get(campo, "")
+    for key, value in valores.items():
+        st.session_state[key] = value
+
+    for indice, respuesta in enumerate(caso.get("gpc_criterios", {}).values()):
+        st.session_state[f"gpc_registro_criterio_{indice}"] = respuesta
+    for indice, respuesta in enumerate(caso.get("aiepi_criterios", {}).values()):
+        st.session_state[f"aiepi_registro_criterio_{indice}"] = respuesta
     borrar_borrador_urgencias()
 
 
@@ -3781,6 +3826,8 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
         "Respeta las negaciones clínicas textuales: un síntoma o signo documentado como NIEGA, SIN o AUSENTE no puede transformarse en un hallazgo presente. "
         "Respeta la conducta final registrada y las recomendaciones clínicas entregadas como apoyo. "
         "Integra de manera natural los hallazgos, clasificación, conducta, educación, signos de alarma y control registrados en los apoyos clínicos. "
+        "Cuando existan REGISTROS GPC O AIEPI POR CRITERIOS, incorpora los hallazgos afirmados o negados de mayor relevancia "
+        "como parte del razonamiento clínico, sin contradecirlos ni repetir toda la lista. "
         "Si el contexto contiene FUNDAMENTO DE GUÍAS DOCUMENTADO, inclúyelo una sola vez como una frase breve dentro del análisis; "
         "no inventes ni menciones una guía no registrada. "
         "No crees apartados separados ni menciones IA, trazabilidad, fuentes o listas de verificación. "
@@ -4868,9 +4915,19 @@ def render():
     )
 
     st.header(titulo_historia)
-    col_acc_1, col_acc_2 = st.columns(2)
-    if col_acc_1.button("Ver ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
-        cargar_ejemplo_urgencias()
+    col_acc_1, col_acc_2 = st.columns([2, 1])
+    ejemplo_guia = col_acc_1.selectbox(
+        "Ejemplo clínico guiado",
+        [""] + nombres_ejemplos("pediatria"),
+        format_func=lambda opcion: "Seleccione una patología" if not opcion else opcion,
+        key="ejemplo_guia_urgencias",
+        help="Carga un caso docente editable con los criterios GPC y AIEPI ya documentados.",
+    )
+    if col_acc_2.button("Cargar ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
+        if ejemplo_guia:
+            cargar_ejemplo_guia_urgencias(ejemplo_guia)
+        else:
+            cargar_ejemplo_urgencias()
         st.rerun()
     edicion_rapida = st.toggle(
         "Edición rápida",
@@ -5299,6 +5356,15 @@ def render():
         cie10_filtrado = cie10_filtrado.copy()
         cie10_filtrado["description_es"] = cie10_filtrado["description"].map(traducir_cie10_descripcion)
         cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
+        diagnostico_pendiente = str(st.session_state.get("dx_cie10_pendiente", "")).strip()
+        if diagnostico_pendiente:
+            codigo_pendiente = diagnostico_pendiente.split("-", 1)[0].strip()
+            coincidencias = cie10_filtrado[
+                cie10_filtrado["code"].astype(str).str.startswith(codigo_pendiente)
+            ]
+            if not coincidencias.empty:
+                st.session_state["dx_cie10"] = coincidencias.iloc[0]["label_es"]
+            st.session_state.pop("dx_cie10_pendiente", None)
         with st.expander(f"Resultados de diagnóstico ({len(cie10_filtrado)})", expanded=False):
             diagnostico_seleccionado = st.selectbox(
                 "Diagnóstico CIE-10",
@@ -5401,23 +5467,47 @@ def render():
         height=200
     )
 
-    apoyo_guias_automatico = construir_apoyo_gpc_aiepi_automatico(
-        diagnostico_seleccionado,
-        "\n".join(
-            str(valor or "")
-            for valor in [
-                enfermedad_input, antecedentes, revision, examen, analisis,
-                diagnostico_seleccionado, observacion_diagnostico, plan,
-                f"TA {ta} FC {fc} FR {fr} SPO2 {sat} TEMPERATURA {temp} GLUCOMETRÍA {glucometria}",
-            ]
-        ),
+    texto_guias = "\n".join(
+        str(valor or "")
+        for valor in [
+            enfermedad_input, antecedentes, revision, examen, analisis,
+            diagnostico_seleccionado, observacion_diagnostico, plan,
+            f"TA {ta} FC {fc} FR {fr} SPO2 {sat} TEMPERATURA {temp} GLUCOMETRÍA {glucometria}",
+        ]
     )
-    fundamento_guias_analisis = apoyo_guias_automatico["fundamento"]
+    ruta_gpc_clave, trazabilidad_gpc, instrucciones_gpc_ia, registro_gpc = render_trazabilidad_gpc(
+        st,
+        clave=detectar_ruta_gpc(diagnostico_seleccionado, enfermedad_input),
+        diagnostico=diagnostico_seleccionado,
+        texto_clinico=texto_guias,
+        justificacion_key="gpc_justificacion",
+        registro_key="gpc_registro",
+        selector_key="gpc_ruta",
+    )
+    apoyo_aiepi_clave, trazabilidad_aiepi, instrucciones_aiepi_ia, registro_aiepi = render_apoyo_aiepi(
+        st,
+        diagnostico=diagnostico_seleccionado,
+        texto_clinico=texto_guias,
+        selector_key="aiepi_apoyo",
+        registro_key="aiepi_registro",
+    )
+    constancias_guias = []
+    if trazabilidad_gpc:
+        ruta_nombre = obtener_ruta_gpc(ruta_gpc_clave).get("nombre", "APOYO CLÍNICO")
+        constancias_guias.append(
+            f"SE DOCUMENTA VALORACIÓN Y CONDUCTA ORIENTADAS POR {ruta_nombre}: {registro_gpc.upper()}."
+        )
+    if trazabilidad_aiepi:
+        apoyo_nombre = obtener_apoyo_aiepi(apoyo_aiepi_clave).get("nombre", "EVALUACIÓN AIEPI")
+        constancias_guias.append(
+            f"SE DOCUMENTA {apoyo_nombre}: {registro_aiepi.upper()}."
+        )
+    fundamento_guias_analisis = " ".join(constancias_guias)
     if permitir_generacion_analisis:
-        contexto_analisis_ia["ruta_gpc"] = apoyo_guias_automatico["instrucciones_gpc"]
-        contexto_analisis_ia["apoyo_aiepi"] = apoyo_guias_automatico["instrucciones_aiepi"]
-    contexto_plan_ia["ruta_gpc"] = apoyo_guias_automatico["instrucciones_gpc"]
-    contexto_plan_ia["apoyo_aiepi"] = apoyo_guias_automatico["instrucciones_aiepi"]
+        contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
+        contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
+    contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
+    contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
     if fundamento_guias_analisis and permitir_generacion_analisis:
         contexto_analisis_ia["fundamento_guias_documentado"] = fundamento_guias_analisis
 

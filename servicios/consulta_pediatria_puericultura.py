@@ -16,6 +16,8 @@ def render():
         revision_auto_depende_enfermedad=True,
         mostrar_conducta_final=False,
         conducta_final_oculta="EGRESO",
+        habilitar_trazabilidad_gpc=True,
+        familia_ejemplos="pediatria",
         instrucciones_analisis_ia=(
             "Eres un asistente clínico experto en consulta externa pediátrica. "
             "Usa únicamente la información consignada en la historia clínica. No inventes diagnósticos, tratamientos, signos ni laboratorios. "
