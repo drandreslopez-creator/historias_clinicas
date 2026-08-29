@@ -66,6 +66,7 @@ from servicios.pediatria_urgencias import (
     puntuar_diagnostico,
     subir_docx_a_google_drive,
     render_informe_html,
+    etiqueta_cie10_en_espanol,
 )
 
 
@@ -586,6 +587,12 @@ def _construir_diagnostico_cie10(prefix):
 
     cie10_filtrado = cie10_filtrado.copy()
     cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
+    diagnostico_key = f"{prefix}_consulta_cie10_dx"
+    diagnostico_en_sesion = str(st.session_state.get(diagnostico_key, "") or "").strip()
+    if diagnostico_en_sesion:
+        diagnostico_espanol = etiqueta_cie10_en_espanol(diagnostico_en_sesion, cie10)
+        if diagnostico_espanol != diagnostico_en_sesion:
+            st.session_state[diagnostico_key] = diagnostico_espanol
     pendiente = str(st.session_state.get(f"{prefix}_consulta_cie10_pendiente", "")).strip()
     if pendiente:
         codigo_pendiente = pendiente.split("-", 1)[0].strip()

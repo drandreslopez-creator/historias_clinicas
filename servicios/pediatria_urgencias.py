@@ -1014,6 +1014,26 @@ def normalizar_codigo_cie10(codigo):
     return re.sub(r"[^A-Z0-9]", "", str(codigo or "").upper())
 
 
+def etiqueta_cie10_en_espanol(etiqueta, catalogo=None):
+    """Convierte etiquetas CIE-10 antiguas en inglés a la descripción local en español."""
+    texto = str(etiqueta or "").strip()
+    if not texto:
+        return ""
+
+    coincidencia = re.match(r"\s*([A-Z]\d{2}(?:\.\d+)?)", texto, flags=re.IGNORECASE)
+    if not coincidencia:
+        return normalizar_diagnostico_espanol(texto)
+
+    codigo = coincidencia.group(1).upper()
+    catalogo = catalogo if catalogo is not None else cargar_cie10()
+    coincidencias = catalogo[catalogo["code_key"] == normalizar_codigo_cie10(codigo)]
+    if coincidencias.empty:
+        return normalizar_diagnostico_espanol(texto)
+
+    fila = coincidencias.iloc[0]
+    return f"{fila['code']} - {fila['description_es']}"
+
+
 def tokenizar_texto(texto):
     return [t for t in re.split(r"[^a-z0-9]+", normalizar_texto(texto)) if t]
 
@@ -5469,6 +5489,12 @@ def render():
     else:
         cie10_filtrado = cie10_filtrado.copy()
         cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
+        # Migra selecciones preservadas por Streamlit desde el catálogo anterior en inglés.
+        diagnostico_en_sesion = str(st.session_state.get("dx_cie10", "") or "").strip()
+        if diagnostico_en_sesion:
+            diagnostico_espanol = etiqueta_cie10_en_espanol(diagnostico_en_sesion, cie10)
+            if diagnostico_espanol != diagnostico_en_sesion:
+                st.session_state["dx_cie10"] = diagnostico_espanol
         diagnostico_pendiente = str(st.session_state.get("dx_cie10_pendiente", "")).strip()
         if diagnostico_pendiente:
             codigo_pendiente = diagnostico_pendiente.split("-", 1)[0].strip()
