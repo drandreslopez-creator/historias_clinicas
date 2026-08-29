@@ -66,7 +66,6 @@ from servicios.pediatria_urgencias import (
     puntuar_diagnostico,
     subir_docx_a_google_drive,
     render_informe_html,
-    traducir_cie10_descripcion,
 )
 
 
@@ -106,8 +105,7 @@ EXTREMIDADES: SIN HALLAZGOS PATOLÓGICOS EVIDENTES.
 NEUROLÓGICO: SIN FOCALIZACIONES CLÍNICAS."""
 
 PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
-- EDUCACIÓN A PACIENTE Y/O CUIDADOR
-- SIGNOS DE ALARMA
+- SE BRINDA INFORMACIÓN A PACIENTE Y/O CUIDADOR RESPONSABLE SOBRE EL MANEJO Y LOS SIGNOS DE ALARMA
 - CONTROL SEGUN EVOLUCIÓN"""
 
 SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT = """- APETITO:
@@ -587,7 +585,6 @@ def _construir_diagnostico_cie10(prefix):
         return ""
 
     cie10_filtrado = cie10_filtrado.copy()
-    cie10_filtrado["description_es"] = cie10_filtrado["description"].map(traducir_cie10_descripcion)
     cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
     pendiente = str(st.session_state.get(f"{prefix}_consulta_cie10_pendiente", "")).strip()
     if pendiente:
@@ -1557,7 +1554,7 @@ def render_consulta_externa(
                 "Responde en MAYÚSCULAS. "
                 "Organiza el texto en bloques breves con estos encabezados: RESUMEN CLÍNICO, ANÁLISIS HOMEOPÁTICO, SIMILIMUM CONSTITUCIONAL, MEDICAMENTO MIASMÁTICO, INTERCURRENTE, ORGANOTERÁPICO. "
                 "Si algún rubro no aplica, escribe NO CONSIDERADO. "
-                "En cada medicamento propuesto explica brevemente por qué podría corresponder al caso según la totalidad clínica y la repertorización. "
+                "Para cada medicamento propuesto, incluye una justificación breve según la totalidad clínica y la repertorización. "
                 "Integra criterios pediátricos y evita afirmaciones absolutas no sustentadas por el caso."
             )
             instrucciones_plan_homeo = (

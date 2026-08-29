@@ -59,6 +59,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 HISTORIAS_PATH = BASE_DIR / "data" / "historias_pediatria_urgencias.jsonl"
 PLANES_PATOLOGIA_PATH = BASE_DIR / "data" / "planes_manejo_pediatria_urgencias.json"
 DOSIS_MEDICACION_PATH = BASE_DIR / "data" / "dosis_medicacion_pediatria_urgencias.json"
+CIE10_ESP_PATH = BASE_DIR / "data" / "cie10_es.csv"
 WORD_EXPORT_DIR_DEFAULT = BASE_DIR / "data" / "word_exports"
 DRAFT_URGENCIAS_PATH = BASE_DIR / "data" / "borrador_pediatria_urgencias.json"
 BOGOTA_TZ = ZoneInfo("America/Bogota")
@@ -968,13 +969,32 @@ MESES_ESP = {
 @st.cache_data
 def cargar_cie10():
     df = pd.read_csv("data/cie10_who.csv")
+    # El catálogo original de la OMS está en inglés. Se cruza localmente por
+    # código para que el selector nunca dependa de un traductor en línea.
+    df["code_key"] = df["code"].astype(str).map(normalizar_codigo_cie10)
+    df["description_es"] = ""
+    if CIE10_ESP_PATH.exists():
+        catalogo_es = pd.read_csv(CIE10_ESP_PATH, dtype=str).fillna("")
+        catalogo_es["code_key"] = catalogo_es["code"].map(normalizar_codigo_cie10)
+        descripciones_es = (
+            catalogo_es.drop_duplicates("code_key")
+            .set_index("code_key")["description"]
+            .to_dict()
+        )
+        df["description_es"] = df["code_key"].map(descripciones_es).fillna("")
+
+    df["description_es"] = df.apply(
+        lambda row: row["description_es"] or traducir_diagnostico_local(row["description"]),
+        axis=1,
+    )
     df["label_normalized"] = df["label"].map(normalizar_texto)
     df["description_normalized"] = df["description"].astype(str).map(normalizar_texto)
+    df["description_es_normalized"] = df["description_es"].astype(str).map(normalizar_texto)
     df["code_normalized"] = df["code"].astype(str).map(normalizar_texto)
     df["search_text"] = df.apply(
         lambda row: construir_texto_busqueda(
             row["code_normalized"],
-            row["description_normalized"],
+            f"{row['description_normalized']} {row['description_es_normalized']}",
             row["label_normalized"]
         ),
         axis=1
@@ -987,6 +1007,11 @@ def normalizar_texto(texto):
     texto = unicodedata.normalize("NFKD", texto)
     texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
     return texto.lower().strip()
+
+
+def normalizar_codigo_cie10(codigo):
+    """Normaliza A00.0/A000 para cruzar catálogos CIE-10 de distinto formato."""
+    return re.sub(r"[^A-Z0-9]", "", str(codigo or "").upper())
 
 
 def tokenizar_texto(texto):
@@ -1003,14 +1028,8 @@ def construir_texto_busqueda(code, description, label):
 
 @st.cache_data(show_spinner=False)
 def traducir_cie10_descripcion(descripcion):
-    texto_original = str(descripcion or "").strip()
-    try:
-        texto_traducido = GoogleTranslator(source="en", target="es").translate(texto_original)
-        if texto_traducido and texto_traducido.strip().lower() != texto_original.lower():
-            return texto_traducido
-    except Exception:
-        pass
-    return traducir_diagnostico_local(texto_original)
+    """Compatibilidad para textos externos; el selector usa el catálogo local."""
+    return traducir_diagnostico_local(descripcion)
 
 
 TRADUCCIONES_DIAGNOSTICO_LOCAL = {
@@ -1574,6 +1593,7 @@ class SafeFormatDict(dict):
 
 
 def construir_linea_medicamento(nombre, configuracion, peso):
+    peso = float_or_none(peso)
     via = str(configuracion.get("via", "")).strip().upper()
     indicacion = str(configuracion.get("indicacion", "")).strip().upper()
     intervalo = int(configuracion.get("intervalo_horas", 0) or 0)
@@ -4309,6 +4329,7 @@ def extraer_codigo_cie10(diagnostico):
 
 
 def calcular_dosis_mg(peso, mg_kg, max_mg=None):
+    peso = float_or_none(peso)
     if not peso or peso <= 0:
         return None
     dosis = peso * mg_kg
@@ -4327,6 +4348,7 @@ def calcular_volumen_ml(dosis_mg, concentracion_mg_en_5ml):
 
 
 def calcular_liquido_mantenimiento_holliday(peso):
+    peso = float_or_none(peso)
     if not peso or peso <= 0:
         return None
     if peso <= 10:
@@ -4339,6 +4361,8 @@ def calcular_liquido_mantenimiento_holliday(peso):
 
 
 def calcular_liquido_superficie_corporal(peso, talla):
+    peso = float_or_none(peso)
+    talla = float_or_none(talla)
     if not peso or not talla or peso <= 0 or talla <= 0:
         return None, None
     sc = calcular_sc(peso, talla)
@@ -4348,6 +4372,8 @@ def calcular_liquido_superficie_corporal(peso, talla):
 
 
 def calcular_parkland(peso, scq_pct):
+    peso = float_or_none(peso)
+    scq_pct = float_or_none(scq_pct)
     if not peso or peso <= 0 or not scq_pct or scq_pct <= 0:
         return None, None, None
     total_24h = round(4 * peso * scq_pct, 1)
@@ -4357,6 +4383,9 @@ def calcular_parkland(peso, scq_pct):
 
 
 def calcular_galveston(peso, talla, scq_pct):
+    peso = float_or_none(peso)
+    talla = float_or_none(talla)
+    scq_pct = float_or_none(scq_pct)
     if not peso or peso <= 0 or not talla or talla <= 0 or not scq_pct or scq_pct <= 0:
         return None, None
     sc = calcular_sc(peso, talla)
@@ -4367,6 +4396,7 @@ def calcular_galveston(peso, talla, scq_pct):
 
 
 def construir_contexto_plan_medicacion(peso):
+    peso = float_or_none(peso)
     dosis_cfg = cargar_dosis_medicacion()
     liquidos_ml_hora = calcular_liquido_mantenimiento_holliday(peso) if peso else None
     if liquidos_ml_hora:
@@ -4392,7 +4422,7 @@ def construir_contexto_plan_medicacion(peso):
     sc_ml_h = None
     if "talla" in st.session_state:
         try:
-            talla_actual = float(st.session_state.get("talla", 0) or 0)
+            talla_actual = float_or_none(st.session_state.get("talla", 0)) or 0
         except Exception:
             talla_actual = 0
         sc, sc_ml_h = calcular_liquido_superficie_corporal(peso, talla_actual)
@@ -4405,7 +4435,7 @@ def construir_contexto_plan_medicacion(peso):
         contexto["LINEA_LIQUIDOS_SC"] = "- MANTENIMIENTO POR SUPERFICIE CORPORAL SEGUN PESO Y TALLA"
 
     try:
-        scq_pct = float(st.session_state.get("scq_pct", 0) or 0)
+        scq_pct = float_or_none(st.session_state.get("scq_pct", 0)) or 0
     except Exception:
         scq_pct = 0
     parkland_total, parkland_8h, parkland_16h = calcular_parkland(peso, scq_pct)
@@ -4560,6 +4590,7 @@ def renderizar_plan_editable(texto_plan, peso):
 
 
 def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
+    peso = float_or_none(peso)
     contexto_medicacion = construir_contexto_plan_medicacion(peso)
     lineas = [
         "- HOSPITALIZACION PEDIATRICA",
@@ -4598,6 +4629,9 @@ def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
 
 
 def generar_resumen_dosis(diagnostico, peso, talla, edad_meses, scq_pct=0):
+    peso = float_or_none(peso)
+    talla = float_or_none(talla)
+    scq_pct = float_or_none(scq_pct) or 0
     lineas = []
     if not peso or peso <= 0:
         return "INGRESE PESO PARA CALCULAR DOSIS AUTOMÁTICAS."
@@ -4721,29 +4755,29 @@ def ajustar_plan_a_conducta_final(plan, conducta_final):
 
 
 def construir_recomendaciones_egreso(diagnostico, enfermedad_actual=""):
-    """Genera un cierre para cuidadores sin alterar las órdenes médicas."""
+    """Genera constancias clínicas de recomendaciones para el egreso."""
     texto = limpiar_fragmento_analisis(f"{diagnostico or ''} {enfermedad_actual or ''}")
     recomendaciones = [
-        "CUMPLIR EL TRATAMIENTO Y LAS ÓRDENES MÉDICAS FORMULADAS.",
-        "OFRECER ALIMENTACIÓN E HIDRATACIÓN ACORDE A LA EDAD Y TOLERANCIA.",
+        "SE INDICA A PADRES O CUIDADOR RESPONSABLE CUMPLIR EL TRATAMIENTO Y LAS ÓRDENES MÉDICAS FORMULADAS.",
+        "SE RECOMIENDA OFRECER ALIMENTACIÓN E HIDRATACIÓN ACORDE A LA EDAD Y TOLERANCIA.",
     ]
     alarmas = [
-        "RECONSULTAR POR DECAIMIENTO MARCADO, SOMNOLENCIA ANORMAL, CONVULSIONES, RECHAZO PERSISTENTE DE LA VÍA ORAL O EMPEORAMIENTO DEL ESTADO GENERAL.",
+        "SE INDICA RECONSULTAR POR DECAIMIENTO MARCADO, SOMNOLENCIA ANORMAL, CONVULSIONES, RECHAZO PERSISTENTE DE LA VÍA ORAL O EMPEORAMIENTO DEL ESTADO GENERAL.",
     ]
 
     if any(termino in texto for termino in ("ASMA", "SIBILAN", "BRONQUIOL", "NEUMON", "TOS", "RINOFARING", "J00", "J18", "J21", "J45")):
-        recomendaciones.append("REALIZAR HIGIENE NASAL Y ADMINISTRAR INHALADORES SOLO SI FUERON INDICADOS, USANDO LA TÉCNICA EXPLICADA.")
-        alarmas.append("RECONSULTAR DE INMEDIATO POR RESPIRACIÓN RÁPIDA O DIFICULTOSA, TIRAJES, QUEJIDO, COLORACIÓN AZULADA, PAUSAS RESPIRATORIAS, ESTRIDOR EN REPOSO O EMPEORAMIENTO DE LA TOS.")
+        recomendaciones.append("SE INDICA HIGIENE NASAL Y USO DE INHALADORES SOLO SI FUERON FORMULADOS, CON LA TÉCNICA ENSEÑADA DURANTE LA ATENCIÓN.")
+        alarmas.append("SE INDICA RECONSULTA INMEDIATA POR RESPIRACIÓN RÁPIDA O DIFICULTOSA, TIRAJES, QUEJIDO, COLORACIÓN AZULADA, PAUSAS RESPIRATORIAS, ESTRIDOR EN REPOSO O EMPEORAMIENTO DE LA TOS.")
     if any(termino in texto for termino in ("DIARREA", "GASTROENTER", "A09", "VOMITO", "EMESIS", "DESHIDRAT")):
-        recomendaciones.append("CONTINUAR SALES DE REHIDRATACIÓN ORAL EN PEQUEÑAS TOMAS FRECUENTES Y LA ALIMENTACIÓN SEGÚN TOLERANCIA.")
-        alarmas.append("RECONSULTAR POR VÓMITO DE TODO LO INGERIDO, AUSENCIA O DISMINUCIÓN MARCADA DE ORINA, SANGRE EN HECES, DOLOR ABDOMINAL INTENSO, LETARGIA O SIGNOS DE DESHIDRATACIÓN.")
+        recomendaciones.append("SE INDICA CONTINUAR SALES DE REHIDRATACIÓN ORAL EN PEQUEÑAS TOMAS FRECUENTES Y LA ALIMENTACIÓN SEGÚN TOLERANCIA.")
+        alarmas.append("SE INDICA RECONSULTAR POR VÓMITO DE TODO LO INGERIDO, AUSENCIA O DISMINUCIÓN MARCADA DE ORINA, SANGRE EN HECES, DOLOR ABDOMINAL INTENSO, LETARGIA O SIGNOS DE DESHIDRATACIÓN.")
     if any(termino in texto for termino in ("CRUP", "LARINGIT", "ESTRIDOR", "J05", "J04")):
-        alarmas.append("RECONSULTAR DE INMEDIATO POR ESTRIDOR EN REPOSO, TIRAJE, CIANOSIS, DIFICULTAD PARA BEBER, SIALORREA, SOMNOLENCIA O EMPEORAMIENTO CLÍNICO.")
+        alarmas.append("SE INDICA RECONSULTA INMEDIATA POR ESTRIDOR EN REPOSO, TIRAJE, CIANOSIS, DIFICULTAD PARA BEBER, SIALORREA, SOMNOLENCIA O EMPEORAMIENTO CLÍNICO.")
     if any(termino in texto for termino in ("FIEBRE", "FEBRIL")):
-        alarmas.append("RECONSULTAR POR FIEBRE PERSISTENTE O RECURRENTE, FIEBRE ASOCIADA A MAL ESTADO GENERAL, EXANTEMA PETEQUIAL O CUALQUIER SIGNO DE ALARMA DESCRITO.")
+        alarmas.append("SE INDICA RECONSULTAR POR FIEBRE PERSISTENTE O RECURRENTE, FIEBRE ASOCIADA A MAL ESTADO GENERAL, EXANTEMA PETEQUIAL O CUALQUIER SIGNO DE ALARMA DESCRITO.")
 
     return "\n".join(
-        ["RECOMENDACIONES PARA EL CUIDADOR:", *(f"- {item}" for item in recomendaciones), "", "SIGNOS DE ALARMA / RECONSULTA POR URGENCIAS:", *(f"- {item}" for item in alarmas), "", "SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS, O ANTES SI PRESENTA SIGNOS DE ALARMA."]
+        ["RECOMENDACIONES BRINDADAS A PADRES O CUIDADOR RESPONSABLE:", *(f"- {item}" for item in recomendaciones), "", "SIGNOS DE ALARMA Y RECONSULTA POR URGENCIAS:", *(f"- {item}" for item in alarmas), "", "SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE, QUIEN REFIERE ENTENDER Y ACEPTAR. SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS, O ANTES SI PRESENTA SIGNOS DE ALARMA."]
     )
 
 
@@ -5434,7 +5468,6 @@ def render():
         diagnostico_seleccionado = ""
     else:
         cie10_filtrado = cie10_filtrado.copy()
-        cie10_filtrado["description_es"] = cie10_filtrado["description"].map(traducir_cie10_descripcion)
         cie10_filtrado["label_es"] = cie10_filtrado["code"].astype(str) + " - " + cie10_filtrado["description_es"]
         diagnostico_pendiente = str(st.session_state.get("dx_cie10_pendiente", "")).strip()
         if diagnostico_pendiente:
