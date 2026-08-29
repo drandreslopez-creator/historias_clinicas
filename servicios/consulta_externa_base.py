@@ -45,6 +45,7 @@ from servicios.pediatria_urgencias import (
     construir_observacion_diagnostica_base,
     construir_conducta_sugerida_analisis,
     ajustar_plan_a_conducta_final,
+    construir_recomendaciones_egreso,
     construir_resumen_paraclinicos_para_analisis,
     construir_resumen_signos_para_analisis,
     construir_nombre_base_docx,
@@ -2081,6 +2082,12 @@ IMÁGENES:
 REPERTORIZACIÓN:
 {repertorizacion}
 """
+        recomendaciones_egreso = (
+            construir_recomendaciones_egreso(diagnosticos, enfermedad_actual)
+            if not modo_homeopatia_pediatrica_ia
+            and str(conducta_final_analisis or "").strip().upper() == "EGRESO"
+            else ""
+        )
         historia += f"""
 
 ANÁLISIS:
@@ -2091,6 +2098,7 @@ DIAGNÓSTICOS:
 
 PLAN:
 {plan}
+{f'''\nRECOMENDACIONES DE EGRESO:\n{recomendaciones_egreso}\n''' if recomendaciones_egreso else ''}
 """
         if not modo_homeopatia_pediatrica_ia:
             historia = historia.replace(
@@ -2142,6 +2150,8 @@ PLAN:
                 ("PLAN", plan),
             ]
         )
+        if recomendaciones_egreso:
+            secciones.append(("RECOMENDACIONES DE EGRESO", recomendaciones_egreso))
         st.success("Historia clínica generada")
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         docx_bytes = generar_docx_informe(titulo.upper(), secciones)

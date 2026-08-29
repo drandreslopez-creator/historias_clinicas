@@ -4682,6 +4682,33 @@ def ajustar_plan_a_conducta_final(plan, conducta_final):
     return "\n".join(lineas)
 
 
+def construir_recomendaciones_egreso(diagnostico, enfermedad_actual=""):
+    """Genera un cierre para cuidadores sin alterar las órdenes médicas."""
+    texto = limpiar_fragmento_analisis(f"{diagnostico or ''} {enfermedad_actual or ''}")
+    recomendaciones = [
+        "CUMPLIR EL TRATAMIENTO Y LAS ÓRDENES MÉDICAS FORMULADAS.",
+        "OFRECER ALIMENTACIÓN E HIDRATACIÓN ACORDE A LA EDAD Y TOLERANCIA.",
+    ]
+    alarmas = [
+        "RECONSULTAR POR DECAIMIENTO MARCADO, SOMNOLENCIA ANORMAL, CONVULSIONES, RECHAZO PERSISTENTE DE LA VÍA ORAL O EMPEORAMIENTO DEL ESTADO GENERAL.",
+    ]
+
+    if any(termino in texto for termino in ("ASMA", "SIBILAN", "BRONQUIOL", "NEUMON", "TOS", "RINOFARING", "J00", "J18", "J21", "J45")):
+        recomendaciones.append("REALIZAR HIGIENE NASAL Y ADMINISTRAR INHALADORES SOLO SI FUERON INDICADOS, USANDO LA TÉCNICA EXPLICADA.")
+        alarmas.append("RECONSULTAR DE INMEDIATO POR RESPIRACIÓN RÁPIDA O DIFICULTOSA, TIRAJES, QUEJIDO, COLORACIÓN AZULADA, PAUSAS RESPIRATORIAS, ESTRIDOR EN REPOSO O EMPEORAMIENTO DE LA TOS.")
+    if any(termino in texto for termino in ("DIARREA", "GASTROENTER", "A09", "VOMITO", "EMESIS", "DESHIDRAT")):
+        recomendaciones.append("CONTINUAR SALES DE REHIDRATACIÓN ORAL EN PEQUEÑAS TOMAS FRECUENTES Y LA ALIMENTACIÓN SEGÚN TOLERANCIA.")
+        alarmas.append("RECONSULTAR POR VÓMITO DE TODO LO INGERIDO, AUSENCIA O DISMINUCIÓN MARCADA DE ORINA, SANGRE EN HECES, DOLOR ABDOMINAL INTENSO, LETARGIA O SIGNOS DE DESHIDRATACIÓN.")
+    if any(termino in texto for termino in ("CRUP", "LARINGIT", "ESTRIDOR", "J05", "J04")):
+        alarmas.append("RECONSULTAR DE INMEDIATO POR ESTRIDOR EN REPOSO, TIRAJE, CIANOSIS, DIFICULTAD PARA BEBER, SIALORREA, SOMNOLENCIA O EMPEORAMIENTO CLÍNICO.")
+    if any(termino in texto for termino in ("FIEBRE", "FEBRIL")):
+        alarmas.append("RECONSULTAR POR FIEBRE PERSISTENTE O RECURRENTE, FIEBRE ASOCIADA A MAL ESTADO GENERAL, EXANTEMA PETEQUIAL O CUALQUIER SIGNO DE ALARMA DESCRITO.")
+
+    return "\n".join(
+        ["RECOMENDACIONES PARA EL CUIDADOR:", *(f"- {item}" for item in recomendaciones), "", "SIGNOS DE ALARMA / RECONSULTA POR URGENCIAS:", *(f"- {item}" for item in alarmas), "", "SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS, O ANTES SI PRESENTA SIGNOS DE ALARMA."]
+    )
+
+
 def generar_docx_informe(titulo, secciones):
     doc = Document()
     section = doc.sections[0]
@@ -5820,6 +5847,11 @@ def render():
         diagnostico_final = diagnostico_seleccionado or ""
         paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY LABORATORIOS POR REPORTAR"
         imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY IMAGENES POR REPORTAR"
+        recomendaciones_egreso = (
+            construir_recomendaciones_egreso(diagnostico_final, enfermedad_input)
+            if limpiar_fragmento_analisis(conducta_final_analisis) == "EGRESO"
+            else ""
+        )
 
         historia = f"""
 {titulo_historia.upper()}
@@ -5887,6 +5919,7 @@ DIAGNÓSTICO NUTRICIONAL:
 
 PLAN:
 {plan}
+{f'''\nRECOMENDACIONES DE EGRESO:\n{recomendaciones_egreso}\n''' if recomendaciones_egreso else ''}
 """
 
         st.success("Historia clínica generada")
@@ -5909,6 +5942,8 @@ PLAN:
             ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
             ("PLAN", plan),
         ]
+        if recomendaciones_egreso:
+            secciones_informe.append(("RECOMENDACIONES DE EGRESO", recomendaciones_egreso))
         docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         nombre_base_docx = construir_nombre_base_docx(
