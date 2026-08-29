@@ -68,7 +68,7 @@ RUTAS_GPC = {
     },
     "ASMA": {
         "codigos": ("J45",),
-        "terminos": ("ASMA", "SIBILANCIAS", "BRONCOESPASMO", "EXACERBACION ASM"),
+        "terminos": ("ASMA", "SIBILANCIAS", "BRONCOESPASMO", "EXACERBACION ASM", "SINDROME BRONCOOBSTRUCTIVO", "SÍNDROME BRONCOOBSTRUCTIVO", "SBO"),
         "nombre": "ASMA Y EXACERBACIÓN BRONCOOBSTRUCTIVA",
         "fuente": "Ministerio de Salud y Protección Social, Herramienta Clínica Primera Infancia - Asma",
         "url": "https://herramientaclinicaprimerainfancia.minsalud.gov.co/modulo-6/asma/",
@@ -133,6 +133,75 @@ RUTAS_GPC = {
             "TOLERANCIA ORAL / DIURESIS": ("VIA ORAL", "VÍA ORAL", "SRO", "DIURES", "GASTO URINARIO"),
             "DECISIÓN DE SITIO DE MANEJO": ("OBSERV", "HOSPITAL", "EGRESO", "REMISI"),
             "SIGNOS DE ALARMA / RECONSULTA": ("SIGNOS DE ALARMA", "RECONSULT", "URGENCIAS"),
+        },
+    },
+    "FIEBRE": {
+        "codigos": ("R50",),
+        "terminos": ("SINDROME FEBRIL", "SÍNDROME FEBRIL", "FIEBRE SIN FOCO", "FIEBRE DE ORIGEN"),
+        "nombre": "ENFERMEDAD FEBRIL / FIEBRE SIN FOCO",
+        "fuente": "Ministerio de Salud y Protección Social, Herramienta Clínica Primera Infancia - Enfermedad febril",
+        "url": "https://herramientaclinicaprimerainfancia.minsalud.gov.co/modulo-5/enfermedad-febril/",
+        "version": "Consulta institucional vigente",
+        "documentacion": (
+            "DURACIÓN, TEMPERATURA, ESTADO GENERAL Y BÚSQUEDA DE FOCO CLÍNICO",
+            "SIGNOS GENERALES DE PELIGRO Y HALLAZGOS DE ALARMA",
+            "JUSTIFICACIÓN DE PARACLÍNICOS, OBSERVACIÓN, HOSPITALIZACIÓN O EGRESO",
+            "ANTIPIRÉTICO, HIDRATACIÓN, SIGNOS DE ALARMA Y CONTROL",
+        ),
+        "alertas": (
+            "DOCUMENTE LOS HALLAZGOS POSITIVOS Y NEGADOS DE FORMA CONCORDANTE; NO AFIRME UN FOCO NI UNA INFECCIÓN BACTERIANA SIN SUSTENTO CLÍNICO.",
+        ),
+        "verificaciones": {
+            "ESTADO GENERAL, TIEMPO DE EVOLUCIÓN Y TEMPERATURA": ("ESTADO GENERAL", "EVOLUCI", "FIEBRE", "TEMPERATURA"),
+            "BÚSQUEDA DE FOCO Y SIGNOS DE ALARMA": ("FOCO", "PETEQUI", "RIGIDEZ", "DIFICULTAD RESPIRATORIA", "CONVULS"),
+            "PARACLÍNICOS Y SITIO DE MANEJO": ("PARACLIN", "UROANAL", "OBSERV", "HOSPITAL", "EGRESO"),
+            "SIGNOS DE ALARMA / CONTROL": ("SIGNOS DE ALARMA", "RECONSULT", "CONTROL", "SEGUIMIENTO"),
+        },
+    },
+    "DESNUTRICION": {
+        "codigos": ("E44", "E43", "E45"),
+        "terminos": ("DESNUTRICION AGUDA", "DESNUTRICIÓN AGUDA", "RIESGO DE DESNUTRICION", "RIESGO DE DESNUTRICIÓN", "MALNUTRICION", "MALNUTRICIÓN"),
+        "nombre": "DESNUTRICIÓN AGUDA Y RIESGO NUTRICIONAL",
+        "fuente": "Ministerio de Salud y Protección Social, Herramienta Clínica Primera Infancia - Desnutrición aguda",
+        "url": "https://herramientaclinicaprimerainfancia.minsalud.gov.co/modulo-8/",
+        "version": "Consulta institucional vigente",
+        "documentacion": (
+            "ANTROPOMETRÍA, PESO/TALLA, PERÍMETRO BRAQUIAL Y EDEMA BILATERAL",
+            "APETITO, INGESTA, DIURESIS, COMORBILIDADES Y SIGNOS GENERALES DE PELIGRO",
+            "CLASIFICACIÓN NUTRICIONAL Y JUSTIFICACIÓN DE MANEJO AMBULATORIO, OBSERVACIÓN O HOSPITALIZACIÓN",
+            "PLAN ALIMENTARIO, SUPLEMENTACIÓN O REMISIÓN SEGÚN PROTOCOLO, CONTROL Y CONSEJERÍA",
+        ),
+        "alertas": (
+            "CORROBORE LA CLASIFICACIÓN ANTROPOMÉTRICA CON LOS ESTÁNDARES OMS Y EL PROTOCOLO INSTITUCIONAL ANTES DE DEFINIR LA CONDUCTA.",
+        ),
+        "verificaciones": {
+            "ANTROPOMETRÍA, PB Y EDEMA BILATERAL": ("PESO", "TALLA", "P/T", "PB", "EDEMA"),
+            "APETITO, INGESTA, HIDRATACIÓN Y SIGNOS DE PELIGRO": ("APETITO", "INGESTA", "HIDRAT", "VIA ORAL", "VÍA ORAL", "PELIGRO"),
+            "CLASIFICACIÓN Y SITIO DE MANEJO": ("DESNUTRIC", "RIESGO", "OBSERV", "HOSPITAL", "EGRESO", "NUTRIC"),
+            "PLAN NUTRICIONAL / CONTROL": ("ALIMENT", "NUTRIC", "CONTROL", "SEGUIMIENTO", "RECONSULT"),
+        },
+    },
+    "OTITIS": {
+        "codigos": ("H66",),
+        "terminos": ("OTITIS MEDIA", "OTITIS", "OTALGIA"),
+        "nombre": "OTITIS MEDIA AGUDA",
+        "fuente": "Ministerio de Salud y Protección Social, Herramienta Clínica Primera Infancia - Otitis media aguda",
+        "url": "https://herramientaclinicaprimerainfancia.minsalud.gov.co/modulo-6/otitis-media-aguda/",
+        "version": "Consulta institucional vigente",
+        "documentacion": (
+            "OTOSCOPIA, LATERALIDAD Y HALLAZGOS DE INFLAMACIÓN / DERRAME DEL OÍDO MEDIO",
+            "DOLOR, FIEBRE, OTORREA, ESTADO GENERAL Y SIGNOS DE COMPLICACIÓN",
+            "JUSTIFICACIÓN DE OBSERVACIÓN O ANTIBIÓTICO, CON VÍA, DOSIS, INTERVALO Y DURACIÓN CUANDO APLIQUE",
+            "ANALGESIA, CONTROL Y SIGNOS DE ALARMA",
+        ),
+        "alertas": (
+            "DOCUMENTE LA OTOSCOPIA Y LA LATERALIDAD. ANTE SOSPECHA DE MASTOIDITIS U OTRA COMPLICACIÓN, JUSTIFIQUE REMISIÓN O MANEJO HOSPITALARIO.",
+        ),
+        "verificaciones": {
+            "OTOSCOPIA Y LATERALIDAD": ("OTOSCOP", "TIMPAN", "OIDO", "OÍDO", "DERECH", "IZQUIERD"),
+            "DOLOR, FIEBRE, OTORREA Y SIGNOS DE COMPLICACIÓN": ("DOLOR", "FIEBRE", "OTORREA", "MASTOID", "ESTADO GENERAL"),
+            "ANTIBIÓTICO / ANALGESIA Y SITIO DE MANEJO": ("AMOXICIL", "ANTIBIOT", "ANALGES", "OBSERV", "HOSPITAL", "EGRESO"),
+            "SIGNOS DE ALARMA / CONTROL": ("SIGNOS DE ALARMA", "RECONSULT", "CONTROL", "SEGUIMIENTO"),
         },
     },
     "IVU": {
@@ -223,6 +292,46 @@ def obtener_apoyo_aiepi(clave: str) -> dict:
 
 def _apoyo_sin_ruta_gpc(diagnostico: object) -> tuple[str, tuple[str, ...]]:
     texto = _normalizar(diagnostico)
+    if any(termino in texto for termino in ("TRAUMA CRANEO", "TCE", "TRAUMATISMO CRANEO")):
+        return (
+            "TRAUMA CRANEOENCEFÁLICO LEVE",
+            (
+                "MECANISMO, HORA DEL TRAUMA, PÉRDIDA DE CONOCIMIENTO, VÓMITO, CONVULSIONES Y AMNESIA",
+                "ESCALA DE GLASGOW, EXAMEN NEUROLÓGICO, SIGNOS DE FRACTURA Y HALLAZGOS EN CUERO CABELLUDO",
+                "JUSTIFICACIÓN DE OBSERVACIÓN, IMÁGENES, EGRESO O REMISIÓN SEGÚN RIESGO CLÍNICO",
+                "CONSEJERÍA AL CUIDADOR, SIGNOS DE ALARMA NEUROLÓGICOS Y RECONSULTA INMEDIATA",
+            ),
+        )
+    if any(termino in texto for termino in ("VOMITO", "VÓMITO", "EMETICO", "EMÉTICO")):
+        return (
+            "SÍNDROME EMÉTICO",
+            (
+                "FRECUENCIA, ASPECTO DEL VÓMITO, TOLERANCIA ORAL, DIURESIS Y ESTADO DE HIDRATACIÓN",
+                "PRESENCIA O AUSENCIA DE VÓMITO BILIOSO, HEMATEMESIS, DOLOR INTENSO, DISTENSIÓN O SIGNOS NEUROLÓGICOS",
+                "JUSTIFICACIÓN DE OBSERVACIÓN, PARACLÍNICOS, IMÁGENES O REMISIÓN SEGÚN HALLAZGOS",
+                "PLAN DE HIDRATACIÓN, ALIMENTACIÓN, SIGNOS DE ALARMA Y CONTROL",
+            ),
+        )
+    if any(termino in texto for termino in ("DOLOR ABDOMINAL", "ABDOMEN AGUDO")):
+        return (
+            "DOLOR ABDOMINAL PEDIÁTRICO",
+            (
+                "LOCALIZACIÓN, INTENSIDAD, EVOLUCIÓN, VÓMITO, DEPOSICIONES, DIURESIS Y RELACIÓN CON LA ALIMENTACIÓN",
+                "EXAMEN ABDOMINAL SERIADO, SIGNOS PERITONEALES, MASAS, DISTENSIÓN Y EXAMEN GENITOURINARIO CUANDO APLIQUE",
+                "JUSTIFICACIÓN DE OBSERVACIÓN, LABORATORIOS, ECOGRAFÍA, VALORACIÓN QUIRÚRGICA O EGRESO",
+                "SIGNOS DE ALARMA ABDOMINAL, CONTROL Y RECONSULTA",
+            ),
+        )
+    if any(termino in texto for termino in ("ESTRENIMIENTO", "CONSTIPACION", "CONSTIPACIÓN")):
+        return (
+            "ESTREÑIMIENTO / CONSTIPACIÓN",
+            (
+                "FRECUENCIA, CONSISTENCIA, BRISTOL, DOLOR, RETENCIÓN, SANGRE Y ENTRENAMIENTO ESFINTERIANO",
+                "BÚSQUEDA DE BANDERAS ROJAS, IMPACTACIÓN, DISTENSIÓN, VÓMITO BILIOSO O ALTERACIÓN NEUROLÓGICA",
+                "PLAN DE DESIMPACTACIÓN O MANTENIMIENTO, ALIMENTACIÓN, HÁBITO INTESTINAL Y ADHERENCIA",
+                "SEGUIMIENTO, SIGNOS DE ALARMA Y CRITERIOS DE REMISIÓN",
+            ),
+        )
     if any(termino in texto for termino in ("RINOFARING", "RESFRIADO", "INFECCION RESPIRATORIA ALTA", "IRA ALTA")):
         return (
             "INFECCIÓN RESPIRATORIA ALTA / RINOFARINGITIS",
@@ -265,15 +374,19 @@ def _apoyo_sin_ruta_gpc(diagnostico: object) -> tuple[str, tuple[str, ...]]:
 
 
 def detectar_apoyo_aiepi(diagnostico: object, texto_clinico: object = "") -> str:
-    texto = _normalizar(f"{diagnostico or ''} {texto_clinico or ''}")
+    # La selección debe depender del diagnóstico, no de síntomas negados dentro
+    # del relato clínico (p. ej. "niega diarrea" o "niega fiebre").
+    texto = _normalizar(diagnostico)
     if any(termino in texto for termino in ("INFECCION URINARIA", "IVU", "PIELONEFRITIS", "CISTITIS", "UROCULTIVO")):
         return "FIEBRE_URINARIA"
     if any(termino in texto for termino in ("DIARREA", "GASTROENTERITIS", "DESHIDRAT")):
         return "DIARREA"
+    if any(termino in texto for termino in ("TOS", "RINOFARING", "BRONQUI", "BRONCO", "NEUMON", "ASMA", "CRUP", "ESTRIDOR", "SIBILAN")):
+        return "RESPIRATORIO"
+    if any(termino in texto for termino in ("OTITIS", "OTALGIA")):
+        return "FIEBRE"
     if any(termino in texto for termino in ("FIEBRE", "FEBRIL", "EXANTEMA")):
         return "FIEBRE"
-    if any(termino in texto for termino in ("TOS", "RINOFARING", "BRONQUI", "NEUMON", "ASMA", "CRUP", "ESTRIDOR", "SIBILAN")):
-        return "RESPIRATORIO"
     return "INTEGRAL"
 
 
