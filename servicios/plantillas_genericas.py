@@ -1,4 +1,5 @@
 from servicios.consulta_externa_base import render_consulta_externa
+from servicios.evolucion_ucin import render as render_evolucion_ucin
 
 
 ANTECEDENTES_CONSULTA_NEONATOLOGIA_DEFAULT = """NEONATALES: PRODUCTO DE # GESTACIÓN, MADRE DE XX AÑOS, CONTROLADO, SIN COMPLICACIONES, STORCH NEGATIVO, ECOGRAFÍAS ANTENATALES NORMALES. NACE VÍA VAGINAL/ CESAREA A LAS XX SEMANAS, PESO XXXX GR - TALLA XX CM. NO REQUIRIÓ OXIGENO SUPLEMENTARIO, NO REQUIRIÓ HOSPITALIZACIÓN, EGRESO CONJUNTO.
@@ -191,13 +192,4 @@ def render_neonatologia_ingreso_unidad():
 
 
 def render_neonatologia_evolucion_ucin():
-    render_consulta_externa(
-        prefix="neo_ucin",
-        titulo="EVOLUCIÓN DEL RECIÉN NACIDO EN UCIN",
-        history_filename="historias_neonatologia_ucin.jsonl",
-        es_pediatrica=True,
-        mostrar_neurodesarrollo=False,
-        mostrar_modalidad_consulta=False,
-        mostrar_pb=False,
-        familia_ejemplos="neonatal",
-    )
+    render_evolucion_ucin()
