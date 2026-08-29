@@ -1,7 +1,7 @@
 import hashlib
 import json
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -99,8 +99,13 @@ def _actualizar_balance(nota, periodo):
     return nota[:coincidencia.start()] + nuevo + nota[coincidencia.end():]
 
 
-def _actualizar_nota_local(nota, edad_dia, peso_dia, periodo):
+def _actualizar_nota_local(nota, fecha_evolucion, edad_dia, peso_dia, periodo, eventualidades=""):
     nota = str(nota or "").replace("\u00a0", " ").strip()
+    fecha_texto = fecha_evolucion.strftime("%d-%m-%Y")
+    if re.search(r"^\s*\d{2}[-/]\d{2}[-/]\d{4}\b", nota):
+        nota = re.sub(r"^\s*\d{2}[-/]\d{2}[-/]\d{4}\b", fecha_texto, nota, count=1)
+    else:
+        nota = f"{fecha_texto}\n{nota}".strip()
     peso_nacer = _entero(_buscar(nota, r"PESO\s+AL\s+NACER\s*:\s*([\d.,]+)"))
     peso_previo = _entero(_buscar(nota, r"PESO\s+ANTERIOR\s*:\s*([\d.,]+)"))
     peso_previo = peso_previo or _entero(_buscar(nota, r"PESO\s+ACTUAL\s*:\s*([\d.,]+)"))
@@ -120,7 +125,14 @@ def _actualizar_nota_local(nota, edad_dia, peso_dia, periodo):
                 count=1,
                 flags=re.IGNORECASE,
             )
-    return _actualizar_balance(nota, periodo), peso_nacer, peso_previo, peso_actual
+    nota = _actualizar_balance(nota, periodo)
+    if str(eventualidades).strip():
+        bloque = f"\nEVENTUALIDADES DEL TURNO:\n{str(eventualidades).strip()}\n"
+        if re.search(r"\n\s*AN[ÁA]LISIS\s*:", nota, flags=re.IGNORECASE):
+            nota = re.sub(r"(\n\s*AN[ÁA]LISIS\s*:)", bloque + r"\1", nota, count=1, flags=re.IGNORECASE)
+        else:
+            nota = f"{nota}{bloque}".strip()
+    return nota, peso_nacer, peso_previo, peso_actual
 
 
 def _actualizar_nota_con_ia(base, contexto, firma):
@@ -135,10 +147,13 @@ def _actualizar_nota_con_ia(base, contexto, firma):
     instrucciones = (
         "Actualiza una evolución neonatal en español usando exclusivamente la nota previa y los datos actualizados. "
         "Devuelve la NOTA COMPLETA con todos sus encabezados clínicos, en MAYÚSCULAS, respetando diagnósticos, estudios, "
-        "tamizajes, soportes y plan ya documentados. Cambia solamente edad, peso y balance cuando existan datos nuevos. "
+        "tamizajes, soportes y plan ya documentados. Cambia solamente fecha, edad, peso y balance cuando existan datos nuevos. "
         "Redacta un ANÁLISIS nuevo, coherente y diferente al previo, integrando los hallazgos disponibles sin inventar diagnósticos, "
         "tratamientos, resultados ni cambios clínicos. Conserva el plan previo, salvo que la información suministrada justifique de forma "
-        "explícita una actualización. No agregues comentarios, advertencias ni texto fuera de la nota clínica."
+        "explícita una actualización. Integra las eventualidades del turno donde correspondan. Reescribe el ANÁLISIS con una redacción "
+        "nueva, fluida y coherente, sin copiar literalmente el anterior. Las cifras de balance solo pueden cambiar si se suministraron "
+        "nuevos valores; si se conserva el mismo período y no hay datos nuevos, conserva las cifras verificadas. No agregues comentarios, "
+        "advertencias ni texto fuera de la nota clínica."
     )
     try:
         modelo = obtener_secret_app("openai_model", "gpt-4o-mini")
@@ -165,17 +180,23 @@ def _actualizar_nota_con_ia(base, contexto, firma):
 
 def _generar_evolucion():
     nota_previa = st.session_state.get(f"{PREFIX}_nota_previa", "")
+    fecha_evolucion = st.session_state.get(f"{PREFIX}_fecha_evolucion", date.today())
     edad = _entero(st.session_state.get(f"{PREFIX}_edad_dia"))
     peso = _entero(st.session_state.get(f"{PREFIX}_peso_dia"))
     periodo = int(st.session_state.get(f"{PREFIX}_periodo_balance", 24))
-    base, peso_nacer, peso_previo, peso_actual = _actualizar_nota_local(nota_previa, edad, peso, periodo)
+    eventualidades = st.session_state.get(f"{PREFIX}_eventualidades", "")
+    base, peso_nacer, peso_previo, peso_actual = _actualizar_nota_local(
+        nota_previa, fecha_evolucion, edad, peso, periodo, eventualidades
+    )
     contexto = {
         "nota_evolutiva_previa": nota_previa,
+        "fecha_evolucion": fecha_evolucion.strftime("%d-%m-%Y"),
         "edad_actual_dias": edad or "SIN CAMBIO REGISTRADO",
         "peso_actual_gramos": peso_actual or "SIN CAMBIO REGISTRADO",
         "peso_al_nacer_gramos": peso_nacer or "NO DOCUMENTADO",
         "peso_previo_gramos": peso_previo or "NO DOCUMENTADO",
         "periodo_balance_horas": periodo,
+        "eventualidades_del_turno": eventualidades or "NO DOCUMENTADAS",
         "nota_actualizada_por_calculos": base,
     }
     firma = hashlib.md5(json.dumps(contexto, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
@@ -194,7 +215,9 @@ def render():
     st.caption("Pegue la evolución previa y registre solamente los cambios del día. Revise y edite el resultado antes de firmarlo.")
     st.text_area("Evolución previa completa", key=f"{PREFIX}_nota_previa", height=420)
 
-    col_edad, col_peso, col_balance = st.columns(3)
+    col_fecha, col_edad, col_peso, col_balance = st.columns(4)
+    with col_fecha:
+        st.date_input("Fecha de evolución", value=date.today(), key=f"{PREFIX}_fecha_evolucion")
     with col_edad:
         st.number_input(
             "Edad del día (opcional)", min_value=0, step=1, key=f"{PREFIX}_edad_dia",
@@ -210,6 +233,11 @@ def render():
             "Período para balance", [6, 12, 24], index=2, key=f"{PREFIX}_periodo_balance",
             help="Si la nota previa contiene balance, se extrapola proporcionalmente y queda editable en el informe final.",
         )
+
+    st.text_area(
+        "¿Hubo algún cambio o eventualidad durante el turno? (opcional)", key=f"{PREFIX}_eventualidades", height=100,
+        placeholder="DESCRIBA EVENTOS, CAMBIOS CLÍNICOS, NUEVOS HALLAZGOS O ESCRIBA SIN EVENTUALIDADES.",
+    )
 
     if st.button("Actualizar evolución con IA", key=f"{PREFIX}_actualizar", use_container_width=True):
         if not str(st.session_state.get(f"{PREFIX}_nota_previa", "")).strip():
