@@ -135,6 +135,30 @@ RUTAS_GPC = {
             "SIGNOS DE ALARMA / RECONSULTA": ("SIGNOS DE ALARMA", "RECONSULT", "URGENCIAS"),
         },
     },
+    "IVU": {
+        "codigos": ("N39", "N10", "N12", "N30"),
+        "terminos": ("INFECCION URINARIA", "INFECCIÓN URINARIA", "IVU", "PIELONEFRITIS", "CISTITIS"),
+        "nombre": "INFECCIÓN DE VÍAS URINARIAS PEDIÁTRICA",
+        "fuente": "Ministerio de Salud y Protección Social, Herramienta Clínica Primera Infancia - Infección de vías urinarias",
+        "url": "https://herramientaclinicaprimerainfancia.minsalud.gov.co/modulo-5/infeccion-de-vias-urinarias/",
+        "version": "Consulta institucional vigente",
+        "documentacion": (
+            "SÍNTOMAS URINARIOS, FIEBRE, ESTADO GENERAL Y FACTORES DE RIESGO",
+            "UROANÁLISIS, TÉCNICA DE TOMA Y UROCULTIVO ANTES DEL ANTIBIÓTICO CUANDO SEA POSIBLE",
+            "JUSTIFICACIÓN DE HOSPITALIZACIÓN, ANTIBIÓTICO EMPÍRICO, VÍA, DOSIS E INTERVALO",
+            "SEGUIMIENTO DEL UROCULTIVO, RESPUESTA CLÍNICA Y AJUSTE SEGÚN ANTIBIOGRAMA",
+            "SIGNOS DE ALARMA, CONTROL Y RECONSULTA",
+        ),
+        "alertas": (
+            "DOCUMENTE LA TÉCNICA DE RECOLECCIÓN DE ORINA Y LA TOMA DEL UROCULTIVO ANTES DE INICIAR ANTIBIÓTICO, SI LA ESTABILIDAD CLÍNICA LO PERMITE.",
+        ),
+        "verificaciones": {
+            "FIEBRE, SÍNTOMAS URINARIOS Y ESTADO GENERAL": ("FIEBRE", "DISURIA", "URIN", "ESTADO GENERAL"),
+            "UROANÁLISIS, TÉCNICA DE TOMA Y UROCULTIVO": ("UROANALISIS", "UROANÁLISIS", "UROCULTIVO", "SONDA", "MICCION"),
+            "ANTIBIÓTICO Y SITIO DE MANEJO": ("CEFAZOLINA", "ANTIBIOT", "ANTIBIÓT", "HOSPITAL", "EGRESO"),
+            "SEGUIMIENTO DE CULTIVO / SIGNOS DE ALARMA": ("CULTIVO", "ANTIBIOGRAMA", "SIGNOS DE ALARMA", "RECONSULT"),
+        },
+    },
 }
 
 
@@ -167,6 +191,16 @@ APOYOS_AIEPI = {
             "EXANTEMA, RIGIDEZ DE CUELLO, PETEQUIAS U OTROS SIGNOS DE ALARMA SI APLICAN",
             "EXÁMENES COMPLEMENTARIOS O JUSTIFICACIÓN DE NO SOLICITARLOS",
             "CONDUCTA, SIGNOS DE ALARMA Y CONTROL",
+        ),
+    },
+    "FIEBRE_URINARIA": {
+        "nombre": "EVALUACIÓN AIEPI: FIEBRE CON SOSPECHA DE IVU",
+        "criterios": (
+            "SIGNOS GENERALES DE PELIGRO Y ESTADO GENERAL",
+            "FIEBRE, SÍNTOMAS URINARIOS Y FOCO CLÍNICO",
+            "UROANÁLISIS, TÉCNICA DE TOMA Y UROCULTIVO",
+            "CRITERIOS DE HOSPITALIZACIÓN, ANTIBIÓTICO Y REVALORACIÓN",
+            "SEGUIMIENTO DEL CULTIVO, SIGNOS DE ALARMA Y CONTROL",
         ),
     },
     "INTEGRAL": {
@@ -232,6 +266,8 @@ def _apoyo_sin_ruta_gpc(diagnostico: object) -> tuple[str, tuple[str, ...]]:
 
 def detectar_apoyo_aiepi(diagnostico: object, texto_clinico: object = "") -> str:
     texto = _normalizar(f"{diagnostico or ''} {texto_clinico or ''}")
+    if any(termino in texto for termino in ("INFECCION URINARIA", "IVU", "PIELONEFRITIS", "CISTITIS", "UROCULTIVO")):
+        return "FIEBRE_URINARIA"
     if any(termino in texto for termino in ("DIARREA", "GASTROENTERITIS", "DESHIDRAT")):
         return "DIARREA"
     if any(termino in texto for termino in ("FIEBRE", "FEBRIL", "EXANTEMA")):
