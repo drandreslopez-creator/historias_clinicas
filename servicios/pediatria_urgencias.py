@@ -1174,6 +1174,27 @@ def puntuar_diagnostico(row, terminos, grupos=None):
 def limpiar_formulario():
     for key, value in FORM_DEFAULTS.items():
         st.session_state[key] = value
+    # Un ejemplo docente guarda estado auxiliar para recalcular sus dosis. Al
+    # iniciar otra historia debe desaparecer por completo y no contaminarla.
+    prefijos_ejemplo = (
+        "_plan_ejemplo_",
+        "_analisis_ejemplo_",
+        "gpc_registro_criterio_",
+        "aiepi_registro_criterio_",
+    )
+    claves_adicionales = {
+        "dx_cie10_pendiente",
+        "ejemplo_guia_urgencias",
+        "nivel_ejemplo_urgencias",
+        "aiepi_apoyo",
+        "aiepi_registro",
+        "plan_ia_cache",
+        "analisis_ia_cache",
+        "obs_dx_ia_cache",
+    }
+    for key in list(st.session_state):
+        if key.startswith(prefijos_ejemplo) or key in claves_adicionales:
+            st.session_state.pop(key, None)
     # Los file_uploader no se pueden resetear asignándoles valores directos.
     st.session_state.pop("pdf_paraclinicos_uploader", None)
     st.session_state.pop("pdf_imagenes_uploader", None)
@@ -1258,10 +1279,11 @@ def cargar_ejemplo_guia_urgencias(nombre_ejemplo):
         "busqueda_cie10": caso.get("busqueda_cie10", ""),
         "dx_cie10_pendiente": caso.get("diagnostico", ""),
         "conducta_final_analisis": caso.get("conducta", "PENDIENTE DEFINIR"),
-        "plan": caso.get("plan", ""),
-        "plan_base": caso.get("plan", ""),
+        "plan": "",
+        "plan_base": "",
         "_analisis_ejemplo_pendiente": caso.get("analisis", ""),
-        "_plan_ejemplo_pendiente": caso.get("plan", ""),
+        "_plan_ejemplo_template": caso.get("plan", ""),
+        "_plan_ejemplo_materializado": "",
         "gpc_ruta": caso.get("gpc", ""),
         "aiepi_apoyo": caso.get("aiepi", "INTEGRAL"),
     }
@@ -3523,6 +3545,8 @@ def complementar_plan_con_ia(base_plan, contexto, fingerprint, instrucciones=Non
         "Eres un asistente clínico que redacta planes médicos en español para historias clínicas. "
         "Usa únicamente la información entregada. No inventes diagnósticos, paraclínicos, fármacos ni dosis que no estén presentes en el contexto o en el plan base. "
         "Puedes reorganizar y complementar el plan con medidas generales coherentes según el estado del paciente, la conducta final y los hallazgos clínicos. "
+        "Nunca escribas expresiones genéricas como 'SEGÚN PESO' para fármacos: conserva las dosis finales ya calculadas en el plan base. "
+        "No sustituyas ni modifiques dosis, vías, intervalos o tratamientos ponderales calculados por la aplicación. "
         "Responde en MAYÚSCULAS, una indicación por línea, sin numeración y sin comentarios adicionales. "
         "Si la conducta final es observación, hospitalización, egreso o remisión, el plan debe ser coherente con esa decisión."
     )
@@ -4354,6 +4378,16 @@ def construir_contexto_plan_medicacion(peso):
         "LINEA_LACTATO_RINGER": linea_lactato_ringer,
     }
 
+    penicilina_ui_dia = (peso * 200000) if peso and peso > 0 else None
+    if penicilina_ui_dia:
+        penicilina_dosis = penicilina_ui_dia / 6
+        contexto["LINEA_PENICILINA_CRISTALINA"] = (
+            "- PENICILINA CRISTALINA 200.000 UI/KG/DÍA: "
+            f"{formatear_numero_clinico(penicilina_dosis, 0)} UI IV CADA 4 HORAS"
+        )
+    else:
+        contexto["LINEA_PENICILINA_CRISTALINA"] = "- PENICILINA CRISTALINA 200.000 UI/KG/DÍA IV DIVIDIDA CADA 4 HORAS"
+
     sc = None
     sc_ml_h = None
     if "talla" in st.session_state:
@@ -4480,6 +4514,9 @@ def renderizar_plan_editable(texto_plan, peso):
         if linea_norm.startswith("- dexametasona ") and "iv dosis unica" in linea_norm:
             lineas_normalizadas.append(contexto["LINEA_DEXAMETASONA_LARINGITIS"])
             continue
+        if "penicilina cristalina" in linea_norm:
+            lineas_normalizadas.append(contexto["LINEA_PENICILINA_CRISTALINA"])
+            continue
         lineas_normalizadas.append(linea)
 
     lineas_sin_duplicados = []
@@ -4501,6 +4538,7 @@ def renderizar_plan_editable(texto_plan, peso):
             "ibuprofeno",
             "salbutamol",
             "adrenalina",
+            "penicilina cristalina",
         ]:
             if token in linea_norm:
                 firma = token
@@ -5494,14 +5532,19 @@ def render():
         if refinar_ia_en_vivo
         else plan_base_local
     )
+    plan_sugerido = renderizar_plan_editable(plan_sugerido, peso)
 
-    # Evita que el recalculador sustituya el plan completo del caso docente.
-    plan_ejemplo = st.session_state.pop("_plan_ejemplo_pendiente", "")
-    if plan_ejemplo:
-        st.session_state["plan"] = plan_ejemplo
-        st.session_state["plan_base"] = plan_sugerido
-
-    if "plan" not in st.session_state:
+    # Los ejemplos docentes conservan una plantilla con marcadores de dosis.
+    # Mientras el médico no edite el plan, sus dosis se recalculan al cambiar el peso.
+    plantilla_plan_ejemplo = st.session_state.get("_plan_ejemplo_template", "")
+    if plantilla_plan_ejemplo:
+        plan_ejemplo_calculado = renderizar_plan_editable(plantilla_plan_ejemplo, peso)
+        plan_ejemplo_previo = st.session_state.get("_plan_ejemplo_materializado", "")
+        if st.session_state.get("plan", "") in ("", plan_ejemplo_previo):
+            st.session_state["plan"] = plan_ejemplo_calculado
+        st.session_state["plan_base"] = plan_ejemplo_calculado
+        st.session_state["_plan_ejemplo_materializado"] = plan_ejemplo_calculado
+    elif "plan" not in st.session_state:
         st.session_state["plan"] = plan_sugerido
         st.session_state["plan_base"] = plan_sugerido
     elif st.session_state.get("plan_base") != plan_sugerido:
