@@ -1327,6 +1327,7 @@ def cargar_ejemplo_guia_urgencias(nombre_ejemplo):
         "plan": "",
         "plan_base": "",
         "_analisis_ejemplo_pendiente": caso.get("analisis", ""),
+        "_analisis_ejemplo_original": caso.get("analisis", ""),
         "_plan_ejemplo_template": caso.get("plan", ""),
         "_plan_ejemplo_materializado": "",
         "gpc_ruta": caso.get("gpc", ""),
@@ -3082,6 +3083,43 @@ def extraer_destinatario_informacion(informante):
     return "FAMILIAR"
 
 
+def construir_encabezado_analisis_pediatrico(
+    grupo, años, meses, dias, sexo, informante, enfermedad_actual, motivo=""
+):
+    """Construye el inicio narrativo obligatorio del análisis pediátrico."""
+    edad_partes = []
+    if años:
+        edad_partes.append(f"{años} {'AÑO' if años == 1 else 'AÑOS'}")
+    if meses:
+        edad_partes.append(f"{meses} {'MES' if meses == 1 else 'MESES'}")
+    if dias or not edad_partes:
+        edad_partes.append(f"{dias} {'DÍA' if dias == 1 else 'DÍAS'}")
+
+    etapa = limpiar_fragmento_analisis(grupo) or "PACIENTE PEDIÁTRICO"
+    edad_texto = ", ".join(edad_partes)
+    acompanante = extraer_destinatario_informacion(informante)
+    traido = "TRAÍDO" if limpiar_fragmento_analisis(sexo) == "MASCULINO" else "TRAÍDA"
+    cuadro = limpiar_fragmento_analisis(enfermedad_actual)
+    if not cuadro:
+        cuadro = f"MOTIVO DE CONSULTA: {limpiar_fragmento_analisis(motivo)}" if motivo else "CUADRO CLÍNICO EN ESTUDIO"
+
+    return (
+        f"SE TRATA DE {etapa} DE {edad_texto} DE EDAD, QUIEN ES {traido} POR {acompanante} "
+        f"POR {cuadro}"
+    )
+
+
+def asegurar_encabezado_analisis(analisis, encabezado):
+    """Evita que una reformulación de IA elimine el inicio clínico acordado."""
+    texto = str(analisis or "").strip()
+    inicio = str(encabezado or "").strip().rstrip(".")
+    if not inicio:
+        return texto
+    if limpiar_fragmento_analisis(texto).startswith(limpiar_fragmento_analisis(inicio)):
+        return texto
+    return f"{inicio}. {texto}".strip()
+
+
 def construir_conducta_sugerida_analisis(enfermedad_actual, examen, paraclinicos_texto, resumen_signos):
     texto = " ".join(
         limpiar_fragmento_analisis(x)
@@ -3890,6 +3928,9 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
         "analisis debe ser un único párrafo profesional en MAYÚSCULAS. "
         "plan debe ser una lista de indicaciones clínicas en MAYÚSCULAS, una por línea. "
         "Toda la salida debe estar exclusivamente en español. "
+        "El CONTEXTO CLÍNICO ACTUAL corresponde a la historia ya diligenciada por el profesional y prevalece sobre cualquier borrador o ejemplo previo. "
+        "El análisis debe comenzar literalmente con el ENCABEZADO CLÍNICO del borrador de análisis y conservar su grupo etario, edad exacta, acompañante y enfermedad actual. "
+        "Si un dato del ejemplo no está consignado en el contexto actual, no lo repitas ni lo uses para justificar la conducta. "
         "Usa únicamente los datos suministrados; no inventes diagnósticos, hallazgos, tratamientos, dosis ni paraclínicos. "
         "Respeta las negaciones clínicas textuales: un síntoma o signo documentado como NIEGA, SIN o AUSENTE no puede transformarse en un hallazgo presente. "
         "Respeta la conducta final registrada y las recomendaciones clínicas entregadas como apoyo. "
@@ -3899,6 +3940,9 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
         "Si el contexto contiene FUNDAMENTO DE GUÍAS DOCUMENTADO, inclúyelo una sola vez como una frase breve dentro del análisis; "
         "no inventes ni menciones una guía no registrada. "
         "No crees apartados separados ni menciones IA, trazabilidad, fuentes o listas de verificación. "
+        "En el PLAN, conserva las dosis, vías e intervalos ya calculados en el BORRADOR PLAN; escríbelos de forma completa y no uses frases como 'SEGÚN PESO'. "
+        "Solo incluye medicamentos y medidas terapéuticas justificadas por el diagnóstico, el estado clínico y la conducta final. "
+        "Si falta una dosis calculada para un medicamento, no la inventes: conserva el plan base editable para validación médica. "
         f"INSTRUCCIONES PARA ANÁLISIS: {instrucciones_analisis or 'INTEGRA EL CONTEXTO CLÍNICO DE FORMA COHERENTE.'} "
         f"INSTRUCCIONES PARA PLAN: {instrucciones_plan or 'PROPÓN SOLO CONDUCTAS SUSTENTADAS POR EL CONTEXTO.'}"
     )
@@ -4616,7 +4660,7 @@ def generar_plan_base_ordenado(peso, edad_meses, incluir_analgesia=True):
     contexto_medicacion = construir_contexto_plan_medicacion(peso)
     lineas = [
         "- HOSPITALIZACION PEDIATRICA",
-        "- DIETA NORMAL ACORDE A LA EDAD",
+        "- DIETA PEDIÁTRICA ACORDE A LA EDAD SEGÚN TOLERANCIA",
         "- CATETER SELLADO",
     ]
 
@@ -4757,23 +4801,93 @@ def generar_plan_sugerido(diagnostico, peso, edad_meses):
 
 def ajustar_plan_a_conducta_final(plan, conducta_final):
     """Evita que el plan automático contradiga el sitio de manejo elegido."""
-    conducta = limpiar_fragmento_analisis(conducta_final)
+    conducta = str(conducta_final or "").strip().upper()
+    es_observacion = conducta.startswith("OBSERV")
+    es_hospitalizacion = conducta.startswith("HOSPITAL")
     lineas = [linea for linea in str(plan or "").splitlines() if linea.strip()]
-    if conducta == "OBSERVACIÓN":
+    if es_observacion:
         lineas = [
             "- OBSERVACIÓN PEDIÁTRICA Y REVALORACIÓN CLÍNICA SEGÚN EVOLUCIÓN"
-            if "HOSPITALIZACION PEDIATRICA" in limpiar_fragmento_analisis(linea)
+            if any(marcador in linea.upper() for marcador in (
+                "HOSPITALIZACIÓN PEDIÁTRICA", "HOSPITALIZACION PEDIATRICA",
+                "HOSPITALIZAR POR PEDIATRÍA", "HOSPITALIZAR POR PEDIATRIA",
+            ))
             else linea
             for linea in lineas
         ]
-    elif conducta == "HOSPITALIZACIÓN":
+    elif es_hospitalizacion:
         lineas = [
             "- HOSPITALIZACIÓN PEDIÁTRICA"
-            if "OBSERVACION PEDIATRICA" in limpiar_fragmento_analisis(linea)
+            if any(marcador in linea.upper() for marcador in (
+                "OBSERVACIÓN PEDIÁTRICA", "OBSERVACION PEDIATRICA",
+                "DEJAR EN OBSERVACIÓN PEDIÁTRICA", "DEJAR EN OBSERVACION PEDIATRICA",
+            ))
             else linea
             for linea in lineas
         ]
-    return "\n".join(lineas)
+    plan_ajustado = "\n".join(lineas)
+    return garantizar_dieta_pediatrica_plan(plan_ajustado, conducta)
+
+
+def garantizar_dieta_pediatrica_plan(plan, conducta_final):
+    """Ordena la dieta pediátrica para observación/hospitalización si aplica."""
+    conducta = str(conducta_final or "").strip().upper()
+    es_observacion = conducta.startswith("OBSERV")
+    es_hospitalizacion = conducta.startswith("HOSPITAL")
+    texto = str(plan or "").strip()
+    if not (es_observacion or es_hospitalizacion) or not texto:
+        return texto
+
+    texto_mayusculas = texto.upper()
+    if any(marcador in texto_mayusculas for marcador in (
+        "AYUNO", "NPO", "DIETA ABSOLUTA", "RESTRICCIÓN DIETARIA",
+        "RESTRICCION DIETARIA", "CONTRAINDICADA",
+    )):
+        return texto
+
+    orden_dieta = "- DIETA PEDIÁTRICA ACORDE A LA EDAD SEGÚN TOLERANCIA"
+    lineas = [linea.strip() for linea in texto.splitlines() if linea.strip()]
+    depuradas = []
+    for linea in lineas:
+        linea_mayusculas = linea.upper()
+        if linea_mayusculas.startswith("- DIETA "):
+            continue
+        if "HIDRATACIÓN Y DIETA ACORDE A LA EDAD SEGÚN TOLERANCIA" in linea_mayusculas:
+            depuradas.append("- HIDRATACIÓN SEGÚN REQUERIMIENTO Y TOLERANCIA")
+            continue
+        if "ACCESO VENOSO PERIFÉRICO, DIETA ACORDE A LA EDAD SEGÚN TOLERANCIA Y " in linea_mayusculas:
+            depuradas.append(linea.replace("DIETA ACORDE A LA EDAD SEGÚN TOLERANCIA Y ", ""))
+            continue
+        depuradas.append(linea)
+
+    if depuradas and any(
+        termino in depuradas[0].upper()
+        for termino in (
+            "OBSERVACIÓN", "OBSERVACION", "HOSPITALIZACIÓN", "HOSPITALIZACION",
+            "DEJAR EN OBSERVACIÓN", "HOSPITALIZAR POR",
+        )
+    ):
+        encabezado_existente = depuradas[0]
+        if "HOSPITALIZAR POR PEDIATRÍA" not in encabezado_existente.upper():
+            encabezado_existente = encabezado_existente.replace(
+                "HOSPITALIZACIÓN PEDIÁTRICA", "HOSPITALIZAR POR PEDIATRÍA"
+            ).replace(
+                "HOSPITALIZACION PEDIATRICA", "HOSPITALIZAR POR PEDIATRÍA"
+            )
+        if "DEJAR EN OBSERVACIÓN PEDIÁTRICA" not in encabezado_existente.upper():
+            encabezado_existente = encabezado_existente.replace(
+                "OBSERVACIÓN PEDIÁTRICA", "DEJAR EN OBSERVACIÓN PEDIÁTRICA"
+            ).replace(
+                "OBSERVACION PEDIATRICA", "DEJAR EN OBSERVACIÓN PEDIÁTRICA"
+            )
+        return "\n".join([encabezado_existente, orden_dieta, *depuradas[1:]])
+
+    encabezado = (
+        "- DEJAR EN OBSERVACIÓN PEDIÁTRICA Y REVALORAR SEGÚN EVOLUCIÓN"
+        if es_observacion
+        else "- HOSPITALIZAR POR PEDIATRÍA"
+    )
+    return "\n".join([encabezado, orden_dieta, *depuradas])
 
 
 def construir_recomendaciones_egreso(diagnostico, enfermedad_actual=""):
@@ -5347,14 +5461,29 @@ def render():
     # =========================
     if fecha_nacimiento:
         años, meses, dias = calcular_edad(fecha_nacimiento)
-        edad_texto = f"{años} AÑOS" if años > 0 else f"{meses} MESES"
     else:
-        edad_texto = ""
+        años = meses = dias = 0
 
-    texto_enfermedad = enfermedad_input.upper() if enfermedad_input else ""
-    sexo_texto_analisis = sexo.upper() if sexo else ""
-
-    enfermedad_auto = f"PACIENTE {sexo_texto_analisis} {grupo.upper()} DE {edad_texto}, QUIEN CONSULTA POR {texto_enfermedad}"
+    enfermedad_auto = construir_encabezado_analisis_pediatrico(
+        grupo,
+        años,
+        meses,
+        dias,
+        sexo,
+        informante,
+        enfermedad_input,
+        motivo,
+    )
+    edad_texto_ia = ", ".join(
+        parte
+        for parte in (
+            f"{años} {'AÑO' if años == 1 else 'AÑOS'}" if años else "",
+            f"{meses} {'MES' if meses == 1 else 'MESES'}" if meses else "",
+            f"{dias} {'DÍA' if dias == 1 else 'DÍAS'}" if dias else "",
+        )
+        if parte
+    ) or "EDAD NO REGISTRADA"
+    sexo_texto_analisis = str(sexo or "").upper()
     resumen_antecedentes_analisis = extraer_resumen_antecedentes_para_analisis(antecedentes)
     resumen_examen_analisis = extraer_resumen_examen_para_analisis(examen)
     destinatario_informacion = extraer_destinatario_informacion(informante)
@@ -5406,7 +5535,7 @@ def render():
         contexto_analisis_ia = {
             "sexo": sexo_texto_analisis,
             "grupo_etario": grupo.upper() if grupo else "",
-            "edad": edad_texto,
+            "edad": edad_texto_ia,
             "motivo_consulta": motivo,
             "enfermedad_actual": enfermedad_input,
             "antecedentes": antecedentes,
@@ -5456,6 +5585,14 @@ def render():
             )
 
     st.subheader("Análisis")
+
+    # Aplica el análisis recalculado en el siguiente rerun, antes de crear el
+    # widget, para no modificar un valor de Streamlit después de instanciarlo.
+    analisis_recalculado_pendiente = st.session_state.pop("_analisis_recalculado_pendiente", "")
+    if analisis_recalculado_pendiente:
+        st.session_state["analisis"] = analisis_recalculado_pendiente
+        st.session_state["analisis_base"] = analisis_recalculado_pendiente
+        st.session_state.pop("_analisis_ejemplo_original", None)
 
     # Conserva el análisis docente del ejemplo; en cambios posteriores el
     # mecanismo existente lo trata como texto editable del profesional.
@@ -5652,6 +5789,10 @@ def render():
         if refinar_ia_en_vivo
         else plan_base_local
     )
+    plan_sugerido = garantizar_dieta_pediatrica_plan(
+        plan_sugerido,
+        conducta_final_analisis,
+    )
     plan_sugerido = renderizar_plan_editable(plan_sugerido, peso)
 
     # Los ejemplos docentes conservan una plantilla con marcadores de dosis.
@@ -5659,6 +5800,10 @@ def render():
     plantilla_plan_ejemplo = st.session_state.get("_plan_ejemplo_template", "")
     if plantilla_plan_ejemplo:
         plan_ejemplo_calculado = renderizar_plan_editable(plantilla_plan_ejemplo, peso)
+        plan_ejemplo_calculado = garantizar_dieta_pediatrica_plan(
+            plan_ejemplo_calculado,
+            conducta_final_analisis,
+        )
         plan_ejemplo_previo = st.session_state.get("_plan_ejemplo_materializado", "")
         if st.session_state.get("plan", "") in ("", plan_ejemplo_previo):
             st.session_state["plan"] = plan_ejemplo_calculado
@@ -5974,18 +6119,33 @@ def render():
                         "SI LA CONDUCTA FINAL ESTÁ PENDIENTE DEFINIR, NO INVENTES UNA DECISIÓN FINAL."
                     ),
                 )
+                analisis_default_final = asegurar_encabezado_analisis(
+                    analisis_default_final,
+                    enfermedad_auto,
+                )
                 analisis_default_final = integrar_fundamento_guias_en_analisis(
                     analisis_default_final,
                     fundamento_guias_analisis,
                 )
                 plan_sugerido_final = ajustar_plan_a_conducta_final(
-                    plan_sugerido_final,
+                    renderizar_plan_editable(plan_sugerido_final, peso),
                     conducta_final_analisis,
                 )
-                if st.session_state.get("analisis") in ("", st.session_state.get("analisis_base", "")):
+                analisis_actual = st.session_state.get("analisis", "")
+                analisis_ejemplo_original = st.session_state.get("_analisis_ejemplo_original", "")
+                ejemplo_sin_editar_analisis = bool(analisis_ejemplo_original) and (
+                    limpiar_fragmento_analisis(analisis_actual)
+                    == limpiar_fragmento_analisis(analisis_ejemplo_original)
+                )
+                if analisis_actual in ("", st.session_state.get("analisis_base", "")) or ejemplo_sin_editar_analisis:
                     analisis = analisis_default_final
+                    if ejemplo_sin_editar_analisis:
+                        # El médico sobrescribió datos clínicos del ejemplo,
+                        # no el análisis: se reemplaza por el nuevo análisis
+                        # coherente y se conserva para la siguiente edición.
+                        st.session_state["_analisis_recalculado_pendiente"] = analisis_default_final
                 else:
-                    analisis = st.session_state.get("analisis", analisis_default_final)
+                    analisis = analisis_actual or analisis_default_final
                 st.session_state["analisis_base"] = analisis_default_final
 
                 obs_dx_default_final = construir_observacion_diagnostica_base(
