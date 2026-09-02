@@ -4775,29 +4775,55 @@ def ajustar_plan_a_conducta_final(plan, conducta_final):
 
 
 def construir_recomendaciones_egreso(diagnostico, enfermedad_actual=""):
-    """Genera constancias clínicas de recomendaciones para el egreso."""
+    """Genera una constancia editable de educación de egreso según el problema clínico."""
     texto = limpiar_fragmento_analisis(f"{diagnostico or ''} {enfermedad_actual or ''}")
     recomendaciones = [
         "SE INDICA A PADRES O CUIDADOR RESPONSABLE CUMPLIR EL TRATAMIENTO Y LAS ÓRDENES MÉDICAS FORMULADAS.",
         "SE RECOMIENDA OFRECER ALIMENTACIÓN E HIDRATACIÓN ACORDE A LA EDAD Y TOLERANCIA.",
+        "SE INDICA NO ADMINISTRAR ANTIBIÓTICOS, ANTITUSIVOS, DESCONGESTIONANTES U OTROS MEDICAMENTOS NO FORMULADOS DURANTE ESTA ATENCIÓN.",
     ]
     alarmas = [
-        "SE INDICA RECONSULTAR POR DECAIMIENTO MARCADO, SOMNOLENCIA ANORMAL, CONVULSIONES, RECHAZO PERSISTENTE DE LA VÍA ORAL O EMPEORAMIENTO DEL ESTADO GENERAL.",
+        "SE INDICA RECONSULTAR DE INMEDIATO POR DECAIMIENTO MARCADO, SOMNOLENCIA ANORMAL, IRRITABILIDAD INCONSOLABLE, CONVULSIONES, RECHAZO PERSISTENTE DE LA VÍA ORAL O EMPEORAMIENTO DEL ESTADO GENERAL.",
     ]
 
     if any(termino in texto for termino in ("ASMA", "SIBILAN", "BRONQUIOL", "NEUMON", "TOS", "RINOFARING", "J00", "J18", "J21", "J45")):
-        recomendaciones.append("SE INDICA HIGIENE NASAL Y USO DE INHALADORES SOLO SI FUERON FORMULADOS, CON LA TÉCNICA ENSEÑADA DURANTE LA ATENCIÓN.")
-        alarmas.append("SE INDICA RECONSULTA INMEDIATA POR RESPIRACIÓN RÁPIDA O DIFICULTOSA, TIRAJES, QUEJIDO, COLORACIÓN AZULADA, PAUSAS RESPIRATORIAS, ESTRIDOR EN REPOSO O EMPEORAMIENTO DE LA TOS.")
+        recomendaciones.extend([
+            "SE INDICA HIGIENE NASAL CON SOLUCIÓN SALINA Y RETIRO SUAVE DE SECRECIONES SEGÚN NECESIDAD.",
+            "SE RECOMIENDA OFRECER LÍQUIDOS Y ALIMENTACIÓN FRACCIONADA SEGÚN TOLERANCIA.",
+            "SI FUERON FORMULADOS INHALADORES, SE INDICA USARLOS EXCLUSIVAMENTE EN LA DOSIS, FRECUENCIA Y TÉCNICA ENSEÑADAS DURANTE LA ATENCIÓN.",
+        ])
+        alarmas.append("SE INDICA RECONSULTA INMEDIATA POR RESPIRACIÓN RÁPIDA O DIFICULTOSA, TIRAJES, QUEJIDO, COLORACIÓN AZULADA, PAUSAS RESPIRATORIAS, ESTRIDOR EN REPOSO, DIFICULTAD PARA HABLAR, BEBER O ALIMENTARSE, O EMPEORAMIENTO DE LA TOS.")
     if any(termino in texto for termino in ("DIARREA", "GASTROENTER", "A09", "VOMITO", "EMESIS", "DESHIDRAT")):
-        recomendaciones.append("SE INDICA CONTINUAR SALES DE REHIDRATACIÓN ORAL EN PEQUEÑAS TOMAS FRECUENTES Y LA ALIMENTACIÓN SEGÚN TOLERANCIA.")
-        alarmas.append("SE INDICA RECONSULTAR POR VÓMITO DE TODO LO INGERIDO, AUSENCIA O DISMINUCIÓN MARCADA DE ORINA, SANGRE EN HECES, DOLOR ABDOMINAL INTENSO, LETARGIA O SIGNOS DE DESHIDRATACIÓN.")
+        recomendaciones.extend([
+            "SE INDICA CONTINUAR SALES DE REHIDRATACIÓN ORAL EN PEQUEÑAS TOMAS FRECUENTES Y MANTENER LA ALIMENTACIÓN SEGÚN TOLERANCIA.",
+            "SE RECOMIENDA VIGILAR FRECUENCIA DE DEPOSICIONES, VÓMITOS, INGESTA DE LÍQUIDOS Y DIURESIS.",
+        ])
+        alarmas.append("SE INDICA RECONSULTAR POR VÓMITO DE TODO LO INGERIDO, AUSENCIA O DISMINUCIÓN MARCADA DE ORINA, SANGRE EN HECES, DOLOR ABDOMINAL INTENSO O PROGRESIVO, DISTENSIÓN ABDOMINAL, LETARGIA, OJOS HUNDIDOS, BOCA SECA O CUALQUIER SIGNO DE DESHIDRATACIÓN.")
     if any(termino in texto for termino in ("CRUP", "LARINGIT", "ESTRIDOR", "J05", "J04")):
         alarmas.append("SE INDICA RECONSULTA INMEDIATA POR ESTRIDOR EN REPOSO, TIRAJE, CIANOSIS, DIFICULTAD PARA BEBER, SIALORREA, SOMNOLENCIA O EMPEORAMIENTO CLÍNICO.")
     if any(termino in texto for termino in ("FIEBRE", "FEBRIL")):
-        alarmas.append("SE INDICA RECONSULTAR POR FIEBRE PERSISTENTE O RECURRENTE, FIEBRE ASOCIADA A MAL ESTADO GENERAL, EXANTEMA PETEQUIAL O CUALQUIER SIGNO DE ALARMA DESCRITO.")
+        recomendaciones.append("SE INDICA VIGILAR TEMPERATURA Y ADMINISTRAR EL ANTIPIRÉTICO ÚNICAMENTE SI FUE FORMULADO, EN LA DOSIS INDICADA.")
+        alarmas.append("SE INDICA RECONSULTAR POR FIEBRE PERSISTENTE O RECURRENTE, FIEBRE ASOCIADA A MAL ESTADO GENERAL, RIGIDEZ DE CUELLO, EXANTEMA PETEQUIAL, CONVULSIÓN O CUALQUIER SIGNO DE ALARMA DESCRITO.")
+    if any(termino in texto for termino in ("OTIT", "H66")):
+        recomendaciones.append("SI SE FORMULÓ ANTIBIOTICOTERAPIA, SE INDICA COMPLETARLA EN LA DOSIS, VÍA, INTERVALO Y DURACIÓN PRESCRITOS.")
+        alarmas.append("SE INDICA RECONSULTAR POR DOLOR OTOLÓGICO INTENSO O PROGRESIVO, EDEMA O ERITEMA RETROAURICULAR, OTORREA PERSISTENTE, FIEBRE PERSISTENTE O DETERIORO DEL ESTADO GENERAL.")
+    if any(termino in texto for termino in ("INFECCIÓN URINARIA", "INFECCION URINARIA", "CISTIT", "PIELONEFRIT", "N39", "N30")):
+        recomendaciones.append("SI SE FORMULÓ ANTIBIOTICOTERAPIA, SE INDICA COMPLETARLA Y ASISTIR A CONTROL DE RESULTADOS DE UROCULTIVO O PARACLÍNICOS SI FUERON SOLICITADOS.")
+        alarmas.append("SE INDICA RECONSULTAR POR FIEBRE PERSISTENTE, VÓMITO, DOLOR LUMBAR O ABDOMINAL INTENSO, DISMINUCIÓN DE DIURESIS, RECHAZO DE LA VÍA ORAL O DETERIORO CLÍNICO.")
+    if any(termino in texto for termino in ("TCE", "TRAUMA CRANEO", "TRAUMATISMO CRANEO", "S09")):
+        recomendaciones.append("SE INDICA VIGILANCIA POR ADULTO RESPONSABLE DURANTE LAS PRÓXIMAS 24 A 48 HORAS Y EVITAR ACTIVIDAD FÍSICA DE RIESGO HASTA LA REVALORACIÓN CLÍNICA.")
+        alarmas.append("SE INDICA RECONSULTAR DE INMEDIATO POR VÓMITO REPETIDO, CEFALEA INTENSA O PROGRESIVA, SOMNOLENCIA ANORMAL, CONVULSIONES, DESORIENTACIÓN, CAMBIOS EN LA CONDUCTA, DEBILIDAD, ALTERACIÓN DE LA MARCHA O SALIDA DE SANGRE O LÍQUIDO POR NARIZ U OÍDOS.")
+    if any(termino in texto for termino in ("DOLOR ABDOMINAL", "ABDOMINAL", "ESTREÑ", "CONSTIP", "K59", "R10")):
+        recomendaciones.append("SE INDICA CONTINUAR LA ALIMENTACIÓN E HIDRATACIÓN SEGÚN TOLERANCIA Y EL PLAN MÉDICO FORMULADO.")
+        alarmas.append("SE INDICA RECONSULTAR POR DOLOR ABDOMINAL INTENSO, LOCALIZADO O PROGRESIVO, VÓMITO BILIOSO O PERSISTENTE, DISTENSIÓN ABDOMINAL, SANGRE EN HECES, FIEBRE, AUSENCIA DE ELIMINACIÓN DE GASES O DETERIORO DEL ESTADO GENERAL.")
+    if any(termino in texto for termino in ("DESNUTRIC", "SOBREPESO", "OBESIDAD", "NUTRICION", "NUTRICIÓN")):
+        recomendaciones.append("SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA Y NUTRICIÓN SEGÚN DISPONIBILIDAD, CON VIGILANCIA DE PESO, TALLA Y ALIMENTACIÓN.")
+
+    recomendaciones = list(dict.fromkeys(recomendaciones))
+    alarmas = list(dict.fromkeys(alarmas))
 
     return "\n".join(
-        ["RECOMENDACIONES BRINDADAS A PADRES O CUIDADOR RESPONSABLE:", *(f"- {item}" for item in recomendaciones), "", "SIGNOS DE ALARMA Y RECONSULTA POR URGENCIAS:", *(f"- {item}" for item in alarmas), "", "SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE, QUIEN REFIERE ENTENDER Y ACEPTAR. SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS, O ANTES SI PRESENTA SIGNOS DE ALARMA."]
+        ["INDICACIONES Y RECOMENDACIONES DE EGRESO:", *(f"- {item}" for item in recomendaciones), "", "SIGNOS DE ALARMA Y RECONSULTA POR URGENCIAS:", *(f"- {item}" for item in alarmas), "", "SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE, QUIEN REFIERE ENTENDER Y ACEPTAR. SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS, O ANTES SI PRESENTA SIGNOS DE ALARMA."]
     )
 
 
@@ -5521,6 +5547,7 @@ def render():
     )
     contexto_obs_dx_ia = {
         "diagnostico_cie10_principal": diagnostico_seleccionado,
+        "conducta_final": conducta_final_analisis,
         "analisis": analisis_default,
         "antecedentes": antecedentes,
         "enfermedad_actual": enfermedad_input,
@@ -5535,6 +5562,14 @@ def render():
             obs_dx_default,
             contexto_obs_dx_ia,
             fingerprint_obs_dx_ia,
+        )
+    if limpiar_fragmento_analisis(conducta_final_analisis) == "EGRESO":
+        recomendaciones_en_observacion = construir_recomendaciones_egreso(
+            diagnostico_seleccionado,
+            enfermedad_input,
+        )
+        obs_dx_default = "\n\n".join(
+            fragmento for fragmento in [obs_dx_default, recomendaciones_en_observacion] if fragmento.strip()
         )
     if "obs_dx_base" not in st.session_state:
         st.session_state["obs_dx"] = obs_dx_default
@@ -5933,6 +5968,15 @@ def render():
                     antecedentes,
                     dx_nutricional,
                 )
+                if limpiar_fragmento_analisis(conducta_final_analisis) == "EGRESO":
+                    obs_dx_default_final = "\n\n".join(
+                        fragmento
+                        for fragmento in [
+                            obs_dx_default_final,
+                            construir_recomendaciones_egreso(diagnostico_seleccionado, enfermedad_input),
+                        ]
+                        if fragmento.strip()
+                    )
                 if st.session_state.get("obs_dx") in ("", st.session_state.get("obs_dx_base", "")):
                     observacion_diagnostico = obs_dx_default_final
                 else:
@@ -5949,11 +5993,9 @@ def render():
         diagnostico_final = diagnostico_seleccionado or ""
         paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY LABORATORIOS POR REPORTAR"
         imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY IMAGENES POR REPORTAR"
-        recomendaciones_egreso = (
-            construir_recomendaciones_egreso(diagnostico_final, enfermedad_input)
-            if limpiar_fragmento_analisis(conducta_final_analisis) == "EGRESO"
-            else ""
-        )
+        # Las recomendaciones de egreso quedan en Observación diagnóstica para
+        # que el profesional pueda revisarlas y modificarlas antes del informe.
+        recomendaciones_egreso = ""
 
         historia = f"""
 {titulo_historia.upper()}
