@@ -919,11 +919,42 @@ EJEMPLOS_NEONATALES = {
 }
 
 
-def nombres_ejemplos(familia="pediatria", conducta=None) -> list[str]:
+ETIQUETAS_PATOLOGIA_EJEMPLO = {
+    "GPC:NEUMONIA": "NEUMONÍA",
+    "GPC:BRONQUIOLITIS": "BRONQUIOLITIS",
+    "GPC:ASMA": "ASMA Y SÍNDROME BRONCOOBSTRUCTIVO",
+    "GPC:CRUP": "CRUP / LARINGITIS",
+    "GPC:EDA": "EDA / DESHIDRATACIÓN",
+    "GPC:IVU": "INFECCIÓN URINARIA",
+    "GPC:FIEBRE": "SÍNDROME FEBRIL / FIEBRE SIN FOCO",
+    "GPC:DESNUTRICION": "DESNUTRICIÓN AGUDA / RIESGO NUTRICIONAL",
+    "GPC:OTITIS": "OTITIS MEDIA AGUDA",
+    "DX:J00": "IRA ALTA / RINOFARINGITIS",
+    "DX:S06.0": "TCE LEVE",
+    "DX:R11": "SÍNDROME EMÉTICO / VÓMITO",
+    "DX:R10": "DOLOR ABDOMINAL",
+    "DX:K59.0": "ESTREÑIMIENTO / CONSTIPACIÓN",
+}
+
+
+def catalogo_ejemplos_por_patologia() -> dict[str, list[str]]:
+    """Entrega el catálogo ordenado por patología y no por variantes sueltas."""
+    grupos = {}
+    for nombre, caso in EJEMPLOS_PEDIATRIA.items():
+        familia = _familia_ejemplo(caso)
+        etiqueta = ETIQUETAS_PATOLOGIA_EJEMPLO.get(familia, familia.replace("GPC:", "").replace("DX:", ""))
+        grupos.setdefault(etiqueta, []).append(nombre)
+    return {etiqueta: sorted(nombres) for etiqueta, nombres in sorted(grupos.items())}
+
+
+def nombres_ejemplos(familia="pediatria", conducta=None, patologia=None) -> list[str]:
     catalogo = EJEMPLOS_NEONATALES if familia == "neonatal" else EJEMPLOS_PEDIATRIA
+    nombres = list(catalogo)
+    if patologia and familia != "neonatal":
+        nombres = catalogo_ejemplos_por_patologia().get(patologia, [])
     if conducta:
-        return [nombre for nombre, caso in catalogo.items() if caso.get("conducta") == conducta]
-    return list(catalogo)
+        nombres = [nombre for nombre in nombres if catalogo.get(nombre, {}).get("conducta") == conducta]
+    return sorted(nombres)
 
 
 def obtener_ejemplo(nombre: str, familia="pediatria") -> dict:
