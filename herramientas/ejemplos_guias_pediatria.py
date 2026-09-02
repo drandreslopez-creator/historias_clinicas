@@ -55,6 +55,35 @@ NEUROLÓGICO: {neurologico}
 PIEL: {piel}"""
 
 
+def _enriquecer_enfermedad_actual(evolucion, conducta, gpc_criterios, aiepi_criterios):
+    """Hace explícitos, dentro del ejemplo, los datos que sustentan la conducta."""
+    criterios = []
+    for fuente in (aiepi_criterios or {}, gpc_criterios or {}):
+        for valor in fuente.values():
+            texto = str(valor).strip()
+            if texto and texto not in criterios:
+                criterios.append(texto)
+
+    cierre_por_conducta = {
+        "EGRESO": (
+            "AL MOMENTO DE LA REEVALUACIÓN SE DOCUMENTAN ESTADO GENERAL, SIGNOS VITALES, TOLERANCIA A LA VÍA ORAL, "
+            "DIURESIS Y AUSENCIA DE SIGNOS GENERALES DE PELIGRO O CRITERIOS CLÍNICOS DE HOSPITALIZACIÓN."
+        ),
+        "OBSERVACIÓN": (
+            "SE DEJA DOCUMENTADO QUE EL ESTADO GENERAL, LA TOLERANCIA ORAL, LA DIURESIS, LOS SIGNOS VITALES Y LOS HALLAZGOS "
+            "DIRIGIDOS REQUIEREN REVALORACIÓN SERIADA ANTES DE DEFINIR EL SITIO DE MANEJO."
+        ),
+        "HOSPITALIZACIÓN": (
+            "SE DOCUMENTAN LOS HALLAZGOS DE SEVERIDAD, LA TOLERANCIA ORAL, LA DIURESIS, EL ESTADO HEMODINÁMICO Y LA RESPUESTA "
+            "CLÍNICA QUE SUSTENTAN LA NECESIDAD DE MANEJO INTRAHOSPITALARIO O REMISIÓN."
+        ),
+    }
+    soporte = " ".join(criterios)
+    if soporte:
+        soporte = f" HALLAZGOS CLÍNICOS RELEVANTES: {soporte}"
+    return f"{evolucion} {cierre_por_conducta.get(conducta, '')}{soporte}"
+
+
 def _caso(
     *, nombre, motivo, enfermedad, examen, diagnostico, busqueda, conducta,
     plan, signos, gpc="", aiepi="RESPIRATORIO", gpc_criterios=None,
@@ -63,6 +92,12 @@ def _caso(
     fecha_nacimiento=date(2023, 1, 15), sexo="Femenino", justificacion="",
     familia="",
 ):
+    enfermedad = _enriquecer_enfermedad_actual(
+        enfermedad,
+        conducta,
+        gpc_criterios,
+        aiepi_criterios,
+    )
     cierres = {
         "EGRESO": (
             "POR EL ESTADO GENERAL CONSERVADO, LA ESTABILIDAD CLÍNICA Y LA "
