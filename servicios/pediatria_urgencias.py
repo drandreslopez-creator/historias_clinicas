@@ -50,7 +50,7 @@ from herramientas.rutas_gpc_pediatria import (
     render_trazabilidad_gpc,
     resumen_gpc_para_ia,
 )
-from herramientas.ejemplos_guias_pediatria import nombres_ejemplos, obtener_ejemplo
+from herramientas.ejemplos_guias_pediatria import catalogo_ejemplos_por_patologia, nombres_ejemplos, obtener_ejemplo
 from utils.google_drive_oauth import subir_docx_con_oauth
 from utils.google_drive_oauth import eliminar_archivo_drive_con_oauth
 
@@ -1225,6 +1225,7 @@ def limpiar_formulario():
         "dx_cie10_pendiente",
         "ejemplo_guia_urgencias",
         "nivel_ejemplo_urgencias",
+        "patologia_ejemplo_urgencias",
         "aiepi_apoyo",
         "aiepi_registro",
         "plan_ia_cache",
@@ -1242,6 +1243,11 @@ def limpiar_formulario():
 
 def solicitar_limpieza_formulario():
     st.session_state["_limpiar_formulario"] = True
+
+
+def reiniciar_variante_ejemplo_urgencias():
+    """Evita conservar un caso de la patología elegida previamente."""
+    st.session_state["ejemplo_guia_urgencias"] = ""
 
 
 def cargar_ejemplo_urgencias():
@@ -5062,21 +5068,35 @@ def render():
     )
 
     st.header(titulo_historia)
-    col_acc_1, col_acc_2, col_acc_3 = st.columns([1, 2, 1])
-    nivel_ejemplo = col_acc_1.selectbox(
-        "Sitio de manejo del ejemplo",
-        ["", "EGRESO", "OBSERVACIÓN", "HOSPITALIZACIÓN"],
-        format_func=lambda opcion: "Todos" if not opcion else opcion.title(),
-        key="nivel_ejemplo_urgencias",
-    )
-    ejemplo_guia = col_acc_2.selectbox(
-        "Ejemplo clínico guiado",
-        [""] + nombres_ejemplos("pediatria", nivel_ejemplo or None),
+    col_acc_1, col_acc_2, col_acc_3, col_acc_4 = st.columns([2, 1, 2, 1])
+    patologias_ejemplo = catalogo_ejemplos_por_patologia()
+    patologia_ejemplo = col_acc_1.selectbox(
+        "Patología del ejemplo",
+        [""] + list(patologias_ejemplo),
         format_func=lambda opcion: "Seleccione una patología" if not opcion else opcion,
-        key="ejemplo_guia_urgencias",
-        help="Carga un caso docente editable con los criterios GPC y AIEPI ya documentados.",
+        key="patologia_ejemplo_urgencias",
+        on_change=reiniciar_variante_ejemplo_urgencias,
     )
-    if col_acc_3.button("Cargar ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
+    nivel_ejemplo = col_acc_2.selectbox(
+        "Sitio de manejo",
+        ["", "EGRESO", "OBSERVACIÓN", "HOSPITALIZACIÓN"],
+        format_func=lambda opcion: "Seleccione" if not opcion else opcion.title(),
+        key="nivel_ejemplo_urgencias",
+        on_change=reiniciar_variante_ejemplo_urgencias,
+    )
+    opciones_ejemplo = nombres_ejemplos(
+        "pediatria",
+        nivel_ejemplo or None,
+        patologia_ejemplo or None,
+    )
+    ejemplo_guia = col_acc_3.selectbox(
+        "Variante clínica",
+        [""] + opciones_ejemplo,
+        format_func=lambda opcion: "Seleccione el escenario" if not opcion else opcion,
+        key="ejemplo_guia_urgencias",
+        help="Cada escenario carga una historia editable con GPC y AIEPI documentados.",
+    )
+    if col_acc_4.button("Cargar ejemplo", key="ver_ejemplo_urgencias", use_container_width=True):
         if ejemplo_guia:
             cargar_ejemplo_guia_urgencias(ejemplo_guia)
         else:
