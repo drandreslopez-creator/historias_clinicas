@@ -3494,10 +3494,6 @@ def construir_observacion_diagnostica_base(
     if "ASMA" in antecedentes_up:
         items.append("ANTECEDENTE DE ASMA")
 
-    dx_nutri = limpiar_fragmento_analisis(dx_nutricional)
-    if dx_nutri and dx_nutri not in {"NO EVALUADO", "NO APLICA"}:
-        items.append(f"DIAGNÓSTICO NUTRICIONAL: {dx_nutri}")
-
     items_limpios = []
     vistos = set()
     for item in items:
@@ -4833,6 +4829,16 @@ def construir_recomendaciones_egreso(diagnostico, enfermedad_actual=""):
     )
 
 
+def separar_observacion_y_recomendaciones_egreso(observacion):
+    """Evita duplicar recomendaciones y las ubica al final del informe."""
+    texto = str(observacion or "").strip()
+    marcador = "INDICACIONES Y RECOMENDACIONES DE EGRESO:"
+    indice = texto.upper().find(marcador)
+    if indice < 0:
+        return texto, ""
+    return texto[:indice].strip(), texto[indice:].strip()
+
+
 def generar_docx_informe(titulo, secciones):
     doc = Document()
     section = doc.sections[0]
@@ -6013,9 +6019,11 @@ def render():
         diagnostico_final = diagnostico_seleccionado or ""
         paraclinicos_final = paraclinicos_texto.strip() if str(paraclinicos_texto).strip() else "NO HAY LABORATORIOS POR REPORTAR"
         imagenes_final = imagenes_texto.strip() if str(imagenes_texto).strip() else "NO HAY IMAGENES POR REPORTAR"
-        # Las recomendaciones de egreso quedan en Observación diagnóstica para
-        # que el profesional pueda revisarlas y modificarlas antes del informe.
-        recomendaciones_egreso = ""
+        # En pantalla pueden editarse dentro de Observación diagnóstica, pero
+        # el informe las muestra al final, después del plan terapéutico.
+        observacion_reporte, recomendaciones_egreso = separar_observacion_y_recomendaciones_egreso(
+            observacion_diagnostico
+        )
 
         historia = f"""
 {titulo_historia.upper()}
@@ -6076,7 +6084,7 @@ DIAGNÓSTICOS:
 {diagnostico_final}
 
 OBSERVACIÓN DIAGNÓSTICA:
-{observacion_diagnostico}
+{observacion_reporte}
 
 DIAGNÓSTICO NUTRICIONAL:
 {dx_nutricional}
@@ -6102,7 +6110,7 @@ PLAN:
             ("ANÁLISIS", analisis),
             ("CLASIFICACIÓN DIAGNÓSTICA", clasificacion_diagnostica),
             ("DIAGNÓSTICOS", diagnostico_final),
-            ("OBSERVACIÓN DIAGNÓSTICA", observacion_diagnostico),
+            ("OBSERVACIÓN DIAGNÓSTICA", observacion_reporte),
             ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
             ("PLAN", plan),
         ]
