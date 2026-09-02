@@ -56,32 +56,89 @@ PIEL: {piel}"""
 
 
 def _enriquecer_enfermedad_actual(evolucion, conducta, gpc_criterios, aiepi_criterios):
-    """Hace explícitos, dentro del ejemplo, los datos que sustentan la conducta."""
-    criterios = []
-    for fuente in (aiepi_criterios or {}, gpc_criterios or {}):
-        for valor in fuente.values():
-            texto = str(valor).strip()
-            if texto and texto not in criterios:
-                criterios.append(texto)
+    """Conserva la enfermedad actual como narrativa clínica, no como lista de auditoría."""
+    texto = str(evolucion or "").strip()
+    texto_mayusculas = texto.upper()
 
-    cierre_por_conducta = {
-        "EGRESO": (
-            "AL MOMENTO DE LA REEVALUACIÓN SE DOCUMENTAN ESTADO GENERAL, SIGNOS VITALES, TOLERANCIA A LA VÍA ORAL, "
-            "DIURESIS Y AUSENCIA DE SIGNOS GENERALES DE PELIGRO O CRITERIOS CLÍNICOS DE HOSPITALIZACIÓN."
-        ),
-        "OBSERVACIÓN": (
-            "SE DEJA DOCUMENTADO QUE EL ESTADO GENERAL, LA TOLERANCIA ORAL, LA DIURESIS, LOS SIGNOS VITALES Y LOS HALLAZGOS "
-            "DIRIGIDOS REQUIEREN REVALORACIÓN SERIADA ANTES DE DEFINIR EL SITIO DE MANEJO."
-        ),
-        "HOSPITALIZACIÓN": (
-            "SE DOCUMENTAN LOS HALLAZGOS DE SEVERIDAD, LA TOLERANCIA ORAL, LA DIURESIS, EL ESTADO HEMODINÁMICO Y LA RESPUESTA "
-            "CLÍNICA QUE SUSTENTAN LA NECESIDAD DE MANEJO INTRAHOSPITALARIO O REMISIÓN."
-        ),
-    }
-    soporte = " ".join(criterios)
-    if soporte:
-        soporte = f" HALLAZGOS CLÍNICOS RELEVANTES: {soporte}"
-    return f"{evolucion} {cierre_por_conducta.get(conducta, '')}{soporte}"
+    # En los ejemplos de egreso, completa los elementos AIEPI básicos solo
+    # si aún no están escritos. Los demás escenarios deben conservar sus
+    # hallazgos específicos, sin inventar datos de estabilidad.
+    if conducta == "EGRESO" and "TOLER" not in texto_mayusculas:
+        texto += (
+            " AL MOMENTO DE LA VALORACIÓN MANTIENE BUENA TOLERANCIA A LA VÍA ORAL "
+            "Y DIURESIS CONSERVADA."
+        )
+    if conducta == "EGRESO" and not any(
+        termino in texto_mayusculas
+        for termino in ("LETARG", "SOMNOL", "SIGNOS DE PELIGRO", "CONVULS", "ALTERACIÓN DEL ESTADO")
+    ):
+        texto += " NIEGA LETARGIA, CONVULSIONES Y ALTERACIÓN DEL ESTADO DE CONCIENCIA."
+    return texto
+
+
+def _normalizar_dieta_plan(plan, conducta):
+    """Incluye la dieta pediátrica en el orden de hospitalización habitual.
+
+    El ayuno, las restricciones dietarias y las contraindicaciones explícitas
+    prevalecen sobre esta orden general.
+    """
+    texto = str(plan or "").strip()
+    if conducta not in ("OBSERVACIÓN", "HOSPITALIZACIÓN") or not texto:
+        return texto
+
+    texto_mayusculas = texto.upper()
+    if any(marcador in texto_mayusculas for marcador in (
+        "AYUNO", "NPO", "DIETA ABSOLUTA", "RESTRICCIÓN DIETARIA",
+        "RESTRICCION DIETARIA", "CONTRAINDICADA",
+    )):
+        return texto
+
+    orden_dieta = "- DIETA PEDIÁTRICA ACORDE A LA EDAD SEGÚN TOLERANCIA."
+    lineas = [linea.strip() for linea in texto.splitlines() if linea.strip()]
+
+    # Evita duplicar o dejar la dieta dispersa en una orden posterior.
+    lineas_sin_dieta = []
+    for linea in lineas:
+        linea_mayusculas = linea.upper()
+        if linea_mayusculas.startswith("- DIETA "):
+            continue
+        if "HIDRATACIÓN Y DIETA ACORDE A LA EDAD SEGÚN TOLERANCIA" in linea_mayusculas:
+            lineas_sin_dieta.append("- HIDRATACIÓN SEGÚN REQUERIMIENTO Y TOLERANCIA.")
+            continue
+        if "ACCESO VENOSO PERIFÉRICO, DIETA ACORDE A LA EDAD SEGÚN TOLERANCIA Y " in linea_mayusculas:
+            lineas_sin_dieta.append(
+                linea.replace("DIETA ACORDE A LA EDAD SEGÚN TOLERANCIA Y ", "")
+            )
+            continue
+        lineas_sin_dieta.append(linea)
+
+    encabezado = (
+        "- DEJAR EN OBSERVACIÓN PEDIÁTRICA Y REVALORAR CLÍNICAMENTE."
+        if conducta == "OBSERVACIÓN"
+        else "- HOSPITALIZAR POR PEDIATRÍA."
+    )
+    if lineas_sin_dieta and any(
+        termino in lineas_sin_dieta[0].upper()
+        for termino in (
+            "OBSERVACIÓN", "OBSERVACION", "HOSPITALIZACIÓN", "HOSPITALIZACION",
+            "DEJAR EN OBSERVACIÓN", "HOSPITALIZAR POR",
+        )
+    ):
+        encabezado_existente = lineas_sin_dieta[0]
+        if "HOSPITALIZAR POR PEDIATRÍA" not in encabezado_existente.upper():
+            encabezado_existente = encabezado_existente.replace(
+                "HOSPITALIZACIÓN PEDIÁTRICA", "HOSPITALIZAR POR PEDIATRÍA"
+            ).replace(
+                "HOSPITALIZACION PEDIATRICA", "HOSPITALIZAR POR PEDIATRÍA"
+            )
+        if "DEJAR EN OBSERVACIÓN PEDIÁTRICA" not in encabezado_existente.upper():
+            encabezado_existente = encabezado_existente.replace(
+                "OBSERVACIÓN PEDIÁTRICA", "DEJAR EN OBSERVACIÓN PEDIÁTRICA"
+            ).replace(
+                "OBSERVACION PEDIATRICA", "DEJAR EN OBSERVACIÓN PEDIÁTRICA"
+            )
+        return "\n".join([encabezado_existente, orden_dieta, *lineas_sin_dieta[1:]])
+    return "\n".join([encabezado, orden_dieta, *lineas_sin_dieta])
 
 
 def _caso(
@@ -98,6 +155,7 @@ def _caso(
         gpc_criterios,
         aiepi_criterios,
     )
+    plan = _normalizar_dieta_plan(plan, conducta)
     cierres = {
         "EGRESO": (
             "POR EL ESTADO GENERAL CONSERVADO, LA ESTABILIDAD CLÍNICA Y LA "
@@ -1393,7 +1451,7 @@ def _plan_por_sitio_manejo(plan_base, conducta):
     cierre = (
         "- SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE EL MOTIVO DEL MANEJO, LA EVOLUCIÓN ESPERADA Y LOS CRITERIOS DE REVALORACIÓN."
     )
-    return "\n".join([encabezado, *lineas, cierre])
+    return _normalizar_dieta_plan("\n".join([encabezado, *lineas, cierre]), conducta)
 
 
 def _actualizar_criterios_por_conducta(criterios, conducta):
@@ -1447,6 +1505,14 @@ def _completar_ejemplos_por_sitio_manejo(catalogo):
 
 
 _completar_ejemplos_por_sitio_manejo(EJEMPLOS_PEDIATRIA)
+
+# También cubre los ejemplos creados desde diccionarios, no solo los que usan
+# _caso(), para que todos mantengan la misma secuencia de órdenes.
+for _caso_pediatrico in EJEMPLOS_PEDIATRIA.values():
+    _caso_pediatrico["plan"] = _normalizar_dieta_plan(
+        _caso_pediatrico.get("plan", ""),
+        _caso_pediatrico.get("conducta", ""),
+    )
 
 
 EJEMPLOS_NEONATALES = {
