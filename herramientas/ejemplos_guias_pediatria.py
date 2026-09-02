@@ -83,6 +83,8 @@ def _caso(
     analisis = (
         f"PACIENTE PEDIÁTRICO QUE CONSULTA POR {motivo}. {enfermedad} "
         f"{justificacion or 'LA VALORACIÓN CLÍNICA SE INTERPRETA EN CONJUNTO CON LOS SIGNOS VITALES, EL EXAMEN POR SISTEMAS Y LA EVOLUCIÓN.'} "
+        f"{'SE DOCUMENTA APLICACIÓN DE LA RUTA GPC DE ' + gpc + ', CON LOS CRITERIOS CLÍNICOS REGISTRADOS EN ESTA HISTORIA. ' if gpc else ''}"
+        f"{'SE DOCUMENTA EVALUACIÓN AIEPI ' + aiepi + ', INCLUYENDO SIGNOS GENERALES DE PELIGRO, CLASIFICACIÓN, CONSEJERÍA Y RECONSULTA SEGÚN CORRESPONDA. ' if aiepi else ''}"
         f"{cierres.get(conducta, '')}"
     )
     return {
@@ -781,6 +783,107 @@ EJEMPLOS_PEDIATRIA = {
         justificacion="LA OTOSCOPIA CONFIRMA OTITIS MEDIA AGUDA SIN DATOS DE MASTOIDITIS, COMPROMISO NEUROLÓGICO NI DETERIORO GENERAL, POR LO QUE SE JUSTIFICA MANEJO AMBULATORIO CON CONTROL.",
     ),
 }
+
+
+def _familia_ejemplo(caso):
+    """Agrupa las variantes por ruta o, si no existe, por el código diagnóstico."""
+    ruta = str(caso.get("gpc", "")).strip()
+    if ruta:
+        return f"GPC:{ruta}"
+    diagnostico = str(caso.get("diagnostico", "")).split("-", 1)[0].strip()
+    return f"DX:{diagnostico or caso.get('nombre', '')}"
+
+
+def _texto_sitio_manejo(conducta):
+    if conducta == "EGRESO":
+        return (
+            "AL MOMENTO DE LA REEVALUACIÓN, PACIENTE CON ESTADO GENERAL CONSERVADO, SIN SIGNOS GENERALES DE PELIGRO, "
+            "CON TOLERANCIA A LA VÍA ORAL Y SIN CRITERIOS CLÍNICOS ACTUALES DE HOSPITALIZACIÓN. "
+            "SE DEFINE MANEJO AMBULATORIO, CON INDICACIONES, SIGNOS DE ALARMA Y CONTROL CERCANO."
+        )
+    if conducta == "OBSERVACIÓN":
+        return (
+            "PRESENTA HALLAZGOS QUE REQUIEREN VIGILANCIA CLÍNICA SERIADA, REEVALUACIÓN DE LA RESPUESTA AL MANEJO INICIAL "
+            "Y DEFINICIÓN DEL SITIO DE MANEJO SEGÚN SU EVOLUCIÓN, TOLERANCIA A LA VÍA ORAL Y HALLAZGOS COMPLEMENTARIOS SI APORTAN."
+        )
+    return (
+        "PRESENTA HALLAZGOS CLÍNICOS Y RIESGO DE DETERIORO QUE JUSTIFICAN HOSPITALIZACIÓN PEDIÁTRICA PARA TRATAMIENTO, "
+        "MONITORIZACIÓN, VIGILANCIA DE LA TOLERANCIA AL MANEJO Y REVALORACIÓN CLÍNICA SERIADA."
+    )
+
+
+def _plan_por_sitio_manejo(plan_base, conducta):
+    lineas = [linea for linea in str(plan_base or "").splitlines() if linea.strip()]
+    if conducta == "EGRESO":
+        lineas = [
+            linea for linea in lineas
+            if not any(marcador in linea.upper() for marcador in ("HOSPITALIZ", "OBSERVACIÓN PEDI", "OBSERVACION PEDI", "CATETER SELLADO"))
+        ]
+        return "\n".join([
+            "- MANEJO AMBULATORIO SEGÚN DIAGNÓSTICO Y TRATAMIENTO FORMULADO.",
+            *lineas,
+            "- SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE INDICACIONES, SIGNOS DE ALARMA Y RECONSULTA.",
+            "- CONTROL POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS O ANTES SI DETERIORO.",
+        ])
+    encabezado = "- OBSERVACIÓN PEDIÁTRICA CON REVALORACIÓN CLÍNICA SERIADA." if conducta == "OBSERVACIÓN" else "- HOSPITALIZACIÓN PEDIÁTRICA."
+    lineas = [linea for linea in lineas if "HOSPITALIZ" not in linea.upper() and "OBSERVACIÓN PEDI" not in linea.upper()]
+    cierre = (
+        "- SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE EL MOTIVO DEL MANEJO, LA EVOLUCIÓN ESPERADA Y LOS CRITERIOS DE REVALORACIÓN."
+    )
+    return "\n".join([encabezado, *lineas, cierre])
+
+
+def _actualizar_criterios_por_conducta(criterios, conducta):
+    actualizados = dict(criterios or {})
+    texto_sitio = {
+        "EGRESO": "SE DEFINE EGRESO POR ESTABILIDAD CLÍNICA, AUSENCIA DE SIGNOS DE GRAVEDAD Y TOLERANCIA A LA VÍA ORAL; SE BRINDAN SIGNOS DE ALARMA Y CONTROL.",
+        "OBSERVACIÓN": "SE DEFINE OBSERVACIÓN PARA VIGILANCIA SERIADA, REEVALUACIÓN DE RESPUESTA Y DEFINICIÓN POSTERIOR DEL SITIO DE MANEJO.",
+        "HOSPITALIZACIÓN": "SE DEFINE HOSPITALIZACIÓN POR RIESGO DE DETERIORO Y NECESIDAD DE TRATAMIENTO Y MONITORIZACIÓN INTRAHOSPITALARIA.",
+    }[conducta]
+    for clave in list(actualizados):
+        clave_up = clave.upper()
+        if any(token in clave_up for token in ("SITIO DE MANEJO", "CLASIFICACIÓN, SITIO", "CLASIFICACION, SITIO")):
+            actualizados[clave] = texto_sitio
+        elif "SIGNOS DE ALARMA" in clave_up:
+            actualizados[clave] = "SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE SIGNOS DE ALARMA, RECONSULTA Y CONTROL SEGÚN LA PATOLOGÍA."
+    return actualizados
+
+
+def _completar_ejemplos_por_sitio_manejo(catalogo):
+    """Garantiza EGRESO, OBSERVACIÓN y HOSPITALIZACIÓN para cada patología docente.
+
+    Las variantes se cargan como historias completas y editables. El médico debe
+    corroborar que el escenario, los hallazgos y el plan sean pertinentes para
+    el paciente real antes de generar el informe.
+    """
+    agrupados = {}
+    for nombre, caso in catalogo.items():
+        agrupados.setdefault(_familia_ejemplo(caso), []).append((nombre, caso))
+
+    agregados = {}
+    for _, variantes in agrupados.items():
+        conductas_presentes = {caso.get("conducta") for _, caso in variantes}
+        base_nombre, base = variantes[0]
+        principal = str(base.get("diagnostico", base_nombre)).split("-", 1)[-1].strip()
+        for conducta in ("EGRESO", "OBSERVACIÓN", "HOSPITALIZACIÓN"):
+            if conducta in conductas_presentes:
+                continue
+            caso = deepcopy(base)
+            caso["nombre"] = f"{principal} - {conducta.title()}"
+            caso["conducta"] = conducta
+            caso["enfermedad"] = (
+                f"CASO DOCENTE DE {principal}. {_texto_sitio_manejo(conducta)} "
+                "SE DOCUMENTAN LOS HALLAZGOS CLÍNICOS, SIGNOS VITALES, RESPUESTA AL MANEJO Y FACTORES DE RIESGO APLICABLES ANTES DE DEFINIR LA CONDUCTA."
+            )
+            caso["justificacion"] = _texto_sitio_manejo(conducta)
+            caso["plan"] = _plan_por_sitio_manejo(base.get("plan", ""), conducta)
+            caso["gpc_criterios"] = _actualizar_criterios_por_conducta(base.get("gpc_criterios"), conducta)
+            caso["aiepi_criterios"] = _actualizar_criterios_por_conducta(base.get("aiepi_criterios"), conducta)
+            agregados[caso["nombre"]] = caso
+    catalogo.update(agregados)
+
+
+_completar_ejemplos_por_sitio_manejo(EJEMPLOS_PEDIATRIA)
 
 
 EJEMPLOS_NEONATALES = {
