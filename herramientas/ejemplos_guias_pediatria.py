@@ -1433,6 +1433,162 @@ def _texto_sitio_manejo(conducta):
     )
 
 
+def _primer_parrafo(texto):
+    """Obtiene el estado general ya consignado, sin inventar un nuevo examen."""
+    for linea in str(texto or "").splitlines():
+        linea = linea.strip()
+        if linea:
+            return linea.rstrip(".") + "."
+    return "PACIENTE EN VALORACIÓN CLÍNICA."
+
+
+def _detalle_clinico_por_conducta(caso, conducta):
+    """Añade datos clínicos útiles a las variantes docentes generadas.
+
+    Las frases se mantienen deliberadamente generales cuando el diagnóstico no
+    permite asumir un hallazgo específico. El profesional siempre debe adaptar
+    el ejemplo a los datos reales antes de emitir el informe.
+    """
+    texto = " ".join(
+        str(caso.get(campo, ""))
+        for campo in ("nombre", "diagnostico", "familia", "gpc", "aiepi")
+    ).upper()
+
+    if any(termino in texto for termino in (
+        "NEUMON", "BRONQUIOL", "ASMA", "BRONCOOBSTRUCT", "CRUP", "LARINGIT",
+        "RESPIRATOR", "CUERPO EXTRAÑO / ASPIRACIÓN",
+    )):
+        detalles = {
+            "EGRESO": "EN LA REEVALUACIÓN NO PRESENTA TIRAJE, CIANOSIS, APNEAS NI DESATURACIÓN; MANTIENE OXIMETRÍA ADECUADA AL AIRE AMBIENTE.",
+            "OBSERVACIÓN": "PERSISTE SINTOMATOLOGÍA RESPIRATORIA QUE AMERITA VIGILANCIA SERIADA DE FRECUENCIA RESPIRATORIA, TRABAJO RESPIRATORIO, OXIMETRÍA Y RESPUESTA AL MANEJO INICIAL.",
+            "HOSPITALIZACIÓN": "PRESENTA COMPROMISO RESPIRATORIO CON NECESIDAD DE OXIGENOTERAPIA, VIGILANCIA DE OXIMETRÍA Y REVALORACIÓN CLÍNICA INTRAHOSPITALARIA.",
+        }
+    elif any(termino in texto for termino in (
+        "EDA", "GASTROENTER", "DIARREA", "EMÉTICO", "EMETICO", "VÓMITO", "VOMITO",
+        "ABDOMINAL", "ESTREÑ", "CONSTIP", "DESNUTRIC",
+    )):
+        detalles = {
+            "EGRESO": "AL MOMENTO DE LA REEVALUACIÓN TOLERA LA VÍA ORAL, MANTIENE DIURESIS Y NO PRESENTA LETARGIA, SIGNOS CLÍNICOS DE DESHIDRATACIÓN GRAVE NI HALLAZGOS ABDOMINALES DE ALARMA.",
+            "OBSERVACIÓN": "PERSISTE TOLERANCIA ORAL PARCIAL O SÍNTOMAS QUE REQUIEREN REVALORAR HIDRATACIÓN, DIURESIS, GASTO FECAL O RESPUESTA AL MANEJO ANTES DE DEFINIR EGRESO.",
+            "HOSPITALIZACIÓN": "PRESENTA INTOLERANCIA A LA VÍA ORAL, DESHIDRATACIÓN O HALLAZGOS CLÍNICOS QUE REQUIEREN HIDRATACIÓN, BALANCE, VIGILANCIA Y MANEJO INTRAHOSPITALARIO.",
+        }
+    elif any(termino in texto for termino in (
+        "CONVUL", "TCE", "TRAUMA CRANEO", "CEFALEA", "MENING", "SÍNCOPE", "SINCOPE",
+        "PARÁLISIS", "PARALISIS",
+    )):
+        detalles = {
+            "EGRESO": "DURANTE LA OBSERVACIÓN CLÍNICA PERMANECE CON ESTADO NEUROLÓGICO BASAL, SIN NUEVOS EVENTOS, VÓMITO PERSISTENTE, FOCALIZACIÓN NI ALTERACIÓN PROGRESIVA DEL ESTADO DE CONCIENCIA.",
+            "OBSERVACIÓN": "REQUIERE VIGILANCIA NEUROLÓGICA SERIADA Y REEVALUACIÓN DE SIGNOS DE ALARMA, DEFINIENDO ESTUDIOS COMPLEMENTARIOS SEGÚN EVOLUCIÓN CLÍNICA.",
+            "HOSPITALIZACIÓN": "PRESENTA DATOS NEUROLÓGICOS DE ALARMA O RIESGO DE DETERIORO QUE REQUIEREN MONITORIZACIÓN, ESTUDIO Y MANEJO INTRAHOSPITALARIO.",
+        }
+    elif any(termino in texto for termino in (
+        "FIEBRE", "DENGUE", "SEPSIS", "MALARIA", "KAWASAKI", "PETEQUI", "PÚRPURA", "PURPURA",
+        "CELULIT", "OTITIS", "INFECCIÓN URINARIA", "INFECCION URINARIA",
+    )):
+        detalles = {
+            "EGRESO": "AL MOMENTO DE LA VALORACIÓN MANTIENE BUEN ESTADO GENERAL, PERFUSIÓN Y TOLERANCIA ORAL, SIN SIGNOS GENERALES DE PELIGRO NI DATOS CLÍNICOS DE SEPSIS.",
+            "OBSERVACIÓN": "POR LA EVOLUCIÓN DEL CUADRO FEBRIL O INFECCIOSO SE REQUIERE VIGILANCIA CLÍNICA, REEVALUACIÓN DEL ESTADO GENERAL Y ESTUDIOS DIRIGIDOS SEGÚN LOS HALLAZGOS.",
+            "HOSPITALIZACIÓN": "PRESENTA COMPROMISO DEL ESTADO GENERAL, NECESIDAD DE ESTUDIOS O TRATAMIENTO PARENTERAL, POR LO QUE REQUIERE VIGILANCIA INTRAHOSPITALARIA.",
+        }
+    else:
+        detalles = {
+            "EGRESO": "AL MOMENTO DE LA REEVALUACIÓN PRESENTA BUEN ESTADO GENERAL, TOLERANCIA A LA VÍA ORAL Y AUSENCIA DE SIGNOS GENERALES DE PELIGRO.",
+            "OBSERVACIÓN": "PERSISTEN HALLAZGOS QUE REQUIEREN VIGILANCIA CLÍNICA SERIADA, REEVALUACIÓN DE LA RESPUESTA AL MANEJO Y DEFINICIÓN SEGURA DEL SITIO DE MANEJO.",
+            "HOSPITALIZACIÓN": "PRESENTA HALLAZGOS CLÍNICOS Y RIESGO DE DETERIORO QUE JUSTIFICAN TRATAMIENTO, MONITORIZACIÓN Y REVALORACIÓN INTRAHOSPITALARIA.",
+        }
+    return detalles[conducta]
+
+
+def _enfermedad_actual_completa_ejemplo(caso, conducta=None):
+    """Refuerza ejemplos breves con una narrativa clínica y no de auditoría."""
+    conducta = conducta or caso.get("conducta", "")
+    enfermedad = str(caso.get("enfermedad", "")).strip()
+    enfermedad = enfermedad.replace("CASO DOCENTE DE ", "CUADRO CLÍNICO DE ")
+    enfermedad = enfermedad.replace(
+        "SE DOCUMENTAN LOS HALLAZGOS CLÍNICOS, SIGNOS VITALES, RESPUESTA AL MANEJO Y FACTORES DE RIESGO APLICABLES ANTES DE DEFINIR LA CONDUCTA.",
+        "",
+    ).strip()
+    estado = _primer_parrafo(caso.get("examen", ""))
+    detalle = _detalle_clinico_por_conducta(caso, conducta)
+
+    if len(enfermedad) < 520:
+        enfermedad = f"{enfermedad} {estado} {detalle}".strip()
+
+    # Algunos escenarios muy específicos (por ejemplo, ojo rojo, dolor
+    # escrotal o una intoxicación) tienen un motivo naturalmente corto. Este
+    # cierre deja una evolución clínica completa sin convertirla en una lista
+    # de instrucciones ni sustituir la valoración real.
+    if len(enfermedad) < 520:
+        complementos = {
+            "EGRESO": (
+                "DURANTE LA REEVALUACIÓN NO PRESENTA DETERIORO DEL ESTADO GENERAL, "
+                "ALTERACIÓN PROGRESIVA DEL ESTADO DE CONCIENCIA, HIPOPERFUSIÓN NI "
+                "INTOLERANCIA PROGRESIVA A LA VÍA ORAL."
+            ),
+            "OBSERVACIÓN": (
+                "DURANTE LA ESTANCIA EN OBSERVACIÓN PEDIÁTRICA SE MANTIENE VIGILANCIA "
+                "SERIADA DEL ESTADO GENERAL, DOLOR, PERFUSIÓN, ESTADO DE CONCIENCIA, "
+                "TOLERANCIA A LA VÍA ORAL Y SIGNOS DE ALARMA ESPECÍFICOS DEL CUADRO."
+            ),
+            "HOSPITALIZACIÓN": (
+                "REQUIERE VIGILANCIA INTRAHOSPITALARIA DE SIGNOS VITALES, PERFUSIÓN, "
+                "ESTADO DE CONCIENCIA, TOLERANCIA AL MANEJO Y APARICIÓN DE SIGNOS DE "
+                "DETERIORO DURANTE LA EVOLUCIÓN."
+            ),
+        }
+        enfermedad = f"{enfermedad} {complementos.get(conducta, '')}".strip()
+
+    if conducta == "EGRESO" and "RECONSULT" not in enfermedad.upper():
+        enfermedad += " SE INDICAN SIGNOS DE ALARMA Y RECONSULTA OPORTUNA EN CASO DE DETERIORO."
+    return " ".join(enfermedad.split())
+
+
+def _analisis_ejemplo_completo(caso):
+    """Genera un análisis docente completo, congruente con la conducta elegida."""
+    conducta = str(caso.get("conducta", "")).upper()
+    motivo = str(caso.get("motivo", "EL CUADRO CLÍNICO ACTUAL")).strip().rstrip(".")
+    enfermedad = _enfermedad_actual_completa_ejemplo(caso, conducta)
+    estado = _primer_parrafo(caso.get("examen", ""))
+    justificacion = str(caso.get("justificacion", "")).strip()
+    gpc = str(caso.get("gpc", "")).strip()
+    aiepi = str(caso.get("aiepi", "")).strip()
+
+    cierres = {
+        "EGRESO": (
+            "DADO EL ESTADO GENERAL CONSERVADO, LA ESTABILIDAD CLÍNICA Y LA AUSENCIA DE CRITERIOS ACTUALES DE HOSPITALIZACIÓN, "
+            "SE DEFINE EGRESO CON MANEJO AMBULATORIO, RECOMENDACIONES ESPECÍFICAS, SIGNOS DE ALARMA Y CONTROL POR PEDIATRÍA EN 48 A 72 HORAS O ANTES SI PRESENTA DETERIORO. "
+            "SE BRINDA INFORMACIÓN A LOS PADRES O CUIDADOR RESPONSABLE, QUIENES REFIEREN ENTENDER Y ACEPTAR."
+        ),
+        "OBSERVACIÓN": (
+            "POR LA EVOLUCIÓN Y LOS HALLAZGOS CLÍNICOS, SE DEFINE OBSERVACIÓN PEDIÁTRICA PARA VIGILANCIA SERIADA, VERIFICAR RESPUESTA AL MANEJO, COMPLETAR LOS ESTUDIOS QUE APORTEN Y REEVALUAR EL SITIO DE MANEJO. "
+            "SE BRINDA INFORMACIÓN A LOS PADRES O CUIDADOR RESPONSABLE SOBRE EL MOTIVO DE LA OBSERVACIÓN Y LOS CRITERIOS DE REVALORACIÓN."
+        ),
+        "HOSPITALIZACIÓN": (
+            "LOS HALLAZGOS DESCRITOS JUSTIFICAN HOSPITALIZACIÓN PEDIÁTRICA PARA EL TRATAMIENTO INDICADO, MONITORIZACIÓN, VIGILANCIA DE LA RESPUESTA CLÍNICA Y REVALORACIÓN SERIADA. "
+            "SE BRINDA INFORMACIÓN A LOS PADRES O CUIDADOR RESPONSABLE SOBRE LA INDICACIÓN, EL PLAN TERAPÉUTICO Y LOS CRITERIOS DE EVOLUCIÓN."
+        ),
+    }
+    guias = []
+    if gpc:
+        guias.append(
+            f"LA CONDUCTA SE FUNDAMENTA EN LA RUTA GPC DE {gpc}, CON LOS CRITERIOS CLÍNICOS CONSIGNADOS EN LA HISTORIA."
+        )
+    if aiepi:
+        guias.append(
+            f"SE REALIZA VALORACIÓN AIEPI {aiepi}, INTEGRANDO LOS SIGNOS GENERALES DE PELIGRO Y LOS HALLAZGOS PERTINENTES AL CUADRO."
+        )
+
+    return " ".join(
+        parte for parte in (
+            f"SE TRATA DE PACIENTE PEDIÁTRICO QUE CONSULTA POR {motivo}. {enfermedad}",
+            f"AL INGRESO: {estado}",
+            justificacion,
+            " ".join(guias),
+            cierres.get(conducta, ""),
+        ) if parte
+    )
+
+
 def _plan_por_sitio_manejo(plan_base, conducta):
     lineas = [linea for linea in str(plan_base or "").splitlines() if linea.strip()]
     if conducta == "EGRESO":
@@ -1492,10 +1648,9 @@ def _completar_ejemplos_por_sitio_manejo(catalogo):
             caso = deepcopy(base)
             caso["nombre"] = f"{principal} - {conducta.title()}"
             caso["conducta"] = conducta
-            caso["enfermedad"] = (
-                f"CASO DOCENTE DE {principal}. {_texto_sitio_manejo(conducta)} "
-                "SE DOCUMENTAN LOS HALLAZGOS CLÍNICOS, SIGNOS VITALES, RESPUESTA AL MANEJO Y FACTORES DE RIESGO APLICABLES ANTES DE DEFINIR LA CONDUCTA."
-            )
+            # Conserva el cuadro clínico de la patología y agrega la evolución
+            # esperable para el nuevo sitio de manejo, en vez de crear texto de auditoría.
+            caso["enfermedad"] = _enfermedad_actual_completa_ejemplo(caso, conducta)
             caso["justificacion"] = _texto_sitio_manejo(conducta)
             caso["plan"] = _plan_por_sitio_manejo(base.get("plan", ""), conducta)
             caso["gpc_criterios"] = _actualizar_criterios_por_conducta(base.get("gpc_criterios"), conducta)
@@ -1509,6 +1664,8 @@ _completar_ejemplos_por_sitio_manejo(EJEMPLOS_PEDIATRIA)
 # También cubre los ejemplos creados desde diccionarios, no solo los que usan
 # _caso(), para que todos mantengan la misma secuencia de órdenes.
 for _caso_pediatrico in EJEMPLOS_PEDIATRIA.values():
+    _caso_pediatrico["enfermedad"] = _enfermedad_actual_completa_ejemplo(_caso_pediatrico)
+    _caso_pediatrico["analisis"] = _analisis_ejemplo_completo(_caso_pediatrico)
     _caso_pediatrico["plan"] = _normalizar_dieta_plan(
         _caso_pediatrico.get("plan", ""),
         _caso_pediatrico.get("conducta", ""),
