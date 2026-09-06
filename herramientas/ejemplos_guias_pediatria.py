@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 from datetime import date
+import re
 
 
 ANTECEDENTES_PEDIATRICOS = """NEONATALES: PRODUCTO DE SEGUNDA GESTACIÓN, EMBARAZO CONTROLADO, SIN COMPLICACIONES, NACE A TÉRMINO, SIN REQUERIMIENTO DE OXÍGENO U HOSPITALIZACIÓN, EGRESO CONJUNTO.
@@ -1160,7 +1161,7 @@ _agregar_trio_urgencias(EJEMPLOS_PEDIATRIA, "CONVULSION", "CONVULSIÓN PEDIÁTRI
 - EGRESO SOLO SI PERMANECE EN SU ESTADO BASAL, SIN SIGNOS MENÍNGEOS NI NUEVAS CONVULSIONES.
 - SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE PRIMEROS AUXILIOS ANTE CONVULSIÓN Y RECONSULTA POR DURACIÓN MAYOR DE 5 MINUTOS, RECURRENCIA, DIFICULTAD RESPIRATORIA, LETARGIA, RIGIDEZ DE CUELLO O DETERIORO.""", "signos": {"fc":"122","fr":"28","sat":"98","temp":"38.5","peso":"13","talla":"91","pc":"49","pb":"15"}, "fecha_nacimiento": date(2024, 4, 5), "sexo": "Masculino", "justificacion": "CONVULSIÓN FEBRIL SIMPLE CON RECUPERACIÓN COMPLETA Y SIN BANDERAS ROJAS; EL EGRESO DEPENDE DE REEVALUACIÓN CLÍNICA Y CONSEJERÍA FAMILIAR.", "aiepi_estado": "SIN CONVULSIÓN ACTIVA, ALERTA Y SIN DÉFICIT; SE DOCUMENTA EL EVENTO COMO SIGNO DE PELIGRO YA RESUELTO."},
     "OBSERVACIÓN": {
-        "motivo": "PRIMER EPISODIO CONVULSIVO", "enfermedad": "PACIENTE DE 4 AÑOS CON PRIMER EPISODIO CONVULSIVO DE CARACTERÍSTICAS NO COMPLETAMENTE PRECISADAS, DURACIÓN APROXIMADA DE 10 MINUTOS, ASOCIADO A FIEBRE. RECUPERA PROGRESIVAMENTE, SIN TRAUMA; SE REQUIERE OBSERVACIÓN PARA DEFINIR RECUPERACIÓN NEUROLÓGICA, FOCO FEBRIL Y NECESIDAD DE ESTUDIOS.", "estado": "PACIENTE SOMNOLIENTO POSTICTAL, DESPIERTA AL ESTÍMULO, SIN DÉFICIT FOCAL EVIDENTE.", "plan": """- OBSERVACIÓN NEUROLÓGICA SERIADA, CURVA TÉRMICA Y REVALORACIÓN DEL ESTADO POSTICTAL.
+        "motivo": "PRIMER EPISODIO CONVULSIVO", "enfermedad": "PACIENTE DE 4 AÑOS, SIN ANTECEDENTE PERSONAL DE CONVULSIONES, QUIEN PRESENTA PRIMER EPISODIO DE MOVIMIENTOS TÓNICO-CLÓNICOS GENERALIZADOS, PRESENCIADO POR LA MADRE, DE DURACIÓN APROXIMADA DE 10 MINUTOS Y ASOCIADO A FIEBRE CUANTIFICADA EN DOMICILIO. NO SE DESCRIBE FOCALIDAD, DESVIACIÓN OCULAR SOSTENIDA, CIANOSIS NI TRAUMA DURANTE EL EVENTO. POSTERIORMENTE PRESENTA SOMNOLENCIA POSTICTAL CON RECUPERACIÓN PROGRESIVA; NO HA PRESENTADO NUEVOS EPISODIOS, VÓMITO PERSISTENTE, RIGIDEZ DE CUELLO, PETEQUIAS NI ALTERACIÓN PREVIA DEL DESARROLLO.", "estado": "PACIENTE SOMNOLIENTO POSTICTAL, DESPIERTA AL ESTÍMULO, SIN DÉFICIT FOCAL EVIDENTE.", "plan": """- OBSERVACIÓN NEUROLÓGICA SERIADA, CURVA TÉRMICA Y REVALORACIÓN DEL ESTADO POSTICTAL.
 {LINEA_ACETAMINOFEN}
 - DEFINIR GLUCOMETRÍA, ELECTROLITOS, PUNCIÓN LUMBAR, NEUROIMAGEN, EEG O REMISIÓN SEGÚN EXAMEN, EVOLUCIÓN Y PROTOCOLO.
 - SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE EL MOTIVO DE LA OBSERVACIÓN.""", "signos": {"fc":"128","fr":"26","sat":"98","temp":"39.0","peso":"17","talla":"105","pc":"","pb":"16"}, "fecha_nacimiento": date(2022, 2, 1), "sexo": "Femenino", "justificacion": "LA DURACIÓN PROLONGADA Y EL PRIMER EVENTO REQUIEREN OBSERVACIÓN Y DOCUMENTACIÓN DE RECUPERACIÓN NEUROLÓGICA ANTES DE DEFINIR EGRESO.", "aiepi_estado": "POSTICTAL EN OBSERVACIÓN; SIN CONVULSIÓN ACTIVA, CON REVALORACIÓN NEUROLÓGICA SERIADA."},
@@ -1300,7 +1301,7 @@ for _familia, _titulo, _diagnostico, _busqueda, _escenarios in [
 for _familia, _titulo, _diagnostico, _busqueda, _escenarios in [
     ("CRISIS_FEBRIL", "CRISIS FEBRIL", "R56.0 - CONVULSIÓN FEBRIL", "crisis febril", {
         "EGRESO": {"motivo":"CRISIS FEBRIL SIMPLE", "enfermedad":"EPISODIO ÚNICO GENERALIZADO, ASOCIADO A FIEBRE, DE MENOS DE 5 MINUTOS, CON RECUPERACIÓN COMPLETA. NIEGA FOCALIDAD, RECURRENCIA, RIGIDEZ DE CUELLO, PETEQUIAS, TRAUMA O DETERIORO POSTICTAL PERSISTENTE.", "estado":"PACIENTE ALERTA, EN SU ESTADO BASAL, FEBRIL, SIN DÉFICIT NEUROLÓGICO.", "plan":"{LINEA_ACETAMINOFEN}\n- IDENTIFICAR Y DOCUMENTAR EL FOCO FEBRIL; OBSERVAR RECUPERACIÓN NEUROLÓGICA COMPLETA.\n- SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE PRIMEROS AUXILIOS, RECONSULTA POR CRISIS MAYOR DE 5 MINUTOS, RECURRENCIA, FOCALIDAD O DETERIORO.", "justificacion":"CRISIS FEBRIL SIMPLE CON RECUPERACIÓN COMPLETA Y SIN BANDERAS ROJAS; SE DEFINE EGRESO CON CONSEJERÍA."},
-        "OBSERVACIÓN": {"motivo":"CRISIS FEBRIL COMPLEJA EN ESTUDIO", "enfermedad":"CONVULSIÓN ASOCIADA A FIEBRE DE APROXIMADAMENTE 12 MINUTOS, CON RECUPERACIÓN POSTICTAL PROGRESIVA. SIN TRAUMA; REQUIERE OBSERVACIÓN PARA DOCUMENTAR RETORNO A ESTADO BASAL Y DEFINIR ESTUDIOS.", "estado":"PACIENTE SOMNOLIENTO POSTICTAL, DESPIERTA AL ESTÍMULO, SIN DÉFICIT FOCAL EVIDENTE.", "plan":"- OBSERVACIÓN NEUROLÓGICA Y CURVA TÉRMICA; DOCUMENTAR RETORNO COMPLETO A ESTADO BASAL.\n- DEFINIR ESTUDIOS DE FOCO FEBRIL, GLUCOMETRÍA, PUNCIÓN LUMBAR, NEUROIMAGEN O REMISIÓN SEGÚN EXAMEN Y PROTOCOLO.\n- SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE EL PLAN.", "justificacion":"DURACIÓN PROLONGADA Y PRIMER EVENTO JUSTIFICAN OBSERVACIÓN Y REEVALUACIÓN NEUROLÓGICA."},
+        "OBSERVACIÓN": {"motivo":"CRISIS FEBRIL COMPLEJA EN ESTUDIO", "enfermedad":"PACIENTE CON FIEBRE CUANTIFICADA EN DOMICILIO, QUIEN PRESENTA EPISODIO ÚNICO DE MOVIMIENTOS TÓNICO-CLÓNICOS GENERALIZADOS DE APROXIMADAMENTE 12 MINUTOS. EL EVENTO FUE PRESENCIADO POR EL ACOMPAÑANTE, SIN TRAUMA, EXPOSICIÓN TÓXICA, INGESTA ACCIDENTAL, CIANOSIS NI FOCALIDAD DESCRITA. AL TERMINAR LA CRISIS PRESENTÓ SOMNOLENCIA POSTICTAL Y RECUPERACIÓN PROGRESIVA, SIN NUEVOS EVENTOS, VÓMITO PERSISTENTE, RIGIDEZ DE CUELLO, PETEQUIAS NI ALTERACIÓN PREVIA DEL NEURODESARROLLO.", "estado":"PACIENTE SOMNOLIENTO POSTICTAL, DESPIERTA AL ESTÍMULO, SIN DÉFICIT FOCAL EVIDENTE.", "plan":"- OBSERVACIÓN NEUROLÓGICA Y CURVA TÉRMICA; DOCUMENTAR RETORNO COMPLETO A ESTADO BASAL.\n- DEFINIR ESTUDIOS DE FOCO FEBRIL, GLUCOMETRÍA, PUNCIÓN LUMBAR, NEUROIMAGEN O REMISIÓN SEGÚN EXAMEN Y PROTOCOLO.\n- SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE EL PLAN.", "justificacion":"DURACIÓN PROLONGADA Y PRIMER EVENTO JUSTIFICAN OBSERVACIÓN Y REEVALUACIÓN NEUROLÓGICA."},
         "HOSPITALIZACIÓN": {"motivo":"CRISIS FEBRIL CON RECUPERACIÓN INCOMPLETA", "enfermedad":"CONVULSIONES RECURRENTES ASOCIADAS A FIEBRE, UNA DE MÁS DE 15 MINUTOS, CON SOMNOLENCIA PERSISTENTE Y RIGIDEZ DE CUELLO A VALORAR.", "estado":"PACIENTE SOMNOLIENTO, FEBRIL, CON RECUPERACIÓN INCOMPLETA.", "plan":"- ABC, GLUCOMETRÍA, ACCESO VASCULAR, MONITORIZACIÓN Y HOSPITALIZACIÓN.\n- MANEJO DE CONVULSIÓN ACTIVA SEGÚN PROTOCOLO; ESTUDIO URGENTE DE MENINGITIS/ENCEFALITIS, ALTERACIÓN METABÓLICA U OTRA ETIOLOGÍA.\n- SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE SOBRE LA INDICACIÓN DE HOSPITALIZACIÓN.", "justificacion":"RECURRENCIA, DURACIÓN PROLONGADA Y RECUPERACIÓN INCOMPLETA SON DATOS DE ALTO RIESGO."},
     }),
     ("CRISIS_EPILEPTICA", "CRISIS EPILÉPTICA / PRIMERA CRISIS AFEBRIL", "G40.9 - CRISIS EPILÉPTICA EN ESTUDIO", "crisis epiléptica primera crisis afebril", {
@@ -1500,47 +1501,172 @@ def _detalle_clinico_por_conducta(caso, conducta):
 
 
 def _enfermedad_actual_completa_ejemplo(caso, conducta=None):
-    """Refuerza ejemplos breves con una narrativa clínica y no de auditoría."""
-    conducta = conducta or caso.get("conducta", "")
-    enfermedad = str(caso.get("enfermedad", "")).strip()
-    enfermedad = enfermedad.replace("CASO DOCENTE DE ", "CUADRO CLÍNICO DE ")
-    enfermedad = enfermedad.replace(
+    """Mantiene la enfermedad actual como anamnesis, no como análisis o plan."""
+    enfermedad = _limpiar_conducta_de_enfermedad_actual(caso.get("enfermedad", ""))
+    complemento = _complemento_anamnesis_por_patologia(caso, enfermedad)
+    if complemento and complemento.upper() not in enfermedad.upper():
+        enfermedad = f"{enfermedad} {complemento}".strip()
+    if len(enfermedad) < 420:
+        enfermedad = f"{enfermedad} {_ampliar_anamnesis_breve(caso)}".strip()
+    if len(enfermedad) < 420:
+        enfermedad = (
+            f"{enfermedad} EL ACOMPAÑANTE NIEGA OTROS SÍNTOMAS DIFERENTES A LOS "
+            "CONSIGNADOS Y APORTA EL RELATO DE LA EVOLUCIÓN DESDE EL INICIO DEL CUADRO."
+        ).strip()
+    return " ".join(enfermedad.split())
+
+
+def _ampliar_anamnesis_breve(caso):
+    """Completa ejemplos breves con interrogatorio clínico relevante, no con plan."""
+    clasificacion = " ".join(
+        str(caso.get(campo, ""))
+        for campo in ("nombre", "diagnostico", "familia", "gpc")
+    ).upper()
+    if any(t in clasificacion for t in ("CONVUL", "CRISIS", "TCE", "TRAUMA CRANEO", "CEFALEA", "SINCOPE", "SÍNCOPE", "PARALISIS", "PARÁLISIS")):
+        return (
+            "EL ACOMPAÑANTE NIEGA DESPERTAR NOCTURNO POR SÍNTOMAS, CAMBIO CONDUCTUAL "
+            "PROGRESIVO, ALTERACIÓN VISUAL, TRASTORNO PERSISTENTE DE LA MARCHA O NUEVOS "
+            "EPISODIOS DIFERENTES A LOS YA DESCRITOS."
+        )
+    if any(t in clasificacion for t in ("PIEL", "ABSCESO", "QUEMAD", "MORDED", "OJO", "PETEQUI", "TROMBOCIT", "CELULIT")):
+        return (
+            "EL ACOMPAÑANTE NIEGA TRAUMA DE ALTA ENERGÍA, CONTACTO CON SUSTANCIAS "
+            "IRRITANTES, INMERSIÓN, MORDEDURA O LESIONES SIMILARES PREVIAS, SALVO LO "
+            "EXPRESAMENTE DESCRITO EN EL CUADRO ACTUAL."
+        )
+    if any(t in clasificacion for t in ("NEFRIT", "NEFROT", "EDEMAT", "RENAL", "ANEMIA", "SANGRADO")):
+        return (
+            "EL ACOMPAÑANTE REFIERE CAMBIOS EN EL PESO, VOLUMEN URINARIO Y COLORACIÓN "
+            "DE LA ORINA SEGÚN LO DESCRITO; NIEGA DOLOR LUMBAR INTENSO, DISNEA DE REPOSO "
+            "O SÍNCOPE, SALVO LOS HALLAZGOS YA CONSIGNADOS."
+        )
+    if any(t in clasificacion for t in ("INTOXIC", "CUERPO_EXTRA", "CUERPO EXTRA", "INGESTA")):
+        return (
+            "EL ACOMPAÑANTE APORTA EL RELATO DEL EVENTO, TIEMPO TRANSCURRIDO, POSIBLE "
+            "PRODUCTO U OBJETO IMPLICADO Y MEDIDAS REALIZADAS EN DOMICILIO; NIEGA OTROS "
+            "EVENTOS DE EXPOSICIÓN DIFERENTES A LOS DESCRITOS."
+        )
+    return (
+        "EL ACOMPAÑANTE REFIERE QUE LOS SÍNTOMAS HAN EVOLUCIONADO SEGÚN LO DESCRITO, "
+        "SIN APARICIÓN DE ALTERACIÓN DEL ESTADO DE CONCIENCIA, CIANOSIS, SANGRADO O "
+        "OTROS SIGNOS DE ALARMA DIFERENTES A LOS YA CONSIGNADOS."
+    )
+
+
+def _limpiar_conducta_de_enfermedad_actual(texto):
+    """Quita de la anamnesis frases que corresponden a análisis, plan o auditoría."""
+    texto = str(texto or "").replace("CASO DOCENTE DE ", "CUADRO CLÍNICO DE ")
+    texto = texto.replace(
         "SE DOCUMENTAN LOS HALLAZGOS CLÍNICOS, SIGNOS VITALES, RESPUESTA AL MANEJO Y FACTORES DE RIESGO APLICABLES ANTES DE DEFINIR LA CONDUCTA.",
         "",
-    ).strip()
-    estado = _primer_parrafo(caso.get("examen", ""))
-    detalle = _detalle_clinico_por_conducta(caso, conducta)
+    )
+    # En algunos ejemplos antiguos la conducta se agregó al final de una misma
+    # oración clínica. Se conserva el dato semiológico previo y se retira solo
+    # la cláusula terapéutica o de decisión.
+    texto = re.sub(
+        r"(?i)(?:\s*[;,]\s*|\s+)REQUIERE\s+(?:OBSERVACI[ÓO]N|VIGILANCIA|HOSPITALIZACI[ÓO]N|"
+        r"ESTUDIOS|DRENAJE|VALORACI[ÓO]N|ESTABILIZACI[ÓO]N|MANEJO|OXIGENOTERAPIA|"
+        r"DESCARTAR)[^.]*\.?,?",
+        ".",
+        texto,
+    )
+    texto = re.sub(r"(?i)\bSE\s+REQUIERE\b[^.]*\.?", "", texto)
+    texto = re.sub(r"(?i)(?:\s*[;,]\s*|\s+)REQUIERE\b[^.]*\.?", ".", texto)
+    texto = re.sub(r"(?i)(?:^|\s)SE\.\s*", " ", texto)
+    oraciones = re.split(r"(?<=[.!?])\s+", texto.strip())
+    marcadores_conducta = (
+        "SE REQUIERE OBSERVACIÓN", "REQUIERE OBSERVACIÓN", "REQUIERE VIGILANCIA",
+        "SE MANTIENE VIGILANCIA", "JUSTIFICA HOSPITALIZACIÓN", "JUSTIFICAN HOSPITALIZACIÓN",
+        "DEFINIR ESTUDIOS", "DEFINIENDO ESTUDIOS", "DEFINIR EGRESO", "DEFINIR EL SITIO",
+        "ANTES DE DEFINIR LA CONDUCTA", "REQUIERE MANEJO INTRAHOSPITALARIO",
+        "REQUIERE HOSPITALIZACIÓN", "SE DEFINE MANEJO", "SE INDICA MANEJO",
+    )
+    clinicas = [
+        oracion.strip()
+        for oracion in oraciones
+        if oracion.strip() and not any(marcador in oracion.upper() for marcador in marcadores_conducta)
+    ]
+    return re.sub(r"\.{2,}", ".", " ".join(clinicas)).strip()
 
-    if len(enfermedad) < 520:
-        enfermedad = f"{enfermedad} {estado} {detalle}".strip()
 
-    # Algunos escenarios muy específicos (por ejemplo, ojo rojo, dolor
-    # escrotal o una intoxicación) tienen un motivo naturalmente corto. Este
-    # cierre deja una evolución clínica completa sin convertirla en una lista
-    # de instrucciones ni sustituir la valoración real.
-    if len(enfermedad) < 520:
-        complementos = {
-            "EGRESO": (
-                "DURANTE LA REEVALUACIÓN NO PRESENTA DETERIORO DEL ESTADO GENERAL, "
-                "ALTERACIÓN PROGRESIVA DEL ESTADO DE CONCIENCIA, HIPOPERFUSIÓN NI "
-                "INTOLERANCIA PROGRESIVA A LA VÍA ORAL."
-            ),
-            "OBSERVACIÓN": (
-                "DURANTE LA ESTANCIA EN OBSERVACIÓN PEDIÁTRICA SE MANTIENE VIGILANCIA "
-                "SERIADA DEL ESTADO GENERAL, DOLOR, PERFUSIÓN, ESTADO DE CONCIENCIA, "
-                "TOLERANCIA A LA VÍA ORAL Y SIGNOS DE ALARMA ESPECÍFICOS DEL CUADRO."
-            ),
-            "HOSPITALIZACIÓN": (
-                "REQUIERE VIGILANCIA INTRAHOSPITALARIA DE SIGNOS VITALES, PERFUSIÓN, "
-                "ESTADO DE CONCIENCIA, TOLERANCIA AL MANEJO Y APARICIÓN DE SIGNOS DE "
-                "DETERIORO DURANTE LA EVOLUCIÓN."
-            ),
-        }
-        enfermedad = f"{enfermedad} {complementos.get(conducta, '')}".strip()
+def _complemento_anamnesis_por_patologia(caso, enfermedad):
+    """Completa negativos clínicos relevantes para GPC/AIEPI dentro de la anamnesis.
 
-    if conducta == "EGRESO" and "RECONSULT" not in enfermedad.upper():
-        enfermedad += " SE INDICAN SIGNOS DE ALARMA Y RECONSULTA OPORTUNA EN CASO DE DETERIORO."
-    return " ".join(enfermedad.split())
+    No incorpora decisiones de sitio de manejo, estudios solicitados, plan ni
+    frases de auditoría. Cada bloque se agrega solo si el dato no aparece ya
+    en la enfermedad actual original.
+    """
+    clasificacion = " ".join(
+        [
+            str(caso.get("nombre", "")), str(caso.get("diagnostico", "")),
+            str(caso.get("familia", "")), str(caso.get("gpc", "")),
+        ]
+    ).upper()
+    texto_actual = str(enfermedad or "").upper()
+    complementos = []
+
+    if any(t in clasificacion for t in ("CONVUL", "CRISIS_FEBRIL", "CRISIS EPIL", "TCE", "TRAUMA CRANEO", "MENING", "CEFALEA", "SINCOPE", "SÍNCOPE", "PARALISIS", "PARÁLISIS")):
+        if "TRAUMA" not in texto_actual:
+            complementos.append("NIEGA TRAUMA CRANEOENCEFÁLICO PREVIO AL EVENTO.")
+        if not any(t in texto_actual for t in ("INGESTA", "TÓXIC", "TOXIC")):
+            complementos.append("SIN ANTECEDENTE DE INGESTA ACCIDENTAL NI EXPOSICIÓN TÓXICA CONOCIDA.")
+        if "FOCAL" not in texto_actual:
+            complementos.append("NIEGA FOCALIDAD NEUROLÓGICA, ALTERACIÓN PERSISTENTE DEL LENGUAJE O DE LA MARCHA.")
+        if "RIGIDEZ" not in texto_actual and "MENINGIS" not in texto_actual:
+            complementos.append("SIN RIGIDEZ DE CUELLO, EXANTEMA PETEQUIAL NI OTROS DATOS REFERIDOS DE MENINGISMO.")
+    elif any(t in clasificacion for t in ("NEUMON", "BRONQUIOL", "ASMA", "BRONCOOBSTRUCT", "CRUP", "LARINGIT", "RESPIRATOR")):
+        if not any(t in texto_actual for t in ("APNEA", "CIANOS")):
+            complementos.append("NIEGA APNEAS, CIANOSIS Y EPISODIOS DE AHOGAMIENTO.")
+        if "ALIMENT" not in texto_actual and "TOLER" not in texto_actual:
+            complementos.append("MANTIENE INGESTA ORAL Y DIURESIS SEGÚN LO REFERIDO POR EL ACOMPAÑANTE.")
+        if "CONTACTO" not in texto_actual:
+            complementos.append("REFIERE CONTACTO DOMICILIARIO CON SÍNTOMAS RESPIRATORIOS SEGÚN INTERROGATORIO.")
+    elif any(t in clasificacion for t in ("EDA", "GASTROENTER", "DIARREA", "EMÉTICO", "EMETICO", "VÓMITO", "VOMITO", "ABDOMINAL", "ESTREÑ", "CONSTIP")):
+        if "DIURES" not in texto_actual and "ORINA" not in texto_actual:
+            complementos.append("DIURESIS PRESENTE, SIN DISURIA, HEMATURIA NI COLURIA REFERIDAS.")
+        if "SANGRE" not in texto_actual and "HEMAT" not in texto_actual:
+            complementos.append("NIEGA SANGRE EN VÓMITO O HECES.")
+        if "LETARG" not in texto_actual and "CONVUL" not in texto_actual:
+            complementos.append("NIEGA LETARGIA, CONVULSIONES O ALTERACIÓN DEL ESTADO DE CONCIENCIA.")
+    elif any(t in clasificacion for t in ("FIEBRE", "DENGUE", "KAWASAKI", "SEPSIS", "MALARIA", "IVU", "URINARIA", "OTIT", "CELULIT")):
+        if "CONVUL" not in texto_actual:
+            complementos.append("NIEGA CONVULSIONES, SOMNOLENCIA ANORMAL O ALTERACIÓN DEL ESTADO DE CONCIENCIA.")
+        if "DIURES" not in texto_actual and "ORINA" not in texto_actual:
+            complementos.append("MANTIENE DIURESIS SEGÚN LO REFERIDO POR EL ACOMPAÑANTE.")
+        if "SANGRADO" not in texto_actual and "PETEQUI" not in texto_actual:
+            complementos.append("NIEGA SANGRADOS, PETEQUIAS O EQUIMOSIS DE NUEVA APARICIÓN.")
+    elif any(t in clasificacion for t in ("PIEL", "ABSCESO", "QUEMAD", "MORDED", "OJO_ROJO", "OJO ROJO", "PETEQUI", "TROMBOCIT", "CELULIT")):
+        if "FIEBRE" not in texto_actual:
+            complementos.append("NIEGA FIEBRE, ESCALOFRÍOS Y COMPROMISO DEL ESTADO GENERAL ASOCIADOS.")
+        if "DOLOR" not in texto_actual:
+            complementos.append("NIEGA DOLOR INTENSO, PROGRESIÓN RÁPIDA DE LA LESIÓN O PÉRDIDA DE FUNCIÓN DEL SEGMENTO COMPROMETIDO.")
+        if "SANGRADO" not in texto_actual and "PETEQUI" not in texto_actual:
+            complementos.append("NIEGA SANGRADO MUCOSO, HEMATURIA, MELENA O APARICIÓN DE NUEVAS LESIONES EN OTROS SITIOS.")
+        if len(str(enfermedad)) < 420:
+            complementos.append("LA FAMILIA REFIERE EVOLUCIÓN LOCAL PROGRESIVA, SIN COMPROMISO FUNCIONAL DEL SEGMENTO AFECTADO DIFERENTE AL YA DESCRITO.")
+    elif any(t in clasificacion for t in ("NEFRIT", "NEFROT", "EDEMAT", "RENAL", "ANEMIA", "SANGRADO")):
+        if "DISUR" not in texto_actual:
+            complementos.append("NIEGA DISURIA, URGENCIA MICCIONAL Y DOLOR LUMBAR; EL ACOMPAÑANTE REFIERE CAMBIO EN EL VOLUMEN Y COLOR DE LA ORINA SOLO CUANDO HA SIDO DESCRITO.")
+        if "DISNEA" not in texto_actual:
+            complementos.append("NIEGA DISNEA, ORTOPNEA, DOLOR TORÁCICO O INTOLERANCIA MARCADA AL EJERCICIO.")
+        if "SANGRADO" not in texto_actual:
+            complementos.append("NIEGA EPISTAXIS, GINGIVORRAGIA, HEMATEMESIS, MELENA O SANGRADO GENITOURINARIO.")
+        if len(str(enfermedad)) < 420:
+            complementos.append("NO REFIERE ANTECEDENTE RECIENTE DE INFECCIÓN CUTÁNEA, MEDICAMENTOS NUEVOS O CONTACTO CON SUSTANCIAS NEFROTÓXICAS, SALVO LO CONSIGNADO.")
+    elif any(t in clasificacion for t in ("INTOXIC", "CUERPO_EXTRA", "CUERPO EXTRA", "INGESTA")):
+        if "HORA" not in texto_actual and "TIEMPO" not in texto_actual:
+            complementos.append("EL ACOMPAÑANTE APORTA INFORMACIÓN SOBRE HORA DEL EVENTO, PRODUCTO U OBJETO INVOLUCRADO Y CANTIDAD APROXIMADA CUANDO ES CONOCIDA.")
+        if "VÓMITO" not in texto_actual and "VOMITO" not in texto_actual:
+            complementos.append("NIEGA VÓMITO PERSISTENTE, SIALORREA, DISFAGIA, DIFICULTAD RESPIRATORIA O ALTERACIÓN PROGRESIVA DEL ESTADO DE CONCIENCIA.")
+    else:
+        if "TOLER" not in texto_actual and "ALIMENT" not in texto_actual:
+            complementos.append("MANTIENE TOLERANCIA A LA VÍA ORAL SEGÚN LO REFERIDO POR EL ACOMPAÑANTE.")
+        if "DIURES" not in texto_actual and "ORINA" not in texto_actual:
+            complementos.append("DIURESIS CONSERVADA SEGÚN LO REFERIDO POR EL ACOMPAÑANTE.")
+        if len(str(enfermedad)) < 420:
+            complementos.append("NIEGA DETERIORO PROGRESIVO DEL ESTADO GENERAL, ALTERACIÓN DEL ESTADO DE CONCIENCIA O SÍNTOMAS NUEVOS DIFERENTES A LOS YA DESCRITOS.")
+
+    return " ".join(complementos)
 
 
 def _analisis_ejemplo_completo(caso):
@@ -1578,12 +1704,19 @@ def _analisis_ejemplo_completo(caso):
             f"SE REALIZA VALORACIÓN AIEPI {aiepi}, INTEGRANDO LOS SIGNOS GENERALES DE PELIGRO Y LOS HALLAZGOS PERTINENTES AL CUADRO."
         )
 
+    correlacion = (
+        "LOS DATOS DE LA ENFERMEDAD ACTUAL, LA REVISIÓN POR SISTEMAS, LOS SIGNOS VITALES, "
+        "EL EXAMEN FÍSICO COMPLETO Y LOS PARACLÍNICOS DISPONIBLES SE CORRELACIONAN DE FORMA "
+        "INTEGRAL PARA DEFINIR LA CONDUCTA Y DESCARTAR SIGNOS DE DETERIORO."
+    )
+
     return " ".join(
         parte for parte in (
             f"SE TRATA DE PACIENTE PEDIÁTRICO QUE CONSULTA POR {motivo}. {enfermedad}",
             f"AL INGRESO: {estado}",
             justificacion,
             " ".join(guias),
+            correlacion,
             cierres.get(conducta, ""),
         ) if parte
     )
