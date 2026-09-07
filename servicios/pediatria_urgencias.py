@@ -5246,6 +5246,9 @@ def render():
         campos_protegidos=tuple(
             clave for clave in FORM_DEFAULTS if clave not in set(campos_migracion_historia_previa.values())
         ),
+        campos_reset_por_migracion=(
+            "ta", "fc", "fr", "sat", "glucometria", "temp", "pb", "peso", "talla", "pc", "scq_pct",
+        ),
     )
     aviso_historia_previa = st.session_state.pop("urgencias_historia_previa_notice", "")
     if aviso_historia_previa:

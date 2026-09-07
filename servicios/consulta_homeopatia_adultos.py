@@ -262,6 +262,10 @@ def render():
         campos_protegidos=tuple(
             clave for clave in defaults if clave not in set(campos_migracion_historia_previa.values())
         ),
+        campos_reset_por_migracion=tuple(
+            f"{prefix}_{campo}"
+            for campo in ("ta", "fc", "fr", "sat", "glucometria", "temp", "peso", "talla", "imc_adulto")
+        ),
     )
     aviso_historia_previa = st.session_state.pop(f"{prefix}_historia_previa_notice", "")
     if aviso_historia_previa:
