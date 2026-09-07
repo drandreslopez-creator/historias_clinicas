@@ -105,6 +105,26 @@ def _extraer_antecedentes(texto):
     return "\n".join(bloque).strip()
 
 
+def _texto_para_verificacion_ia(texto):
+    """Reduce el documento a los bloques necesarios para no agotar la cuota de IA."""
+    texto = str(texto or "")
+    antecedentes = _extraer_antecedentes(texto)
+    encabezado = texto[:9000]
+    if antecedentes and antecedentes not in encabezado:
+        encabezado += f"\n\nANTECEDENTES IDENTIFICADOS:\n{antecedentes[:7000]}"
+    return encabezado[:16000]
+
+
+def _limpiar_informante(valor):
+    valor = str(valor or "").strip()
+    return re.split(r"\s*/\s*(?:TEL[EÉ]FONO|CELULAR|PROCEDENTE|EPS)\s*[:\-]", valor, maxsplit=1, flags=re.IGNORECASE)[0].strip()
+
+
+def _valor_en_linea(texto, etiqueta):
+    coincidencia = re.search(rf"\b(?:{etiqueta})\s*[:\-]\s*([^\n/|]+)", str(texto or ""), flags=re.IGNORECASE)
+    return coincidencia.group(1).strip() if coincidencia else ""
+
+
 def extraer_datos_historia_previa(texto):
     """Obtiene únicamente datos de continuidad que pueden migrarse con seguridad."""
     texto = str(texto or "")[:120000]
@@ -125,11 +145,12 @@ def extraer_datos_historia_previa(texto):
         "fecha_nacimiento": _fecha_desde_texto(_valor_etiqueta(texto, [r"FECHA DE NACIMIENTO", r"FECHA NACIMIENTO", r"FN"])),
         "sexo": sexo,
         "eps": _valor_etiqueta(texto, [r"EPS", r"ASEGURADORA"]),
-        "telefono": _valor_etiqueta(texto, [r"TEL[EÉ]FONO", r"CELULAR"]),
-        "informante": _valor_etiqueta(
+        "telefono": _valor_etiqueta(texto, [r"TEL[EÉ]FONO", r"CELULAR"])
+        or _valor_en_linea(texto, r"TEL[EÉ]FONO|CELULAR"),
+        "informante": _limpiar_informante(_valor_etiqueta(
             texto,
             [r"INFORMANTE(?:\s*\([^\n)]*\))?(?:\s*/\s*ACOMPA[ÑN]ANTE)?", r"ACOMPA[ÑN]ANTE"],
-        ),
+        )),
         "antecedentes": _extraer_antecedentes(texto),
     }
 
@@ -178,7 +199,7 @@ def verificar_datos_historia_previa_con_ia(texto, datos_locales):
     if not api_key:
         return datos_locales, "No hay una clave de IA configurada; se usó la extracción local.", False
 
-    modelo = _obtener_secret("openai_model", "gpt-4o-mini")
+    modelo = _obtener_secret("openai_model_extraccion", "gpt-4o-mini")
     instrucciones = (
         "Eres un verificador documental de historias clínicas en español. Extrae solo datos "
         "explícitos del texto original. Nunca infieras, completes, corrijas ni inventes valores. "
@@ -199,7 +220,7 @@ def verificar_datos_historia_previa_con_ia(texto, datos_locales):
         datos_serializables["fecha_nacimiento"] = datos_locales["fecha_nacimiento"].strftime("%d/%m/%Y")
     contexto = {
         "datos_extraidos_localmente": datos_serializables,
-        "texto_historia_previa": str(texto or "")[:90000],
+        "texto_historia_previa": _texto_para_verificacion_ia(texto),
     }
     try:
         respuesta = requests.post(
@@ -210,7 +231,7 @@ def verificar_datos_historia_previa_con_ia(texto, datos_locales):
                 "input": json.dumps(contexto, ensure_ascii=False),
                 "instructions": instrucciones,
                 "temperature": 0,
-                "max_output_tokens": 900,
+                "max_output_tokens": 500,
             },
             timeout=35,
         )
@@ -332,36 +353,57 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
             if st.session_state.get(f"{prefix}_historia_previa_ia_firma") == firma_archivo and advertencia_ia:
                 st.warning(f"Verificación IA pendiente: {advertencia_ia}")
 
+        permitir_migracion_local = False
+        if ia_configurada and not verificacion_ia_completa:
+            permitir_migracion_local = st.checkbox(
+                "Usar extracción local sin verificación IA para este documento",
+                value=False,
+                key=f"{prefix}_historia_previa_permitir_local",
+                help="Úselo solo si la verificación IA no está disponible. Revise todos los datos antes de migrarlos.",
+            )
+
         st.text_area(
             "Datos preparados para migración",
             value=_resumen_datos(datos),
             height=170,
             disabled=True,
         )
-        sobrescribir = st.checkbox(
-            "Reemplazar los datos que ya están diligenciados",
-            value=False,
-            key=f"{prefix}_historia_previa_sobrescribir",
+        col_migracion_1, col_migracion_2 = st.columns(2)
+        actualizar_identificacion = col_migracion_1.checkbox(
+            "Actualizar identificación del paciente",
+            value=True,
+            key=f"{prefix}_historia_previa_actualizar_identificacion",
+        )
+        actualizar_antecedentes = col_migracion_2.checkbox(
+            "Actualizar antecedentes documentados",
+            value=True,
+            key=f"{prefix}_historia_previa_actualizar_antecedentes",
+        )
+        st.caption(
+            "No se modifican motivo de consulta, enfermedad actual, revisión, signos vitales, examen físico, "
+            "diagnósticos, análisis ni plan del ejemplo seleccionado."
         )
         if st.button(
-            "Migrar datos de historia previa",
+            "Actualizar datos desde historia previa",
             key=f"{prefix}_migrar_historia_previa",
             use_container_width=True,
-            disabled=ia_configurada and not verificacion_ia_completa,
+            disabled=ia_configurada and not verificacion_ia_completa and not permitir_migracion_local,
         ):
             migrados = []
             for campo, clave_estado in campos.items():
                 valor = datos.get(campo)
                 if not valor or not clave_estado:
                     continue
-                actual = st.session_state.get(clave_estado)
-                es_default_antecedentes = campo == "antecedentes" and actual == antecedentes_default
-                if sobrescribir or not actual or es_default_antecedentes:
-                    st.session_state[clave_estado] = valor
-                    migrados.append(campo)
+                if campo == "antecedentes" and not actualizar_antecedentes:
+                    continue
+                if campo != "antecedentes" and not actualizar_identificacion:
+                    continue
+                st.session_state[clave_estado] = valor
+                migrados.append(campo)
             if migrados:
                 st.session_state[f"{prefix}_historia_previa_notice"] = (
-                    "Datos migrados: " + ", ".join(migrados) + ". Revise y actualice la información antes de generar la historia."
+                    "Datos actualizados desde historia previa: " + ", ".join(migrados)
+                    + ". El contenido clínico del ejemplo se conservó sin cambios."
                 )
                 st.rerun()
-            st.info("No se modificó ningún campo: los datos ya estaban diligenciados o no se identificaron valores migrables.")
+            st.info("No se modificó ningún campo: no se identificaron datos seleccionados para actualizar.")
