@@ -244,20 +244,24 @@ def render():
 
     st.header(titulo)
     st.info(f"Modalidad de la consulta: {modalidad}")
+    campos_migracion_historia_previa = {
+        "nombre": f"{prefix}_nombre",
+        "tipo_documento": f"{prefix}_tipo_documento",
+        "documento": f"{prefix}_documento",
+        "fecha_nacimiento": f"{prefix}_fecha_nacimiento",
+        "sexo": f"{prefix}_sexo",
+        "eps": f"{prefix}_eps",
+        "telefono": f"{prefix}_telefono",
+        "informante": f"{prefix}_informante",
+        "antecedentes": f"{prefix}_antecedentes",
+    }
     render_importador_historia_previa(
         prefix,
-        {
-            "nombre": f"{prefix}_nombre",
-            "tipo_documento": f"{prefix}_tipo_documento",
-            "documento": f"{prefix}_documento",
-            "fecha_nacimiento": f"{prefix}_fecha_nacimiento",
-            "sexo": f"{prefix}_sexo",
-            "eps": f"{prefix}_eps",
-            "telefono": f"{prefix}_telefono",
-            "informante": f"{prefix}_informante",
-            "antecedentes": f"{prefix}_antecedentes",
-        },
+        campos_migracion_historia_previa,
         antecedentes_default=ANTECEDENTES_HOMEO_ADULTOS_DEFAULT,
+        campos_protegidos=tuple(
+            clave for clave in defaults if clave not in set(campos_migracion_historia_previa.values())
+        ),
     )
     aviso_historia_previa = st.session_state.pop(f"{prefix}_historia_previa_notice", "")
     if aviso_historia_previa:

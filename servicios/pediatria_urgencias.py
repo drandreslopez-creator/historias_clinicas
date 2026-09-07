@@ -5228,20 +5228,24 @@ def render():
             cargar_ejemplo_urgencias()
         st.rerun()
 
+    campos_migracion_historia_previa = {
+        "nombre": "nombre_1",
+        "tipo_documento": "tipo_documento_1",
+        "documento": "documento_1",
+        "fecha_nacimiento": "fecha_1",
+        "sexo": "sexo_1",
+        "eps": "eps_1",
+        "telefono": "telefono_1",
+        "informante": "informante_1",
+        "antecedentes": "antecedentes_1",
+    }
     render_importador_historia_previa(
         "urgencias",
-        {
-            "nombre": "nombre_1",
-            "tipo_documento": "tipo_documento_1",
-            "documento": "documento_1",
-            "fecha_nacimiento": "fecha_1",
-            "sexo": "sexo_1",
-            "eps": "eps_1",
-            "telefono": "telefono_1",
-            "informante": "informante_1",
-            "antecedentes": "antecedentes_1",
-        },
+        campos_migracion_historia_previa,
         antecedentes_default=ANTECEDENTES_DEFAULT,
+        campos_protegidos=tuple(
+            clave for clave in FORM_DEFAULTS if clave not in set(campos_migracion_historia_previa.values())
+        ),
     )
     aviso_historia_previa = st.session_state.pop("urgencias_historia_previa_notice", "")
     if aviso_historia_previa:
