@@ -1,6 +1,6 @@
 """Importación local y prudente de datos desde historias clínicas previas."""
 
-from datetime import datetime
+from datetime import date, datetime
 from io import BytesIO
 import re
 import unicodedata
@@ -106,6 +106,60 @@ def _limpiar_informante(valor):
     return re.split(r"\s*/\s*(?:TEL[EÉ]FONO|CELULAR|PROCEDENTE|EPS)\s*[:\-]", valor, maxsplit=1, flags=re.IGNORECASE)[0].strip()
 
 
+def _formatear_informante(valor):
+    """Conserva solo parentesco, edad y ocupación, sin inventar parentescos."""
+    valor = _limpiar_informante(valor)
+    if not valor:
+        return ""
+
+    parentesco = re.search(
+        r"\b(MADRE|PADRE|ABUELA|ABUELO|HERMANA|HERMANO|TIA|TIO|CUIDADOR(?:A)?|ACUDIENTE)\b",
+        _normalizar(valor),
+    )
+    edad = re.search(
+        r"\b(?:EDAD\s*[:\-]?\s*)?(\d{1,3})\s*A[NÑ]OS?\b",
+        valor,
+        flags=re.IGNORECASE,
+    )
+    ocupacion = re.search(r"\bOCUPACI[ÓO]N\s*[:\-]?\s*([^/|\n]+)", valor, flags=re.IGNORECASE)
+    if not ocupacion:
+        ocupacion = re.search(r"\b\d{1,3}\s*A[NÑ]OS?\s*[-/]\s*([^/|\n]+)", valor, flags=re.IGNORECASE)
+
+    partes = [parentesco.group(1) if parentesco else "INFORMANTE"]
+    if edad:
+        partes.append(f"{edad.group(1)} AÑOS")
+    if ocupacion and ocupacion.group(1).strip():
+        partes.append(ocupacion.group(1).strip(" .-"))
+
+    # Si no hay ningún dato estructurado, conservar el texto original para revisión manual.
+    return " - ".join(partes) if len(partes) > 1 or parentesco else valor
+
+
+def _tipo_documento_pediatrico(fecha_nacimiento):
+    """Aplica RC/TI solo a menores cuando el documento previo no lo informa."""
+    if not fecha_nacimiento:
+        return ""
+    hoy = date.today()
+    edad = hoy.year - fecha_nacimiento.year - (
+        (hoy.month, hoy.day) < (fecha_nacimiento.month, fecha_nacimiento.day)
+    )
+    if not 0 <= edad < 18:
+        return ""
+    return "RC" if edad < 7 else "TI"
+
+
+def _normalizar_tipo_documento(valor):
+    valor = _normalizar(valor)
+    equivalencias = {
+        "REGISTRO CIVIL": "RC",
+        "TARJETA DE IDENTIDAD": "TI",
+        "TARJETA IDENTIDAD": "TI",
+        "CEDULA DE CIUDADANIA": "CC",
+        "CEDULA EXTRANJERIA": "CE",
+    }
+    return equivalencias.get(valor, valor if valor in TIPOS_DOCUMENTO else "")
+
+
 def _valor_en_linea(texto, etiqueta):
     coincidencia = re.search(rf"\b(?:{etiqueta})\s*[:\-]\s*([^\n/|]+)", str(texto or ""), flags=re.IGNORECASE)
     return coincidencia.group(1).strip() if coincidencia else ""
@@ -114,7 +168,14 @@ def _valor_en_linea(texto, etiqueta):
 def extraer_datos_historia_previa(texto):
     """Obtiene únicamente datos de continuidad que pueden migrarse con seguridad."""
     texto = str(texto or "")[:120000]
-    tipo_documento = _normalizar(_valor_etiqueta(texto, [r"TIPO DE DOCUMENTO", r"TIPO DOCUMENTO"]))
+    fecha_nacimiento = _fecha_desde_texto(_valor_etiqueta(
+        texto, [r"FECHA DE NACIMIENTO", r"FECHA NACIMIENTO", r"FN"]
+    ))
+    tipo_documento = _normalizar_tipo_documento(_valor_etiqueta(
+        texto, [r"TIPO DE DOCUMENTO", r"TIPO DOCUMENTO"]
+    ))
+    if not tipo_documento:
+        tipo_documento = _tipo_documento_pediatrico(fecha_nacimiento)
     sexo = _valor_etiqueta(texto, [r"SEXO"])
     sexo_normalizado = _normalizar(sexo)
     if sexo_normalizado.startswith("FEMEN"):
@@ -126,14 +187,14 @@ def extraer_datos_historia_previa(texto):
 
     return {
         "nombre": _valor_etiqueta(texto, [r"NOMBRES? Y APELLIDOS?", r"NOMBRE(?: DEL)?(?: PACIENTE| RN)?"]),
-        "tipo_documento": tipo_documento if tipo_documento in TIPOS_DOCUMENTO else "",
+        "tipo_documento": tipo_documento,
         "documento": _valor_etiqueta(texto, [r"DOCUMENTO", r"IDENTIFICACION", r"N[ÚU]MERO DE DOCUMENTO"]),
-        "fecha_nacimiento": _fecha_desde_texto(_valor_etiqueta(texto, [r"FECHA DE NACIMIENTO", r"FECHA NACIMIENTO", r"FN"])),
+        "fecha_nacimiento": fecha_nacimiento,
         "sexo": sexo,
         "eps": _valor_etiqueta(texto, [r"EPS", r"ASEGURADORA"]),
         "telefono": _valor_etiqueta(texto, [r"TEL[EÉ]FONO", r"CELULAR"])
         or _valor_en_linea(texto, r"TEL[EÉ]FONO|CELULAR"),
-        "informante": _limpiar_informante(_valor_etiqueta(
+        "informante": _formatear_informante(_valor_etiqueta(
             texto,
             [r"INFORMANTE(?:\s*\([^\n)]*\))?(?:\s*/\s*ACOMPA[ÑN]ANTE)?", r"ACOMPA[ÑN]ANTE"],
         )),
@@ -160,7 +221,13 @@ def _resumen_datos(datos):
     return "\n".join(partes) or "No se identificaron datos estructurados para migrar."
 
 
-def render_importador_historia_previa(prefix, campos, antecedentes_default="", campos_protegidos=()):
+def render_importador_historia_previa(
+    prefix,
+    campos,
+    antecedentes_default="",
+    campos_protegidos=(),
+    campos_reset_por_migracion=(),
+):
     """Renderiza un importador reutilizable antes de identificación.
 
     `campos` relaciona nombres estándar con las claves de Session State de cada
@@ -216,10 +283,11 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default="", c
             key=f"{prefix}_migrar_historia_previa",
             use_container_width=True,
         ):
+            campos_reset = set(campos_reset_por_migracion)
             estado_protegido = {
                 clave: st.session_state.get(clave)
                 for clave in campos_protegidos
-                if clave in st.session_state
+                if clave in st.session_state and clave not in campos_reset
             }
             migrados = []
             for campo, clave_estado in campos.items():
@@ -233,12 +301,18 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default="", c
                 st.session_state[clave_estado] = valor
                 migrados.append(campo)
             if migrados:
+                # Los valores fisiológicos y antropométricos pertenecen a la atención actual,
+                # nunca al ejemplo o al documento previo.
+                for clave in campos_reset:
+                    if clave in st.session_state:
+                        st.session_state[clave] = ""
                 # El rerun posterior no puede alterar el escenario clínico cargado.
                 for clave, valor in estado_protegido.items():
                     st.session_state[clave] = valor
                 st.session_state[f"{prefix}_historia_previa_notice"] = (
                     "Datos actualizados desde historia previa: " + ", ".join(migrados)
-                    + ". El contenido clínico del ejemplo se conservó sin cambios."
+                    + ". El contenido clínico del ejemplo se conservó sin cambios. "
+                    "Registre nuevamente los signos vitales y la antropometría medidos hoy."
                 )
                 st.rerun()
             st.info("No se modificó ningún campo: no se identificaron datos seleccionados para actualizar.")
