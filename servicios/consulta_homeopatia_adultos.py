@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 from core.calculos import calcular_edad
+from herramientas.historia_previa import render_importador_historia_previa
 from servicios.pediatria_urgencias import (
     actualizar_texto_extraido,
     complementar_analisis_con_ia,
@@ -243,6 +244,24 @@ def render():
 
     st.header(titulo)
     st.info(f"Modalidad de la consulta: {modalidad}")
+    render_importador_historia_previa(
+        prefix,
+        {
+            "nombre": f"{prefix}_nombre",
+            "tipo_documento": f"{prefix}_tipo_documento",
+            "documento": f"{prefix}_documento",
+            "fecha_nacimiento": f"{prefix}_fecha_nacimiento",
+            "sexo": f"{prefix}_sexo",
+            "eps": f"{prefix}_eps",
+            "telefono": f"{prefix}_telefono",
+            "informante": f"{prefix}_informante",
+            "antecedentes": f"{prefix}_antecedentes",
+        },
+        antecedentes_default=ANTECEDENTES_HOMEO_ADULTOS_DEFAULT,
+    )
+    aviso_historia_previa = st.session_state.pop(f"{prefix}_historia_previa_notice", "")
+    if aviso_historia_previa:
+        st.success(aviso_historia_previa)
 
     col1, col2 = st.columns(2)
     with col1:

@@ -51,6 +51,7 @@ from herramientas.rutas_gpc_pediatria import (
     resumen_gpc_para_ia,
 )
 from herramientas.ejemplos_guias_pediatria import catalogo_ejemplos_por_patologia, nombres_ejemplos, obtener_ejemplo
+from herramientas.historia_previa import render_importador_historia_previa
 from utils.google_drive_oauth import subir_docx_con_oauth
 from utils.google_drive_oauth import eliminar_archivo_drive_con_oauth
 
@@ -1231,6 +1232,7 @@ def limpiar_formulario():
         "plan_ia_cache",
         "analisis_ia_cache",
         "obs_dx_ia_cache",
+        "historia_previa_urgencias_notice",
     }
     for key in list(st.session_state):
         if key.startswith(prefijos_ejemplo) or key in claves_adicionales:
@@ -1238,6 +1240,9 @@ def limpiar_formulario():
     # Los file_uploader no se pueden resetear asignándoles valores directos.
     st.session_state.pop("pdf_paraclinicos_uploader", None)
     st.session_state.pop("pdf_imagenes_uploader", None)
+    for key in list(st.session_state):
+        if key.startswith("urgencias_historia_previa_"):
+            st.session_state.pop(key, None)
     borrar_borrador_urgencias()
 
 
@@ -5222,6 +5227,25 @@ def render():
         else:
             cargar_ejemplo_urgencias()
         st.rerun()
+
+    render_importador_historia_previa(
+        "urgencias",
+        {
+            "nombre": "nombre_1",
+            "tipo_documento": "tipo_documento_1",
+            "documento": "documento_1",
+            "fecha_nacimiento": "fecha_1",
+            "sexo": "sexo_1",
+            "eps": "eps_1",
+            "telefono": "telefono_1",
+            "informante": "informante_1",
+            "antecedentes": "antecedentes_1",
+        },
+        antecedentes_default=ANTECEDENTES_DEFAULT,
+    )
+    aviso_historia_previa = st.session_state.pop("urgencias_historia_previa_notice", "")
+    if aviso_historia_previa:
+        st.success(aviso_historia_previa)
     edicion_rapida = st.toggle(
         "Edición rápida",
         value=True,

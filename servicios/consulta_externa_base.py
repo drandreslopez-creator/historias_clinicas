@@ -19,6 +19,7 @@ from herramientas.oms_full import (
 )
 from herramientas.diagnostico_nutricional import diagnostico_mayor_5, diagnostico_menor_5
 from herramientas.ejemplos_guias_pediatria import nombres_ejemplos, obtener_ejemplo
+from herramientas.historia_previa import render_importador_historia_previa
 from herramientas.rutas_gpc_pediatria import (
     construir_apoyo_gpc_aiepi_automatico,
     detectar_ruta_gpc,
@@ -1130,6 +1131,25 @@ def render_consulta_externa(
                     mostrar_modalidad_consulta=mostrar_modalidad_consulta,
                 )
             st.rerun()
+
+    render_importador_historia_previa(
+        prefix,
+        {
+            "nombre": f"{prefix}_nombre",
+            "tipo_documento": f"{prefix}_tipo_documento",
+            "documento": f"{prefix}_documento",
+            "fecha_nacimiento": f"{prefix}_fecha_nacimiento",
+            "sexo": f"{prefix}_sexo",
+            "eps": f"{prefix}_eps",
+            "telefono": f"{prefix}_telefono",
+            "informante": f"{prefix}_informante",
+            "antecedentes": f"{prefix}_antecedentes",
+        },
+        antecedentes_default=antecedentes_default,
+    )
+    aviso_historia_previa = st.session_state.pop(f"{prefix}_historia_previa_notice", "")
+    if aviso_historia_previa:
+        st.success(aviso_historia_previa)
 
     modalidad_consulta = modalidad_consulta_forzada
     if modalidad_consulta_forzada is not None:
