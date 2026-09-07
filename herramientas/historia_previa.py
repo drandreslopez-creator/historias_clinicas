@@ -176,7 +176,7 @@ def verificar_datos_historia_previa_con_ia(texto, datos_locales):
     """Contrasta datos migrables con el documento sin completar información faltante."""
     api_key = _obtener_secret("openai_api_key")
     if not api_key:
-        return datos_locales, "No hay una clave de IA configurada; se usó la extracción local."
+        return datos_locales, "No hay una clave de IA configurada; se usó la extracción local.", False
 
     modelo = _obtener_secret("openai_model", "gpt-4o-mini")
     instrucciones = (
@@ -191,8 +191,14 @@ def verificar_datos_historia_previa_con_ia(texto, datos_locales):
         "NV, RC, TI, CC, CE, PEP, PS, OTRO o cadena vacía. sexo debe ser Masculino, Femenino o cadena vacía. "
         "advertencias debe ser una lista breve de campos no confirmados o inconsistencias."
     )
+    datos_serializables = {
+        clave: (valor.strftime("%d/%m/%Y") if isinstance(valor, datetime) else valor)
+        for clave, valor in datos_locales.items()
+    }
+    if getattr(datos_locales.get("fecha_nacimiento"), "strftime", None):
+        datos_serializables["fecha_nacimiento"] = datos_locales["fecha_nacimiento"].strftime("%d/%m/%Y")
     contexto = {
-        "datos_extraidos_localmente": datos_locales,
+        "datos_extraidos_localmente": datos_serializables,
         "texto_historia_previa": str(texto or "")[:90000],
     }
     try:
@@ -211,10 +217,10 @@ def verificar_datos_historia_previa_con_ia(texto, datos_locales):
         respuesta.raise_for_status()
         resultado = _json_desde_respuesta(_texto_respuesta_openai(respuesta.json()))
     except Exception as error:
-        return datos_locales, f"No fue posible verificar con IA; se usó la extracción local. {error}"
+        return datos_locales, f"No fue posible verificar con IA; se usó la extracción local. {error}", False
 
     if not isinstance(resultado, dict):
-        return datos_locales, "La IA no devolvió un formato verificable; se usó la extracción local."
+        return datos_locales, "La IA no devolvió un formato verificable; se usó la extracción local.", False
 
     verificados = dict(datos_locales)
     for campo in ("nombre", "tipo_documento", "documento", "eps", "telefono", "informante", "antecedentes"):
@@ -236,7 +242,7 @@ def verificar_datos_historia_previa_con_ia(texto, datos_locales):
     if isinstance(advertencias, str):
         advertencias = [advertencias]
     advertencias = [str(advertencia).strip() for advertencia in advertencias if str(advertencia).strip()]
-    return verificados, " ".join(advertencias)
+    return verificados, " ".join(advertencias), True
 
 
 def _resumen_datos(datos):
@@ -290,7 +296,10 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
         datos_locales = extraer_datos_historia_previa(texto)
         datos = datos_locales
         ia_configurada = bool(_obtener_secret("openai_api_key"))
-        verificacion_ia_completa = st.session_state.get(f"{prefix}_historia_previa_ia_firma") == firma_archivo
+        verificacion_ia_completa = (
+            st.session_state.get(f"{prefix}_historia_previa_ia_firma") == firma_archivo
+            and bool(st.session_state.get(f"{prefix}_historia_previa_ia_verificada"))
+        )
         if verificacion_ia_completa:
             datos_ia = st.session_state.get(f"{prefix}_historia_previa_ia_datos", {})
             if isinstance(datos_ia, dict):
@@ -303,10 +312,11 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
             use_container_width=True,
         ):
             with st.spinner("Verificando datos documentados en la historia previa..."):
-                datos_verificados, advertencia_ia = verificar_datos_historia_previa_con_ia(texto, datos_locales)
+                datos_verificados, advertencia_ia, verificada_por_ia = verificar_datos_historia_previa_con_ia(texto, datos_locales)
             st.session_state[f"{prefix}_historia_previa_ia_firma"] = firma_archivo
             st.session_state[f"{prefix}_historia_previa_ia_datos"] = datos_verificados
             st.session_state[f"{prefix}_historia_previa_ia_advertencia"] = advertencia_ia
+            st.session_state[f"{prefix}_historia_previa_ia_verificada"] = verificada_por_ia
             st.rerun()
         if verificacion_ia_completa:
             col_estado.caption("Datos contrastados con IA contra el documento original.")
@@ -318,6 +328,9 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
                 col_estado.caption("La extracción inicial es local. Verifique con IA antes de migrar para contrastar los valores.")
             else:
                 col_estado.caption("La IA no está configurada; solo está disponible la extracción local.")
+            advertencia_ia = st.session_state.get(f"{prefix}_historia_previa_ia_advertencia", "")
+            if st.session_state.get(f"{prefix}_historia_previa_ia_firma") == firma_archivo and advertencia_ia:
+                st.warning(f"Verificación IA pendiente: {advertencia_ia}")
 
         st.text_area(
             "Datos preparados para migración",
