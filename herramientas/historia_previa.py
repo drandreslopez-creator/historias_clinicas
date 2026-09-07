@@ -2,13 +2,9 @@
 
 from datetime import datetime
 from io import BytesIO
-import hashlib
-import json
-import os
 import re
 import unicodedata
 
-import requests
 import streamlit as st
 from docx import Document
 from pypdf import PdfReader
@@ -105,16 +101,6 @@ def _extraer_antecedentes(texto):
     return "\n".join(bloque).strip()
 
 
-def _texto_para_verificacion_ia(texto):
-    """Reduce el documento a los bloques necesarios para no agotar la cuota de IA."""
-    texto = str(texto or "")
-    antecedentes = _extraer_antecedentes(texto)
-    encabezado = texto[:9000]
-    if antecedentes and antecedentes not in encabezado:
-        encabezado += f"\n\nANTECEDENTES IDENTIFICADOS:\n{antecedentes[:7000]}"
-    return encabezado[:16000]
-
-
 def _limpiar_informante(valor):
     valor = str(valor or "").strip()
     return re.split(r"\s*/\s*(?:TEL[EÉ]FONO|CELULAR|PROCEDENTE|EPS)\s*[:\-]", valor, maxsplit=1, flags=re.IGNORECASE)[0].strip()
@@ -155,117 +141,6 @@ def extraer_datos_historia_previa(texto):
     }
 
 
-def _obtener_secret(nombre, default=""):
-    try:
-        valor = st.secrets.get(nombre, default)
-        if valor:
-            return str(valor)
-    except Exception:
-        pass
-    return os.getenv(nombre.upper(), default)
-
-
-def _texto_respuesta_openai(respuesta):
-    if not isinstance(respuesta, dict):
-        return ""
-    if respuesta.get("output_text"):
-        return str(respuesta["output_text"])
-    partes = []
-    for salida in respuesta.get("output", []):
-        for contenido in salida.get("content", []):
-            if contenido.get("type") == "output_text" and contenido.get("text"):
-                partes.append(str(contenido["text"]))
-    return "\n".join(partes)
-
-
-def _json_desde_respuesta(texto):
-    texto = str(texto or "").strip()
-    texto = re.sub(r"^```(?:json)?\s*|\s*```$", "", texto, flags=re.IGNORECASE)
-    try:
-        return json.loads(texto)
-    except json.JSONDecodeError:
-        inicio, final = texto.find("{"), texto.rfind("}")
-        if inicio >= 0 and final > inicio:
-            try:
-                return json.loads(texto[inicio:final + 1])
-            except json.JSONDecodeError:
-                pass
-    return {}
-
-
-def verificar_datos_historia_previa_con_ia(texto, datos_locales):
-    """Contrasta datos migrables con el documento sin completar información faltante."""
-    api_key = _obtener_secret("openai_api_key")
-    if not api_key:
-        return datos_locales, "No hay una clave de IA configurada; se usó la extracción local.", False
-
-    modelo = _obtener_secret("openai_model_extraccion", "gpt-4o-mini")
-    instrucciones = (
-        "Eres un verificador documental de historias clínicas en español. Extrae solo datos "
-        "explícitos del texto original. Nunca infieras, completes, corrijas ni inventes valores. "
-        "Si un valor es ambiguo o no está escrito con claridad, devuélvelo como cadena vacía. "
-        "Para antecedentes, conserva únicamente el bloque expresamente documentado bajo "
-        "ANTECEDENTES; no agregues información de diagnósticos, análisis o plan. "
-        "Responde exclusivamente JSON válido con estas llaves: nombre, tipo_documento, documento, "
-        "fecha_nacimiento, sexo, eps, telefono, informante, antecedentes, advertencias. "
-        "fecha_nacimiento debe usar DD/MM/AAAA o cadena vacía. tipo_documento debe ser una de "
-        "NV, RC, TI, CC, CE, PEP, PS, OTRO o cadena vacía. sexo debe ser Masculino, Femenino o cadena vacía. "
-        "advertencias debe ser una lista breve de campos no confirmados o inconsistencias."
-    )
-    datos_serializables = {
-        clave: (valor.strftime("%d/%m/%Y") if isinstance(valor, datetime) else valor)
-        for clave, valor in datos_locales.items()
-    }
-    if getattr(datos_locales.get("fecha_nacimiento"), "strftime", None):
-        datos_serializables["fecha_nacimiento"] = datos_locales["fecha_nacimiento"].strftime("%d/%m/%Y")
-    contexto = {
-        "datos_extraidos_localmente": datos_serializables,
-        "texto_historia_previa": _texto_para_verificacion_ia(texto),
-    }
-    try:
-        respuesta = requests.post(
-            "https://api.openai.com/v1/responses",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": modelo,
-                "input": json.dumps(contexto, ensure_ascii=False),
-                "instructions": instrucciones,
-                "temperature": 0,
-                "max_output_tokens": 500,
-            },
-            timeout=35,
-        )
-        respuesta.raise_for_status()
-        resultado = _json_desde_respuesta(_texto_respuesta_openai(respuesta.json()))
-    except Exception as error:
-        return datos_locales, f"No fue posible verificar con IA; se usó la extracción local. {error}", False
-
-    if not isinstance(resultado, dict):
-        return datos_locales, "La IA no devolvió un formato verificable; se usó la extracción local.", False
-
-    verificados = dict(datos_locales)
-    for campo in ("nombre", "tipo_documento", "documento", "eps", "telefono", "informante", "antecedentes"):
-        valor = str(resultado.get(campo) or "").strip()
-        if valor:
-            verificados[campo] = valor
-
-    fecha = _fecha_desde_texto(resultado.get("fecha_nacimiento"))
-    if fecha:
-        verificados["fecha_nacimiento"] = fecha
-    sexo = str(resultado.get("sexo") or "").strip()
-    if sexo in {"Masculino", "Femenino"}:
-        verificados["sexo"] = sexo
-    tipo = _normalizar(resultado.get("tipo_documento"))
-    if tipo in TIPOS_DOCUMENTO:
-        verificados["tipo_documento"] = tipo
-
-    advertencias = resultado.get("advertencias", [])
-    if isinstance(advertencias, str):
-        advertencias = [advertencias]
-    advertencias = [str(advertencia).strip() for advertencia in advertencias if str(advertencia).strip()]
-    return verificados, " ".join(advertencias), True
-
-
 def _resumen_datos(datos):
     etiquetas = {
         "nombre": "Nombre", "tipo_documento": "Tipo de documento", "documento": "Documento",
@@ -285,7 +160,7 @@ def _resumen_datos(datos):
     return "\n".join(partes) or "No se identificaron datos estructurados para migrar."
 
 
-def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
+def render_importador_historia_previa(prefix, campos, antecedentes_default="", campos_protegidos=()):
     """Renderiza un importador reutilizable antes de identificación.
 
     `campos` relaciona nombres estándar con las claves de Session State de cada
@@ -313,54 +188,7 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
             st.error("No fue posible leer el archivo. Verifique que sea un PDF o Word (.docx) válido.")
             return
 
-        firma_archivo = hashlib.sha256(archivo.getvalue()).hexdigest()
-        datos_locales = extraer_datos_historia_previa(texto)
-        datos = datos_locales
-        ia_configurada = bool(_obtener_secret("openai_api_key"))
-        verificacion_ia_completa = (
-            st.session_state.get(f"{prefix}_historia_previa_ia_firma") == firma_archivo
-            and bool(st.session_state.get(f"{prefix}_historia_previa_ia_verificada"))
-        )
-        if verificacion_ia_completa:
-            datos_ia = st.session_state.get(f"{prefix}_historia_previa_ia_datos", {})
-            if isinstance(datos_ia, dict):
-                datos = datos_ia
-
-        col_ia, col_estado = st.columns([1.4, 2.6])
-        if col_ia.button(
-            "Verificar datos con IA",
-            key=f"{prefix}_verificar_historia_previa_ia",
-            use_container_width=True,
-        ):
-            with st.spinner("Verificando datos documentados en la historia previa..."):
-                datos_verificados, advertencia_ia, verificada_por_ia = verificar_datos_historia_previa_con_ia(texto, datos_locales)
-            st.session_state[f"{prefix}_historia_previa_ia_firma"] = firma_archivo
-            st.session_state[f"{prefix}_historia_previa_ia_datos"] = datos_verificados
-            st.session_state[f"{prefix}_historia_previa_ia_advertencia"] = advertencia_ia
-            st.session_state[f"{prefix}_historia_previa_ia_verificada"] = verificada_por_ia
-            st.rerun()
-        if verificacion_ia_completa:
-            col_estado.caption("Datos contrastados con IA contra el documento original.")
-            advertencia_ia = st.session_state.get(f"{prefix}_historia_previa_ia_advertencia", "")
-            if advertencia_ia:
-                st.warning(f"Verificación IA: {advertencia_ia}")
-        else:
-            if ia_configurada:
-                col_estado.caption("La extracción inicial es local. Verifique con IA antes de migrar para contrastar los valores.")
-            else:
-                col_estado.caption("La IA no está configurada; solo está disponible la extracción local.")
-            advertencia_ia = st.session_state.get(f"{prefix}_historia_previa_ia_advertencia", "")
-            if st.session_state.get(f"{prefix}_historia_previa_ia_firma") == firma_archivo and advertencia_ia:
-                st.warning(f"Verificación IA pendiente: {advertencia_ia}")
-
-        permitir_migracion_local = False
-        if ia_configurada and not verificacion_ia_completa:
-            permitir_migracion_local = st.checkbox(
-                "Usar extracción local sin verificación IA para este documento",
-                value=False,
-                key=f"{prefix}_historia_previa_permitir_local",
-                help="Úselo solo si la verificación IA no está disponible. Revise todos los datos antes de migrarlos.",
-            )
+        datos = extraer_datos_historia_previa(texto)
 
         st.text_area(
             "Datos preparados para migración",
@@ -387,8 +215,12 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
             "Actualizar datos desde historia previa",
             key=f"{prefix}_migrar_historia_previa",
             use_container_width=True,
-            disabled=ia_configurada and not verificacion_ia_completa and not permitir_migracion_local,
         ):
+            estado_protegido = {
+                clave: st.session_state.get(clave)
+                for clave in campos_protegidos
+                if clave in st.session_state
+            }
             migrados = []
             for campo, clave_estado in campos.items():
                 valor = datos.get(campo)
@@ -401,6 +233,9 @@ def render_importador_historia_previa(prefix, campos, antecedentes_default=""):
                 st.session_state[clave_estado] = valor
                 migrados.append(campo)
             if migrados:
+                # El rerun posterior no puede alterar el escenario clínico cargado.
+                for clave, valor in estado_protegido.items():
+                    st.session_state[clave] = valor
                 st.session_state[f"{prefix}_historia_previa_notice"] = (
                     "Datos actualizados desde historia previa: " + ", ".join(migrados)
                     + ". El contenido clínico del ejemplo se conservó sin cambios."
