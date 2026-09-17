@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from herramientas.revision_documental import ancla_criterio
+
 
 def _normalizar(texto: object) -> str:
     texto = unicodedata.normalize("NFD", str(texto or ""))
@@ -501,9 +503,11 @@ def limpiar_registros_al_cambiar_ruta(st, registros):
 
 def _render_criterios_etapas(st, criterios, etapas, registro_key, contenedores=None, compartidos=None):
     respuestas = {}
+    revision = []
     for indice, criterio in enumerate(criterios):
         destino = contenedores[etapas[indice]] if contenedores else st.container()
         key = f"{registro_key}_criterio_{indice}"
+        ancla = ancla_criterio(key)
         # Solo se unifican preguntas equivalentes, no hallazgos de distinto alcance.
         identidad = "PELIGRO" if criterio in ("SIGNOS DE PELIGRO AIEPI", "SIGNOS GENERALES DE PELIGRO") else None
         with destino:
@@ -511,18 +515,23 @@ def _render_criterios_etapas(st, criterios, etapas, registro_key, contenedores=N
             valor_previo = str(st.session_state.get(key, "") or "").strip()
             if anterior is not None and (not valor_previo or _normalizar(valor_previo) == _normalizar(anterior)):
                 respuestas[criterio] = anterior
+                revision.append(dict(etiqueta=criterio, respuesta=anterior, etapa=etapas[indice], ancla=compartidos["PELIGRO_ANCLA"]))
                 # El campo común es la fuente; no dejar una copia oculta obsoleta.
                 st.session_state.pop(key, None)
                 continue
             if anterior is not None:
                 st.caption("El ejemplo contiene dos registros de peligro diferentes. Revise ambos antes de generar la historia.")
             etiqueta = "SIGNOS GENERALES DE PELIGRO (GPC / AIEPI)" if identidad else criterio
+            st.markdown(f'<span id="{ancla}"></span>', unsafe_allow_html=True)
             respuestas[criterio] = st.text_input(
                 etiqueta, key=key,
                 placeholder="HALLAZGO REAL, AUSENTE O NO APLICA CON JUSTIFICACIÓN",
             )
             if compartidos is not None and identidad and anterior is None:
                 compartidos[identidad] = respuestas[criterio]
+                compartidos["PELIGRO_ANCLA"] = ancla
+            revision.append(dict(etiqueta=criterio, respuesta=respuestas[criterio], etapa=etapas[indice], ancla=ancla))
+    st.session_state[f"{registro_key}_revision"] = revision
     return respuestas
 
 
@@ -667,6 +676,7 @@ def render_trazabilidad_gpc(
         )
     ruta = obtener_ruta_gpc(ruta_seleccionada)
     if not ruta:
+        st.session_state[f"{registro_key}_revision"] = []
         with contenedores["cierre"] if contenedores else st.container():
             nombre_apoyo, recomendaciones = _apoyo_sin_ruta_gpc(diagnostico)
             st.caption(f"No hay una ruta GPC específica seleccionada. Apoyo sugerido: {nombre_apoyo}.")

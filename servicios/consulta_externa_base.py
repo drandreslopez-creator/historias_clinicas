@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
+from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
+
 from core.calculos import calcular_edad, edad_en_meses
 from core.clasificacion import grupo_etario
 from herramientas.antropometria import calcular_imc
@@ -744,6 +746,7 @@ def _cargar_ejemplo_consulta_externa(
     mostrar_modalidad_consulta=True,
 ):
     _clear_state(prefix, defaults)
+    marcar_ejemplo(st, prefix, "Ejemplo de consulta")
 
     es_homeopatia_pediatrica = prefix == "homeo_ped"
     fecha_nacimiento = date(2022, 3, 15) if es_pediatrica else date(1992, 8, 21)
@@ -898,6 +901,8 @@ def _cargar_ejemplo_guia_consulta_externa(
         mostrar_modalidad_consulta=mostrar_modalidad_consulta,
     )
 
+    marcar_ejemplo(st, prefix, nombre_ejemplo)
+
     for key in list(st.session_state):
         if key.startswith((f"{prefix}_gpc_registro_criterio_", f"{prefix}_aiepi_registro_criterio_")):
             st.session_state.pop(key, None)
@@ -1017,6 +1022,7 @@ def render_consulta_externa(
     history_path = _historia_path(history_filename)
 
     defaults = {
+        f"{prefix}_ejemplo_origen": "",
         f"{prefix}_nombre": "",
         f"{prefix}_tipo_documento": None,
         f"{prefix}_documento": "",
@@ -1080,6 +1086,7 @@ def render_consulta_externa(
         st.caption("Borrador restaurado automáticamente.")
 
     st.header(titulo)
+    aviso_ejemplo(st, prefix)
     edicion_rapida = st.toggle(
         "Edición rápida",
         value=True,
@@ -1951,13 +1958,19 @@ def render_consulta_externa(
         if fundamento_guias_analisis and permitir_generacion_analisis:
             contexto_analisis_ia["fundamento_guias_documentado"] = fundamento_guias_analisis
 
+    ejemplo_revisado = render_revision_documental(
+        st, prefix=prefix,
+        registros=(f"{prefix}_gpc_registro", f"{prefix}_aiepi_registro") if habilitar_trazabilidad_gpc else (),
+        claves_revision=list(defaults) + [f"{prefix}_aiepi_apoyo", f"{prefix}_aiepi_registro", f"{prefix}_consulta_cie10_dx"],
+    )
+
     col_btn_1, col_btn_2 = st.columns(2)
-    generar = col_btn_1.button("Generar Historia Clínica", key=f"{prefix}_generar", use_container_width=True)
+    generar = col_btn_1.button("Generar Historia Clínica", key=f"{prefix}_generar", use_container_width=True, disabled=not ejemplo_revisado)
     if col_btn_2.button("Limpiar y empezar otra historia", key=f"{prefix}_limpiar", use_container_width=True):
         st.session_state[f"{prefix}_clear_requested"] = True
         st.rerun()
 
-    if generar:
+    if generar and ejemplo_revisado:
         if permitir_generacion_analisis and not modo_homeopatia_pediatrica_ia:
             with st.spinner("Actualizando análisis, impresión diagnóstica y plan..."):
                 analisis_default_final = analisis_default

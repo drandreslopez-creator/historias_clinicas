@@ -2,6 +2,8 @@ import os
 import hashlib
 import time
 import streamlit as st
+
+from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
 import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date
@@ -795,6 +797,7 @@ PLANES_PATOLOGIA_DEFAULTS = {
 }
 
 FORM_DEFAULTS = {
+    "urgencias_ejemplo_origen": "",
     "nombre_1": "",
     "tipo_documento_1": None,
     "documento_1": "",
@@ -1213,6 +1216,7 @@ def puntuar_diagnostico(row, terminos, grupos=None):
 
 
 def limpiar_formulario():
+    st.session_state.pop("urgencias_ejemplo_confirmado", None)
     for key, value in FORM_DEFAULTS.items():
         st.session_state[key] = value
     # Un ejemplo docente guarda estado auxiliar para recalcular sus dosis. Al
@@ -1258,6 +1262,7 @@ def reiniciar_variante_ejemplo_urgencias():
 
 def cargar_ejemplo_urgencias():
     limpiar_formulario()
+    marcar_ejemplo(st, "urgencias", "Ejemplo general de urgencias")
     ejemplo = {
         "nombre_1": "MARIA JOSE GOMEZ",
         "tipo_documento_1": "RC",
@@ -1314,6 +1319,7 @@ def cargar_ejemplo_guia_urgencias(nombre_ejemplo):
         return
 
     cargar_ejemplo_urgencias()
+    marcar_ejemplo(st, "urgencias", nombre_ejemplo)
     for key in list(st.session_state):
         if key.startswith(("gpc_registro_criterio_", "aiepi_registro_criterio_")):
             st.session_state.pop(key, None)
@@ -5194,6 +5200,7 @@ def render():
     )
 
     st.header(titulo_historia)
+    aviso_ejemplo(st, "urgencias")
     col_acc_1, col_acc_2, col_acc_3, col_acc_4 = st.columns([2, 1, 2, 1])
     patologias_ejemplo = catalogo_ejemplos_por_patologia()
     patologia_ejemplo = col_acc_1.selectbox(
@@ -6121,18 +6128,23 @@ def render():
             height=360
         )
 
+    ejemplo_revisado = render_revision_documental(
+        st, prefix="urgencias", registros=("gpc_registro", "aiepi_registro"),
+        claves_revision=list(FORM_DEFAULTS) + ["aiepi_apoyo", "aiepi_registro"],
+    )
+
     # =========================
     # GENERAR / LIMPIAR
     # =========================
     col_btn_1, col_btn_2 = st.columns(2)
-    generar_historia = col_btn_1.button("Generar Historia Clínica", use_container_width=True)
+    generar_historia = col_btn_1.button("Generar Historia Clínica", use_container_width=True, disabled=not ejemplo_revisado)
     col_btn_2.button(
         "Limpiar y empezar otra historia",
         use_container_width=True,
         on_click=solicitar_limpieza_formulario
     )
 
-    if generar_historia:
+    if generar_historia and ejemplo_revisado:
         if permitir_generacion_analisis:
             with st.spinner("Actualizando análisis, impresión diagnóstica y plan..."):
                 analisis_default_final = generar_analisis_asistido_urgencias(
