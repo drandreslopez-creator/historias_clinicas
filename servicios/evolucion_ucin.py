@@ -79,7 +79,9 @@ def _actualizar_balance(nota, periodo):
     la = escalar(r"\bLA\s*[: ]\s*([\d.,]+)")
     le = escalar(r"\bLE\s*[: ]\s*([\d.,]+)")
     pi = escalar(r"\bPI\s*[: ]\s*([\d.,]+)")
-    gu = escalar(r"GASTO\s+(?:URINARIO|MIXTO)\s*:\s*([\d.,]+)")
+    # La tasa ya está expresada por hora; solo los volúmenes se extrapolan.
+    gasto = _buscar(contenido, r"GASTO\s+(?:URINARIO|MIXTO)\s*:\s*([\d.,]+)")
+    gu = _numero(gasto) if gasto else None
     if la is None and le is None and pi is None and gu is None:
         return nota
 
@@ -108,11 +110,15 @@ def _actualizar_nota_local(nota, fecha_evolucion, edad_dia, peso_dia, periodo, e
         nota = f"{fecha_texto}\n{nota}".strip()
     peso_nacer = _entero(_buscar(nota, r"PESO\s+AL\s+NACER\s*:\s*([\d.,]+)"))
     peso_previo = _entero(_buscar(nota, r"PESO\s+ANTERIOR\s*:\s*([\d.,]+)"))
-    peso_previo = peso_previo or _entero(_buscar(nota, r"PESO\s+ACTUAL\s*:\s*([\d.,]+)"))
-    peso_actual = _entero(peso_dia) or _entero(_buscar(nota, r"PESO\s+ACTUAL\s*:\s*([\d.,]+)"))
+    ultimo_peso_actual = _entero(_buscar(nota, r"PESO\s+ACTUAL\s*:\s*([\d.,]+)"))
+    nuevo_peso = _entero(peso_dia)
+    if nuevo_peso:
+        # La medición actual de la nota previa es la referencia del nuevo día.
+        peso_previo = ultimo_peso_actual or peso_previo
+    peso_actual = nuevo_peso or ultimo_peso_actual
     if edad_dia:
         nota = re.sub(r"(\bEDAD\s*:\s*)[^\n]+", rf"\g<1>{edad_dia} DÍAS.", nota, count=1, flags=re.IGNORECASE)
-    if peso_actual:
+    if nuevo_peso:
         reemplazo = _peso_texto(peso_nacer, peso_previo, peso_actual)
         patron_peso = r"PESO\s+ANTERIOR\s*:\s*[\d.,]+\s*G\s*,?\s*PESO\s+ACTUAL\s*:\s*[\d.,]+\s*G[^\n]*(?:\n\s*(?:P[ÉE]RDIDA\s+GLOBAL|SUPERA\s+EL\s+PESO|RECUPER[ÓO]\s+EL\s+PESO)[^\n]*)?"
         if re.search(patron_peso, nota, flags=re.IGNORECASE):
