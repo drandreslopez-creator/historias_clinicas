@@ -46,6 +46,7 @@ from herramientas.rutas_gpc_pediatria import (
     detectar_ruta_gpc,
     obtener_apoyo_aiepi,
     obtener_ruta_gpc,
+    crear_etapa_guias,
     render_apoyo_aiepi,
     render_trazabilidad_gpc,
     resumen_gpc_para_ia,
@@ -5323,6 +5324,7 @@ def render():
 
     motivo = st.text_area("Motivo de consulta", key="motivo_1")
     enfermedad_input = st.text_area("Detalles enfermedad actual", key="enfermedad_1")
+    etapas_guias = {"inicial": crear_etapa_guias(st, "inicial")}
 
     st.subheader("Antecedentes")
 
@@ -5426,6 +5428,7 @@ def render():
     st.subheader("Examen físico")
 
     examen = st.text_area("Examen físico", key="examen", height=300)
+    etapas_guias["evaluacion"] = crear_etapa_guias(st, "evaluacion")
 
     # =========================
     # PARACLÍNICOS / IMÁGENES
@@ -5854,6 +5857,8 @@ def render():
         height=200
     )
 
+    etapas_guias["cierre"] = crear_etapa_guias(st, "cierre")
+    criterios_compartidos = {}
     texto_guias = "\n".join(
         str(valor or "")
         for valor in [
@@ -5870,12 +5875,18 @@ def render():
         justificacion_key="gpc_justificacion",
         registro_key="gpc_registro",
         selector_key="gpc_ruta",
+        contenedores=etapas_guias,
+        registros_limpieza=("gpc_registro", "gpc_justificacion", "aiepi_registro"),
+        compartidos=criterios_compartidos,
     )
     apoyo_aiepi_clave, trazabilidad_aiepi, instrucciones_aiepi_ia, registro_aiepi = render_apoyo_aiepi(
         st,
         diagnostico=diagnostico_seleccionado,
         texto_clinico=texto_guias,
         selector_key="aiepi_apoyo",
+        contenedores=etapas_guias,
+        registros_limpieza=("gpc_registro", "gpc_justificacion", "aiepi_registro"),
+        compartidos=criterios_compartidos,
         registro_key="aiepi_registro",
     )
     constancias_guias = []

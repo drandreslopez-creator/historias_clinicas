@@ -452,42 +452,110 @@ def construir_apoyo_gpc_aiepi_automatico(
     }
 
 
-def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, selector_key: str, registro_key: str) -> tuple[str, str, str, str]:
+
+# Etapas explícitas: se conserva el orden/índice original para los ejemplos.
+ETAPAS_GPC = {
+    "BRONQUIOLITIS": ("inicial", "inicial", "inicial", "evaluacion", "evaluacion", "inicial", "cierre", "cierre"),
+    "NEUMONIA": ("inicial", "inicial", "inicial", "evaluacion", "evaluacion", "cierre", "cierre", "cierre", "cierre", "cierre"),
+    "ASMA": ("evaluacion", "evaluacion", "cierre", "cierre"),
+    "CRUP": ("evaluacion", "evaluacion", "cierre", "cierre"),
+    "EDA": ("evaluacion", "inicial", "cierre", "cierre"),
+    "FIEBRE": ("inicial", "evaluacion", "cierre", "cierre"),
+    "DESNUTRICION": ("evaluacion", "inicial", "cierre", "cierre"),
+    "OTITIS": ("evaluacion", "inicial", "cierre", "cierre"),
+    "IVU": ("inicial", "evaluacion", "cierre", "cierre"),
+}
+ETAPAS_AIEPI = {
+    "RESPIRATORIO": ("inicial", "evaluacion", "evaluacion", "evaluacion", "cierre"),
+    "DIARREA": ("inicial", "inicial", "evaluacion", "cierre", "cierre"),
+    "FIEBRE": ("inicial", "inicial", "evaluacion", "cierre", "cierre"),
+    "FIEBRE_URINARIA": ("inicial", "inicial", "evaluacion", "cierre", "cierre"),
+    "INTEGRAL": ("inicial", "inicial", "evaluacion", "cierre", "cierre"),
+}
+
+
+def crear_etapa_guias(st, etapa):
+    titulos = {
+        "inicial": "1. Evaluación inicial · AIEPI / GPC",
+        "evaluacion": "2. Evaluación y clasificación · AIEPI / GPC",
+        "cierre": "3. Conducta y cierre · AIEPI / GPC",
+    }
+    contenedor = st.container()
+    with contenedor:
+        st.subheader(titulos[etapa])
+        if etapa == "inicial":
+            st.caption("Seleccione el apoyo según el problema en evaluación. Registre los signos de peligro desde el inicio y confirme la ruta con el diagnóstico final.")
+        elif etapa == "evaluacion":
+            st.caption("Documente los hallazgos y la clasificación según el examen actual. Complete la respuesta al tratamiento cuando esté disponible.")
+        else:
+            st.caption("Registre la conducta y, cuando corresponda, la reevaluación, criterios de egreso, educación y seguimiento. Si un criterio no aplica, indique el motivo.")
+    return contenedor
+
+
+def limpiar_registros_al_cambiar_ruta(st, registros):
+    # Callback: se ejecuta antes de reconstruir los widgets de la nueva ruta.
+    for key in list(st.session_state):
+        if any(key == registro or key.startswith(f"{registro}_criterio_") for registro in registros):
+            st.session_state.pop(key, None)
+
+
+def _render_criterios_etapas(st, criterios, etapas, registro_key, contenedores=None, compartidos=None):
+    respuestas = {}
+    for indice, criterio in enumerate(criterios):
+        destino = contenedores[etapas[indice]] if contenedores else st.container()
+        key = f"{registro_key}_criterio_{indice}"
+        # Solo se unifican preguntas equivalentes, no hallazgos de distinto alcance.
+        identidad = "PELIGRO" if criterio in ("SIGNOS DE PELIGRO AIEPI", "SIGNOS GENERALES DE PELIGRO") else None
+        with destino:
+            anterior = compartidos.get(identidad) if compartidos is not None and identidad else None
+            valor_previo = str(st.session_state.get(key, "") or "").strip()
+            if anterior is not None and (not valor_previo or _normalizar(valor_previo) == _normalizar(anterior)):
+                respuestas[criterio] = anterior
+                # El campo común es la fuente; no dejar una copia oculta obsoleta.
+                st.session_state.pop(key, None)
+                continue
+            if anterior is not None:
+                st.caption("El ejemplo contiene dos registros de peligro diferentes. Revise ambos antes de generar la historia.")
+            etiqueta = "SIGNOS GENERALES DE PELIGRO (GPC / AIEPI)" if identidad else criterio
+            respuestas[criterio] = st.text_input(
+                etiqueta, key=key,
+                placeholder="HALLAZGO REAL, AUSENTE O NO APLICA CON JUSTIFICACIÓN",
+            )
+            if compartidos is not None and identidad and anterior is None:
+                compartidos[identidad] = respuestas[criterio]
+    return respuestas
+
+
+def render_apoyo_aiepi(st, *, diagnostico: object, texto_clinico: object, selector_key: str, registro_key: str, contenedores=None, registros_limpieza=(), compartidos=None) -> tuple[str, str, str, str]:
     sugerido = detectar_apoyo_aiepi(diagnostico, texto_clinico)
     opciones = list(APOYOS_AIEPI)
     actual = st.session_state.get(selector_key, sugerido)
     if actual not in opciones:
         actual = sugerido
-    seleccionado = st.selectbox(
-        "Apoyo AIEPI aplicable",
-        opciones,
-        index=opciones.index(actual),
-        key=selector_key,
-        format_func=lambda opcion: APOYOS_AIEPI[opcion]["nombre"],
-        help="Apoyo para organizar la valoración pediátrica. Confirme siempre con AIEPI y el protocolo institucional vigente.",
-    )
+    with contenedores["inicial"] if contenedores else st.container():
+        seleccionado = st.selectbox(
+            "Apoyo AIEPI aplicable",
+            opciones,
+            index=opciones.index(actual),
+            key=selector_key,
+            on_change=limpiar_registros_al_cambiar_ruta,
+            args=(st, registros_limpieza or (registro_key,)),
+            format_func=lambda opcion: APOYOS_AIEPI[opcion]["nombre"],
+            help="Apoyo para organizar la valoración pediátrica. Al cambiarlo se limpian los registros GPC/AIEPI para evitar respuestas de otra ruta. Confirme con AIEPI y el protocolo institucional vigente.",
+        )
     apoyo = APOYOS_AIEPI[seleccionado]
-    st.subheader("Apoyo AIEPI")
-    st.caption("Registre cada criterio como PRESENTE, AUSENTE o con el hallazgo y conducta correspondiente.")
-    respuestas_criterios = {}
-    for indice, criterio in enumerate(apoyo["criterios"]):
-        col_criterio, col_respuesta = st.columns([1.35, 2])
-        with col_criterio:
-            st.caption(criterio)
-        with col_respuesta:
-            respuestas_criterios[criterio] = st.text_input(
-                criterio,
-                key=f"{registro_key}_criterio_{indice}",
-                label_visibility="collapsed",
-                placeholder="PRESENTE, AUSENTE O HALLAZGO / CONDUCTA",
-            )
-    registro = st.text_area(
-        "Registro clínico AIEPI",
-        key=registro_key,
-        height=110,
-        placeholder="Amplíe clasificación, conducta, consejería, signos de alarma o control si es necesario.",
-        help="Los registros AIEPI se integran de forma clínica al análisis y al plan final.",
+    respuestas_criterios = _render_criterios_etapas(
+        st, apoyo["criterios"], ETAPAS_AIEPI[seleccionado], registro_key,
+        contenedores, compartidos,
     )
+    with contenedores["cierre"] if contenedores else st.container():
+        registro = st.text_area(
+            "Registro clínico AIEPI",
+            key=registro_key,
+            height=110,
+            placeholder="Amplíe clasificación, conducta, consejería, signos de alarma o control si es necesario.",
+            help="Los registros AIEPI se integran de forma clínica al análisis y al plan final.",
+        )
     lineas_registro = [
         f"{criterio}: {respuesta.strip()}"
         for criterio, respuesta in respuestas_criterios.items()
@@ -576,97 +644,95 @@ def render_trazabilidad_gpc(
     justificacion_key: str,
     registro_key: str,
     selector_key: str,
+    contenedores=None,
+    registros_limpieza=(),
+    compartidos=None,
 ) -> tuple[str, str, str, str]:
     opciones = [""] + list(RUTAS_GPC)
     clave_actual = st.session_state.get(selector_key, clave)
     if clave_actual not in opciones:
         clave_actual = clave
-    ruta_seleccionada = st.selectbox(
-        "Ruta GPC aplicable",
-        opciones,
-        index=opciones.index(clave_actual),
-        key=selector_key,
-        format_func=lambda opcion: (
-            "SIN RUTA GPC ESPECÍFICA" if not opcion else RUTAS_GPC[opcion]["nombre"]
-        ),
-        help="Confirma la ruta según el diagnóstico clínico. La sugerencia automática se basa únicamente en el diagnóstico registrado.",
-    )
+    with contenedores["inicial"] if contenedores else st.container():
+        ruta_seleccionada = st.selectbox(
+            "Ruta GPC aplicable",
+            opciones,
+            index=opciones.index(clave_actual),
+            key=selector_key,
+            on_change=limpiar_registros_al_cambiar_ruta,
+            args=(st, registros_limpieza or (registro_key, justificacion_key)),
+            format_func=lambda opcion: (
+                "SIN RUTA GPC ESPECÍFICA" if not opcion else RUTAS_GPC[opcion]["nombre"]
+            ),
+            help="Puede seleccionar una ruta provisional antes del diagnóstico final. Al cambiarla se limpian los registros GPC/AIEPI para evitar respuestas de otra ruta.",
+        )
     ruta = obtener_ruta_gpc(ruta_seleccionada)
-    st.subheader("Apoyo GPC")
     if not ruta:
-        nombre_apoyo, recomendaciones = _apoyo_sin_ruta_gpc(diagnostico)
-        st.caption(f"No hay una ruta GPC específica seleccionada. Apoyo sugerido: {nombre_apoyo}.")
-        st.caption("Registre los elementos que correspondan al diagnóstico y al protocolo institucional:")
-        for recomendacion in recomendaciones:
-            st.caption(f"- {recomendacion}")
+        with contenedores["cierre"] if contenedores else st.container():
+            nombre_apoyo, recomendaciones = _apoyo_sin_ruta_gpc(diagnostico)
+            st.caption(f"No hay una ruta GPC específica seleccionada. Apoyo sugerido: {nombre_apoyo}.")
+            st.caption("Registre los elementos que correspondan al diagnóstico y al protocolo institucional:")
+            for recomendacion in recomendaciones:
+                st.caption(f"- {recomendacion}")
+            registro_complementario = st.text_area(
+                "Registro clínico complementario",
+                key=registro_key,
+                height=110,
+                placeholder="Documente hallazgos, conducta, recomendaciones, signos de alarma, control o justificación clínica.",
+                help="Este registro apoya la coherencia del análisis y el plan, sin presentarse como una ruta GPC específica.",
+            )
+            justificacion = st.text_area(
+                "Justificación clínica si se individualiza la conducta",
+                key=justificacion_key,
+                height=90,
+            )
+            lineas_registro = []
+            if registro_complementario.strip():
+                lineas_registro.append(registro_complementario.strip())
+            if justificacion.strip():
+                lineas_registro.extend(["JUSTIFICACIÓN CLÍNICA:", justificacion.strip()])
+            trazabilidad = (
+                "\n".join([f"APOYO CLÍNICO: {nombre_apoyo}", *lineas_registro])
+                if lineas_registro
+                else ""
+            )
+            instrucciones = (
+                f"APOYO CLÍNICO SIN RUTA GPC ESPECÍFICA: {nombre_apoyo}. "
+                f"CONSIDERAR: {'; '.join(recomendaciones)}. "
+                f"REGISTRO CLÍNICO: {registro_complementario.strip() or 'SIN REGISTRO ADICIONAL.'}"
+            )
+            return "", trazabilidad, instrucciones, registro_complementario.strip()
+
+    with contenedores["inicial"] if contenedores else st.container():
+        with st.expander("Fuente y orientación de la ruta GPC", expanded=False):
+            st.caption(f"Ruta detectada: {ruta['nombre']}")
+            st.caption(f"Fuente: {ruta['fuente']}")
+            st.link_button("Consultar fuente de la ruta", ruta["url"], use_container_width=False)
+            st.caption("Para esta ruta, deje documentado según corresponda:")
+            for item in ruta["documentacion"]:
+                st.caption(f"- {item}")
+            for alerta in ruta["alertas"]:
+                st.info(alerta)
+    respuestas_criterios = _render_criterios_etapas(
+        st, ruta["verificaciones"], ETAPAS_GPC[ruta_seleccionada], registro_key,
+        contenedores, compartidos,
+    )
+    with contenedores["cierre"] if contenedores else st.container():
         registro_complementario = st.text_area(
-            "Registro clínico complementario",
+            "Registro clínico complementario GPC",
             key=registro_key,
             height=110,
-            placeholder="Documente hallazgos, conducta, recomendaciones, signos de alarma, control o justificación clínica.",
-            help="Este registro apoya la coherencia del análisis y el plan, sin presentarse como una ruta GPC específica.",
+            placeholder=(
+                "Documente aquí los elementos pendientes: severidad, revaloración, "
+                "tolerancia oral, diuresis, educación de signos de alarma u otros hallazgos relevantes."
+            ),
+            help="Este registro se integra al análisis, al plan y al informe final.",
         )
         justificacion = st.text_area(
-            "Justificación clínica si se individualiza la conducta",
+            "Justificación clínica si se individualiza o se aparta de la ruta",
             key=justificacion_key,
             height=90,
+            help="Registre el motivo clínico, contraindicación, comorbilidad o decisión individual que modifique la conducta sugerida.",
         )
-        lineas_registro = []
-        if registro_complementario.strip():
-            lineas_registro.append(registro_complementario.strip())
-        if justificacion.strip():
-            lineas_registro.extend(["JUSTIFICACIÓN CLÍNICA:", justificacion.strip()])
-        trazabilidad = (
-            "\n".join([f"APOYO CLÍNICO: {nombre_apoyo}", *lineas_registro])
-            if lineas_registro
-            else ""
-        )
-        instrucciones = (
-            f"APOYO CLÍNICO SIN RUTA GPC ESPECÍFICA: {nombre_apoyo}. "
-            f"CONSIDERAR: {'; '.join(recomendaciones)}. "
-            f"REGISTRO CLÍNICO: {registro_complementario.strip() or 'SIN REGISTRO ADICIONAL.'}"
-        )
-        return "", trazabilidad, instrucciones, registro_complementario.strip()
-
-    st.caption(f"Ruta detectada: {ruta['nombre']}")
-    st.caption(f"Fuente: {ruta['fuente']}")
-    st.link_button("Consultar fuente de la ruta", ruta["url"], use_container_width=False)
-    st.caption("Para esta ruta, deje documentado según corresponda:")
-    for item in ruta["documentacion"]:
-        st.caption(f"- {item}")
-    for alerta in ruta["alertas"]:
-        st.info(alerta)
-
-    respuestas_criterios = {}
-    st.caption("Registro por criterios GPC:")
-    for indice, etiqueta in enumerate(ruta["verificaciones"]):
-        col_etiqueta, col_respuesta = st.columns([1.35, 2])
-        with col_etiqueta:
-            st.caption(etiqueta)
-        with col_respuesta:
-            respuestas_criterios[etiqueta] = st.text_input(
-                etiqueta,
-                key=f"{registro_key}_criterio_{indice}",
-                label_visibility="collapsed",
-                placeholder="REGISTRE HALLAZGOS, CONDUCTA O JUSTIFICACIÓN",
-            )
-
-    registro_complementario = st.text_area(
-        "Registro clínico complementario GPC",
-        key=registro_key,
-        height=110,
-        placeholder=(
-            "Documente aquí los elementos pendientes: severidad, revaloración, "
-            "tolerancia oral, diuresis, educación de signos de alarma u otros hallazgos relevantes."
-        ),
-        help="Este registro se integra al análisis, al plan y al informe final.",
-    )
-    justificacion = st.text_area(
-        "Justificación clínica si se individualiza o se aparta de la ruta",
-        key=justificacion_key,
-        height=90,
-        help="Registre el motivo clínico, contraindicación, comorbilidad o decisión individual que modifique la conducta sugerida.",
-    )
     return (
         ruta_seleccionada,
         construir_trazabilidad_gpc(

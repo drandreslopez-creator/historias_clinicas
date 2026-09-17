@@ -25,6 +25,7 @@ from herramientas.rutas_gpc_pediatria import (
     detectar_ruta_gpc,
     obtener_apoyo_aiepi,
     obtener_ruta_gpc,
+    crear_etapa_guias,
     render_apoyo_aiepi,
     render_trazabilidad_gpc,
     resumen_gpc_para_ia,
@@ -1238,6 +1239,9 @@ def render_consulta_externa(
     etapa_vida_auto = _etapa_vida_consulta_externa(es_pediatrica, grupo, años if fecha_nacimiento else None)
     enfermedad_actual_label = "Detalles enfermedad actual" if usar_modo_urgencias else "Enfermedad actual"
     enfermedad_actual = st.text_area(enfermedad_actual_label, key=f"{prefix}_enfermedad_actual")
+    etapas_guias = {}
+    if habilitar_trazabilidad_gpc:
+        etapas_guias["inicial"] = crear_etapa_guias(st, "inicial")
     enfermedad_actual_historia = enfermedad_actual
     if enfermedad_actual_auto_homeopatia_pediatrica:
         encabezado_final, cola_final = _construir_enfermedad_actual_homeopatia_pediatrica(
@@ -1383,6 +1387,7 @@ def render_consulta_externa(
     talla_num = _float_or_none(talla)
     pc_num = _float_or_none(pc)
     pb_num = _float_or_none(pb)
+    dx_nutricional = "ESTADO NUTRICIONAL NO EVALUADO"
 
     if es_pediatrica and fecha_nacimiento and peso_num and peso_num > 0 and talla_num and talla_num > 0 and sexo:
         edad_meses = edad_en_meses(fecha_nacimiento)
@@ -1416,6 +1421,8 @@ def render_consulta_externa(
     if usar_modo_urgencias and st.session_state.get(f"{prefix}_examen") == EXAMEN_DEFAULT:
         st.session_state[f"{prefix}_examen"] = EXAMEN_URGENCIAS_DEFAULT
     examen = st.text_area("Examen físico", key=f"{prefix}_examen", height=300 if usar_modo_urgencias else 260)
+    if habilitar_trazabilidad_gpc:
+        etapas_guias["evaluacion"] = crear_etapa_guias(st, "evaluacion")
 
     st.subheader("Paraclínicos")
     col_pdf_1, col_pdf_2 = st.columns(2)
@@ -1892,6 +1899,8 @@ def render_consulta_externa(
 
     fundamento_guias_analisis = ""
     if habilitar_trazabilidad_gpc:
+        etapas_guias["cierre"] = crear_etapa_guias(st, "cierre")
+        criterios_compartidos = {}
         texto_guias = "\n".join(
             str(valor or "")
             for valor in [
@@ -1908,12 +1917,18 @@ def render_consulta_externa(
             justificacion_key=f"{prefix}_gpc_justificacion",
             registro_key=f"{prefix}_gpc_registro",
             selector_key=f"{prefix}_gpc_ruta",
+            contenedores=etapas_guias,
+            registros_limpieza=(f"{prefix}_gpc_registro", f"{prefix}_gpc_justificacion", f"{prefix}_aiepi_registro"),
+            compartidos=criterios_compartidos,
         )
         apoyo_aiepi_clave, trazabilidad_aiepi, instrucciones_aiepi_ia, registro_aiepi = render_apoyo_aiepi(
             st,
             diagnostico=diagnosticos,
             texto_clinico=texto_guias,
             selector_key=f"{prefix}_aiepi_apoyo",
+            contenedores=etapas_guias,
+            registros_limpieza=(f"{prefix}_gpc_registro", f"{prefix}_gpc_justificacion", f"{prefix}_aiepi_registro"),
+            compartidos=criterios_compartidos,
             registro_key=f"{prefix}_aiepi_registro",
         )
         constancias_guias = []
