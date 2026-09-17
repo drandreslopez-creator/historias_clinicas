@@ -68,6 +68,7 @@ if "app_autenticada" not in st.session_state:
 if not st.session_state["app_autenticada"]:
     st.title("Medinexus")
     st.caption("Plataforma de documentación clínica")
+    st.caption("Prueba de actualización: 17/09/2026 · 01")
     st.subheader("Acceso")
     with st.form("login_form"):
         password_input = st.text_input("Contraseña", type="password")
@@ -84,6 +85,7 @@ if not st.session_state["app_autenticada"]:
 
 st.title("Medinexus")
 st.caption("Plataforma de documentación clínica")
+st.caption("Prueba de actualización: 17/09/2026 · 01")
 
 col_titulo, col_drive = st.columns([6, 1.8])
 with col_drive:
