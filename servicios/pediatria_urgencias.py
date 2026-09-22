@@ -3,6 +3,7 @@ import hashlib
 import time
 import streamlit as st
 
+from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual
 from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
 import streamlit.components.v1 as components
 import pandas as pd
@@ -1217,6 +1218,8 @@ def puntuar_diagnostico(row, terminos, grupos=None):
 
 def limpiar_formulario():
     st.session_state.pop("urgencias_ejemplo_confirmado", None)
+    st.session_state.pop("urgencias_informe_final", None)
+    st.session_state.pop("_analisis_recalculado_pendiente", None)
     for key, value in FORM_DEFAULTS.items():
         st.session_state[key] = value
     # Un ejemplo docente guarda estado auxiliar para recalcular sus dosis. Al
@@ -1384,10 +1387,7 @@ def borrar_borrador_urgencias():
 
 
 def _snapshot_borrador_urgencias():
-    snapshot = {}
-    for key, default in FORM_DEFAULTS.items():
-        snapshot[key] = st.session_state.get(key, default)
-    return snapshot
+    return snapshot_formulario(st.session_state, FORM_DEFAULTS, "urgencias")
 
 
 def _formulario_urgencias_vacio():
@@ -1411,9 +1411,7 @@ def restaurar_borrador_urgencias_si_aplica():
         st.session_state["_borrador_urgencias_restaurado"] = True
         return
 
-    for key in FORM_DEFAULTS.keys():
-        if key in data:
-            st.session_state[key] = data[key]
+    restaurar_formulario(st.session_state, data, FORM_DEFAULTS, "urgencias")
 
     st.session_state["_borrador_urgencias_restaurado"] = True
     st.session_state["_borrador_urgencias_notice"] = "Borrador de urgencias restaurado automáticamente."
@@ -1424,6 +1422,10 @@ def guardar_borrador_urgencias():
     tiene_contenido = any(
         snapshot.get(key) != default
         for key, default in FORM_DEFAULTS.items()
+    )
+    tiene_contenido = tiene_contenido or any(
+        bool(str(valor or "").strip()) for clave, valor in snapshot.items()
+        if "_registro_criterio_" in clave or clave.endswith("aiepi_registro")
     )
     if not tiene_contenido:
         return
@@ -6193,14 +6195,8 @@ def render():
                 )
                 if analisis_actual in ("", st.session_state.get("analisis_base", "")) or ejemplo_sin_editar_analisis:
                     analisis = analisis_default_final
-                    if ejemplo_sin_editar_analisis:
-                        # El médico sobrescribió datos clínicos del ejemplo,
-                        # no el análisis: se reemplaza por el nuevo análisis
-                        # coherente y se conserva para la siguiente edición.
-                        st.session_state["_analisis_recalculado_pendiente"] = analisis_default_final
                 else:
                     analisis = analisis_actual or analisis_default_final
-                st.session_state["analisis_base"] = analisis_default_final
 
                 obs_dx_default_final = construir_observacion_diagnostica_base(
                     diagnostico_seleccionado,
@@ -6221,13 +6217,11 @@ def render():
                     observacion_diagnostico = obs_dx_default_final
                 else:
                     observacion_diagnostico = st.session_state.get("obs_dx", obs_dx_default_final)
-                st.session_state["obs_dx_base"] = obs_dx_default_final
 
                 if st.session_state.get("plan") in ("", st.session_state.get("plan_base", "")):
                     plan = plan_sugerido_final
                 else:
                     plan = st.session_state.get("plan", plan_sugerido_final)
-                st.session_state["plan_base"] = plan_sugerido_final
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         diagnostico_final = diagnostico_seleccionado or ""
@@ -6330,12 +6324,16 @@ PLAN:
         ]
         if recomendaciones_egreso:
             secciones_informe.append(("RECOMENDACIONES DE EGRESO", recomendaciones_egreso))
-        docx_bytes = generar_docx_informe(titulo_historia.upper(), secciones_informe)
+        preparar_informe(st, "urgencias", huella_formulario(st.session_state, FORM_DEFAULTS, "urgencias"),
+                         titulo_historia.upper(), secciones_informe, historia.upper(), nombre, documento, tipo_documento)
+
+    def guardar_informe_revisado(informe):
+        docx_bytes = generar_docx_informe(informe["titulo"], informe["secciones"])
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
         nombre_base_docx = construir_nombre_base_docx(
             "HC",
-            nombre=nombre,
-            documento=documento,
+            nombre=informe["nombre"],
+            documento=informe["documento"],
             fecha_guardado=fecha_guardado,
         )
         ruta_docx_guardado = guardar_docx_exportado(
@@ -6344,13 +6342,8 @@ PLAN:
             subcarpeta="pediatria_urgencias",
         )
         nombre_docx = f"{nombre_base_docx}.docx"
-        st.download_button(
-            "Descargar informe en Word",
-            data=docx_bytes,
-            file_name=nombre_docx,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True,
-        )
+        informe["docx_bytes"] = docx_bytes
+        informe["nombre_docx"] = nombre_docx
         resultado_drive = subir_docx_a_google_drive(docx_bytes, nombre_docx)
         if resultado_drive.get("ok"):
             enlace_drive = resultado_drive.get("webViewLink")
@@ -6363,20 +6356,22 @@ PLAN:
         else:
             st.info("Google Drive no está configurado aún. El Word sí quedó guardado localmente y disponible para descarga.")
 
-        identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
+        identificador = f"{fecha_guardado} | {informe['nombre'] or 'SIN NOMBRE'} | {informe['documento'] or 'SIN DOCUMENTO'}"
         guardar_historia({
             "id": identificador,
             "fecha_guardado": fecha_guardado,
-            "nombre": nombre,
-            "tipo_documento": tipo_documento,
-            "documento": documento,
-            "historia": historia.upper(),
+            "nombre": informe["nombre"],
+            "tipo_documento": informe["tipo_documento"],
+            "documento": informe["documento"],
+            "historia": informe["historia"],
             "docx_local_path": str(ruta_docx_guardado),
             "drive_file_id": resultado_drive.get("file_id"),
             "drive_webview_link": resultado_drive.get("webViewLink"),
         })
         borrar_borrador_urgencias()
-        render_informe_html(titulo_historia.upper(), secciones_informe, historia.upper())
+        render_informe_html(informe["titulo"], informe["secciones"], informe["historia"])
+
+    revisar_informe(st, "urgencias", huella_formulario(st.session_state, FORM_DEFAULTS, "urgencias"), guardar_informe_revisado)
 
     st.divider()
     with st.expander("Historias guardadas", expanded=False):
@@ -6413,7 +6408,8 @@ PLAN:
         else:
             st.info("Aún no hay historias guardadas.")
 
-    guardar_borrador_urgencias()
+    if not informe_guardado_actual(st, "urgencias", huella_formulario(st.session_state, FORM_DEFAULTS, "urgencias")):
+        guardar_borrador_urgencias()
 
     with st.expander("Planes de manejo por patología", expanded=False):
         planes_patologia = cargar_planes_patologia()

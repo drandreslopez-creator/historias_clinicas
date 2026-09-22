@@ -1,6 +1,6 @@
 """Comprobación integral aislada: python3 -B tests/check_revision_app.py.
 
-No copia historias/borradores ni credenciales; no genera ni envía documentos.
+No copia historias/borradores ni credenciales; solo genera documentos ficticios en la carpeta temporal; Drive se sustituye por un simulador.
 """
 from pathlib import Path
 import os
@@ -36,6 +36,31 @@ def ejecutar():
             app.run()
             def comprobar():
                 assert not app.exception, [e.message for e in app.exception]
+            import servicios.pediatria_urgencias as urg
+            import servicios.consulta_externa_base as consulta
+            envios = []
+            def drive_falso(datos, nombre):
+                envios.append(nombre)
+                return {"configured": False}
+            urg.subir_docx_a_google_drive = drive_falso
+            consulta.subir_docx_a_google_drive = drive_falso
+            def probar_informe():
+                antes = len(envios)
+                generar().click().run()
+                comprobar()
+                assert len(envios) == antes, "Generar no debe enviar el documento"
+                texto = next(t.value for t in app.text_area if t.label == 'Texto definitivo')
+                app.run()
+                comprobar()
+                boton = next(b for b in app.button if b.label.startswith('Confirmar informe final'))
+                boton.click().run()
+                comprobar()
+                assert len(envios) == antes + 1
+                guardadas = [json.loads(linea)['historia'] for archivo in (sandbox / 'data').glob('*.jsonl') for linea in archivo.read_text().splitlines() if linea.strip()]
+                assert texto in guardadas, 'Se debe guardar exactamente el texto revisado'
+                app.run()
+                comprobar()
+                assert len(envios) == antes + 1, 'Un rerun no debe duplicar el envío'
             def generar():
                 return next(b for b in app.button if b.label == 'Generar Historia Clínica')
             def confirmar():
@@ -56,6 +81,7 @@ def ejecutar():
             import json
             borrador = json.loads((sandbox / 'data' / 'borrador_pediatria_urgencias.json').read_text())
             assert borrador['data']['urgencias_ejemplo_origen']
+            assert borrador['data']['gpc_registro_criterio_0']
             confirmar()
             assert not generar().disabled
             app.run()
@@ -71,6 +97,9 @@ def ejecutar():
             app.run()
             comprobar()
             assert generar().disabled
+            assert app.text_input(key="gpc_registro_criterio_0").value == borrador["data"]["gpc_registro_criterio_0"]
+            confirmar()
+            probar_informe()
             limpiar()
             assert not generar().disabled
             assert not app.session_state['urgencias_ejemplo_origen']
@@ -89,11 +118,22 @@ def ejecutar():
                 boton.click().run()
                 comprobar()
                 assert generar().disabled, f'{area}: ejemplo sin marcar'
+                prefijo = boton.key.removesuffix('_ver_ejemplo')
+                original = app.session_state.filtered_state.get(f'_{prefijo}_analisis_ejemplo_original')
+                if original:
+                    app.text_area(key=f'{prefijo}_enfermedad_actual').set_value('CUADRO MODIFICADO PARA PRUEBA, EVOLUCIÓN DE DOS DÍAS.').run()
+                    comprobar()
+                    assert app.text_area(key=f'{prefijo}_analisis').value != original
+                app.text_area(key=f'{prefijo}_plan').set_value('PLAN EDITADO MANUALMENTE PARA PRUEBA').run()
+                app.text_input(key=f'{prefijo}_peso').set_value('18').run()
+                comprobar()
+                assert app.text_area(key=f'{prefijo}_plan').value == 'PLAN EDITADO MANUALMENTE PARA PRUEBA'
                 confirmar()
                 assert not generar().disabled
                 app.run()
                 comprobar()
                 assert not generar().disabled
+                probar_informe()
                 limpiar()
                 assert not generar().disabled
                 print(f'{area}: panel, ejemplo, confirmación y limpieza OK')

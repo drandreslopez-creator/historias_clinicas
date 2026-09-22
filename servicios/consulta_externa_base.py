@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
+from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual
 from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
 
 from core.calculos import calcular_edad, edad_en_meses
@@ -70,6 +71,7 @@ from servicios.pediatria_urgencias import (
     puntuar_diagnostico,
     subir_docx_a_google_drive,
     render_informe_html,
+    renderizar_plan_editable,
     etiqueta_cie10_en_espanol,
 )
 
@@ -633,7 +635,7 @@ def _init_state(defaults):
 
 
 def _clear_state(prefix, defaults):
-    keys_to_clear = [key for key in st.session_state.keys() if key.startswith(prefix)]
+    keys_to_clear = [key for key in st.session_state.keys() if key.startswith((prefix, f"_{prefix}_analisis_ejemplo_", f"_{prefix}_plan_ejemplo_"))]
     for key in keys_to_clear:
         st.session_state.pop(key, None)
     for key, value in defaults.items():
@@ -664,10 +666,8 @@ def _borrar_borrador_consulta(prefix):
 
 
 def _snapshot_borrador_consulta(defaults):
-    snapshot = {}
-    for key, default in defaults.items():
-        snapshot[key] = st.session_state.get(key, default)
-    return snapshot
+    prefix = next(k.removesuffix("_ejemplo_origen") for k in defaults if k.endswith("_ejemplo_origen"))
+    return snapshot_formulario(st.session_state, defaults, prefix)
 
 
 def _formulario_consulta_vacio(defaults):
@@ -694,9 +694,7 @@ def _restaurar_borrador_consulta_si_aplica(prefix, defaults):
         st.session_state[restored_key] = True
         return
 
-    for key in defaults.keys():
-        if key in data:
-            st.session_state[key] = data[key]
+    restaurar_formulario(st.session_state, data, defaults, prefix)
 
     st.session_state[restored_key] = True
     st.session_state[notice_key] = "Borrador restaurado automáticamente."
@@ -707,6 +705,10 @@ def _guardar_borrador_consulta(prefix, defaults):
     tiene_contenido = any(
         snapshot.get(key) != default
         for key, default in defaults.items()
+    )
+    tiene_contenido = tiene_contenido or any(
+        bool(str(valor or "").strip()) for clave, valor in snapshot.items()
+        if "_registro_criterio_" in clave or clave.endswith("aiepi_registro")
     )
     if not tiene_contenido:
         _borrar_borrador_consulta(prefix)
@@ -923,6 +925,9 @@ def _cargar_ejemplo_guia_consulta_externa(
         f"{prefix}_plan": caso.get("plan", ""),
         f"{prefix}_plan_base": caso.get("plan", ""),
         f"_{prefix}_analisis_ejemplo_pendiente": caso.get("analisis", ""),
+        f"_{prefix}_analisis_ejemplo_original": caso.get("analisis", ""),
+        f"_{prefix}_plan_ejemplo_original": caso.get("plan", ""),
+        f"_{prefix}_plan_ejemplo_diagnostico": caso.get("diagnostico", ""),
         f"_{prefix}_plan_ejemplo_pendiente": caso.get("plan", ""),
         f"{prefix}_gpc_ruta": caso.get("gpc", ""),
         f"{prefix}_aiepi_apoyo": caso.get("aiepi", "INTEGRAL"),
@@ -1769,7 +1774,7 @@ def render_consulta_externa(
         st.session_state.get(f"{prefix}_analisis_base") != analisis_default
         or st.session_state.pop(f"{prefix}_analisis_actualizar_por_conducta", False)
     ):
-        if st.session_state.get(f"{prefix}_analisis") == st.session_state.get(f"{prefix}_analisis_base", ""):
+        if st.session_state.get(f"{prefix}_analisis") in (st.session_state.get(f"{prefix}_analisis_base", ""), st.session_state.get(f"_{prefix}_analisis_ejemplo_original", "")):
             st.session_state[f"{prefix}_analisis"] = analisis_default
         else:
             merge_fp = hashlib.md5(
@@ -1843,6 +1848,21 @@ def render_consulta_externa(
         and st.session_state.get(f"{prefix}_plan") == plan_default
     ):
         st.session_state[f"{prefix}_plan"] = PLAN_URGENCIAS_DEFAULT
+    plantilla_ejemplo = st.session_state.get(f"_{prefix}_plan_ejemplo_original", "")
+    if plantilla_ejemplo:
+        plan_previo = st.session_state.get(f"_{prefix}_plan_ejemplo_materializado", plantilla_ejemplo)
+        diagnostico_ejemplo = st.session_state.get(f"_{prefix}_plan_ejemplo_diagnostico", "")
+        mismo_diagnostico = str(diagnosticos).split(" - ")[0].strip() == str(diagnostico_ejemplo).split(" - ")[0].strip()
+        plan_actualizado = renderizar_plan_editable(plantilla_ejemplo if mismo_diagnostico else plan_default, peso)
+        if usar_modo_urgencias:
+            plan_actualizado = ajustar_plan_a_conducta_final(plan_actualizado, conducta_final_analisis)
+        if st.session_state.get(f"{prefix}_plan", "") in ("", plan_previo, plantilla_ejemplo):
+            st.session_state[f"{prefix}_plan"] = plan_actualizado
+            st.session_state[f"{prefix}_plan_base"] = plan_actualizado
+        elif plan_actualizado != plan_previo:
+            st.warning("Cambió el contexto del ejemplo. Revise su plan editado: se conservó el texto manual.")
+        st.session_state[f"_{prefix}_plan_ejemplo_materializado"] = plan_actualizado
+
     plan_base_local = st.session_state.get(f"{prefix}_plan_base", plan_default) or plan_default
     if usar_modo_urgencias:
         plan_base_local = ajustar_plan_a_conducta_final(plan_base_local, conducta_final_analisis)
@@ -1894,10 +1914,10 @@ def render_consulta_externa(
             plan_sugerido = plan_base_local
     plan_ejemplo = st.session_state.pop(f"_{prefix}_plan_ejemplo_pendiente", "")
     if plan_ejemplo:
-        st.session_state[f"{prefix}_plan"] = plan_ejemplo
+        st.session_state[f"{prefix}_plan"] = st.session_state.get(f"_{prefix}_plan_ejemplo_materializado", plan_ejemplo)
         st.session_state[f"{prefix}_plan_base"] = plan_sugerido
     if st.session_state.get(f"{prefix}_plan_base") != plan_sugerido:
-        if st.session_state.get(f"{prefix}_plan", "") == st.session_state.get(f"{prefix}_plan_base", ""):
+        if st.session_state.get(f"{prefix}_plan", "") in (st.session_state.get(f"{prefix}_plan_base", ""), st.session_state.get(f"_{prefix}_plan_ejemplo_original", "")):
             st.session_state[f"{prefix}_plan"] = plan_sugerido
         elif f"{prefix}_plan_base" not in st.session_state:
             st.session_state[f"{prefix}_plan"] = plan_sugerido
@@ -2010,11 +2030,10 @@ def render_consulta_externa(
                                 plan_sugerido_final,
                                 conducta_final_analisis,
                             )
-                    if st.session_state.get(f"{prefix}_analisis", "") in ("", st.session_state.get(f"{prefix}_analisis_base", "")):
+                    if st.session_state.get(f"{prefix}_analisis", "") in ("", st.session_state.get(f"{prefix}_analisis_base", ""), st.session_state.get(f"_{prefix}_analisis_ejemplo_original", "")):
                         analisis = analisis_default_final
                     else:
                         analisis = st.session_state.get(f"{prefix}_analisis", analisis_default_final)
-                    st.session_state[f"{prefix}_analisis_base"] = analisis_default_final
 
                 obs_dx_default_final = construir_observacion_diagnostica_base(
                     diagnosticos,
@@ -2026,14 +2045,12 @@ def render_consulta_externa(
                     observacion_dx = obs_dx_default_final
                 else:
                     observacion_dx = st.session_state.get(f"{prefix}_obs_dx", obs_dx_default_final)
-                st.session_state[f"{prefix}_obs_dx_base"] = obs_dx_default_final
 
                 if generar_plan_automatico:
-                    if st.session_state.get(f"{prefix}_plan", "") in ("", st.session_state.get(f"{prefix}_plan_base", "")):
+                    if st.session_state.get(f"{prefix}_plan", "") in ("", st.session_state.get(f"{prefix}_plan_base", ""), st.session_state.get(f"_{prefix}_plan_ejemplo_original", "")):
                         plan = plan_sugerido_final
                     else:
                         plan = st.session_state.get(f"{prefix}_plan", plan_sugerido_final)
-                    st.session_state[f"{prefix}_plan_base"] = plan_sugerido_final
 
         fecha_str = fecha_nacimiento.strftime("%d/%m/%Y") if fecha_nacimiento else ""
         paraclinicos_reporte = _texto_reporte_bloque(paraclinicos_texto, "NO HAY LABORATORIOS POR REPORTAR")
@@ -2212,13 +2229,16 @@ PLAN:
         )
         if recomendaciones_egreso:
             secciones.append(("RECOMENDACIONES DE EGRESO", recomendaciones_egreso))
-        st.success("Historia clínica generada")
+        preparar_informe(st, prefix, huella_formulario(st.session_state, defaults, prefix),
+                         titulo.upper(), secciones, historia.upper(), nombre, documento)
+
+    def guardar_informe_revisado(informe):
         fecha_guardado = datetime.now(BOGOTA_TZ).strftime("%Y-%m-%d %H:%M:%S")
-        docx_bytes = generar_docx_informe(titulo.upper(), secciones)
+        docx_bytes = generar_docx_informe(informe["titulo"], informe["secciones"])
         nombre_base_docx = construir_nombre_base_docx(
             "CE",
-            nombre=nombre,
-            documento=documento,
+            nombre=informe["nombre"],
+            documento=informe["documento"],
             fecha_guardado=fecha_guardado,
         )
         ruta_docx_guardado = guardar_docx_exportado(
@@ -2227,14 +2247,8 @@ PLAN:
             subcarpeta=prefix,
         )
         nombre_docx = f"{nombre_base_docx}.docx"
-        st.download_button(
-            "Descargar informe en Word",
-            data=docx_bytes,
-            file_name=nombre_docx,
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            use_container_width=True,
-            key=f"{prefix}_download_docx",
-        )
+        informe["docx_bytes"] = docx_bytes
+        informe["nombre_docx"] = nombre_docx
         resultado_drive = subir_docx_a_google_drive(docx_bytes, nombre_docx)
         if resultado_drive.get("ok"):
             enlace_drive = resultado_drive.get("webViewLink")
@@ -2247,22 +2261,24 @@ PLAN:
         else:
             st.info("Google Drive no está configurado aún. El Word sí quedó guardado localmente y disponible para descarga.")
 
-        identificador = f"{fecha_guardado} | {nombre or 'SIN NOMBRE'} | {documento or 'SIN DOCUMENTO'}"
+        identificador = f"{fecha_guardado} | {informe['nombre'] or 'SIN NOMBRE'} | {informe['documento'] or 'SIN DOCUMENTO'}"
         _save_history(
             history_path,
             {
                 "id": identificador,
                 "fecha_guardado": fecha_guardado,
-                "nombre": nombre,
-                "documento": documento,
-                "historia": historia.upper(),
+                "nombre": informe["nombre"],
+                "documento": informe["documento"],
+                "historia": informe["historia"],
                 "docx_local_path": str(ruta_docx_guardado),
                 "drive_file_id": resultado_drive.get("file_id"),
                 "drive_webview_link": resultado_drive.get("webViewLink"),
             },
         )
         _borrar_borrador_consulta(prefix)
-        render_informe_html(titulo.upper(), secciones, historia.upper())
+        render_informe_html(informe["titulo"], informe["secciones"], informe["historia"])
+
+    revisar_informe(st, prefix, huella_formulario(st.session_state, defaults, prefix), guardar_informe_revisado)
 
     st.divider()
     with st.expander("Historias guardadas", expanded=False):
@@ -2292,4 +2308,5 @@ PLAN:
         else:
             st.info("Aún no hay historias guardadas.")
 
-    _guardar_borrador_consulta(prefix, defaults)
+    if not informe_guardado_actual(st, prefix, huella_formulario(st.session_state, defaults, prefix)):
+        _guardar_borrador_consulta(prefix, defaults)
