@@ -61,6 +61,7 @@ def render_revision_documental(st, *, prefix, registros=(), claves_revision=()):
     if not origen:
         return True
     claves = list(claves_revision)
+    claves += [k for k in st.session_state if k.startswith(f"{prefix}_checklist_") and not k.endswith("_revision")]
     for registro in registros:
         claves += [k for k in st.session_state if k == registro or k.startswith(f"{registro}_criterio_")]
     # Las respuestas compartidas también forman parte de la revisión.

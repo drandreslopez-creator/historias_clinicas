@@ -11,7 +11,7 @@ import tempfile
 from streamlit.testing.v1 import AppTest
 
 
-def ejecutar():
+def ejecutar(patologia="NEUMONÍA", nivel="HOSPITALIZACIÓN", reporte=None):
     root = Path(__file__).resolve().parents[1]
     with tempfile.TemporaryDirectory(prefix='revision-documental-') as temporal:
         sandbox = Path(temporal)
@@ -50,6 +50,20 @@ def ejecutar():
                 comprobar()
                 assert len(envios) == antes, "Generar no debe enviar el documento"
                 texto = next(t.value for t in app.text_area if t.label == 'Texto definitivo')
+                assert "SE DOCUMENTA VALORACIÓN Y CONDUCTA ORIENTADAS POR" not in texto
+                assert "SE DOCUMENTA EVALUACIÓN AIEPI" not in texto
+                if reporte and patologia == "BRONQUIOLITIS" and "urgencias_informe_final" in app.session_state:
+                    informe = app.session_state["urgencias_informe_final"]
+                    secciones = dict(informe['secciones'])
+                    assert 'POR LACTANTE DE 8 MESES' not in texto
+                    assert 'EDAD NO REGISTRADA' not in texto
+                    assert '0 DÍAS DE EDAD' not in texto
+                    assert 'REALIZACIÓN DE EXÁMENES COMPLEMENTARIOS' not in texto
+                    assert 'REFIERE ENTENDER Y ACEPTAR' not in texto
+                    assert 'RECOMENDACIONES DE EGRESO' not in secciones
+                    assert 'CRITERIOS DE EGRESO' not in secciones['ANÁLISIS']
+                    Path(reporte).write_text(texto)
+
                 app.run()
                 comprobar()
                 boton = next(b for b in app.button if b.label.startswith('Confirmar informe final'))
@@ -71,13 +85,18 @@ def ejecutar():
                 comprobar()
             comprobar()
             assert not generar().disabled
-            app.selectbox(key='patologia_ejemplo_urgencias').select('NEUMONÍA').run()
-            app.selectbox(key='nivel_ejemplo_urgencias').select('HOSPITALIZACIÓN').run()
+            app.selectbox(key='patologia_ejemplo_urgencias').select(patologia).run()
+            app.selectbox(key='nivel_ejemplo_urgencias').select(nivel).run()
             selector = app.selectbox(key='ejemplo_guia_urgencias')
             selector.select(selector.options[1]).run()
             app.button(key='ver_ejemplo_urgencias').click().run()
             comprobar()
             assert generar().disabled
+            if patologia == "BRONQUIOLITIS":
+                for campo, valor in (("peligro", "Ausentes"), ("ingesta", "Disminuida"), ("diuresis", "Disminuida"), ("oximetria", "Aire ambiente"), ("estudios", "No")):
+                    app.selectbox(key=f"urgencias_checklist_{campo}").select(valor).run()
+                app.text_input(key="urgencias_checklist_clasificacion").set_value("BRONQUIOLITIS CON DIFICULTAD RESPIRATORIA LEVE, EN OBSERVACIÓN POR INGESTA DISMINUIDA").run()
+                app.text_input(key="urgencias_checklist_condiciones_egreso").set_value("Reevaluar trabajo respiratorio, oximetría, ingesta y diuresis antes de definir destino.").run()
             import json
             borrador = json.loads((sandbox / 'data' / 'borrador_pediatria_urgencias.json').read_text())
             assert borrador['data']['urgencias_ejemplo_origen']
@@ -98,6 +117,7 @@ def ejecutar():
             comprobar()
             assert generar().disabled
             assert app.text_input(key="gpc_registro_criterio_0").value == borrador["data"]["gpc_registro_criterio_0"]
+            assert app.date_input(key='fecha_1').value is not None, 'La fecha del borrador debe restaurarse como fecha'
             confirmar()
             probar_informe()
             limpiar()
@@ -143,4 +163,9 @@ def ejecutar():
 
 
 if __name__ == '__main__':
-    ejecutar()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--bronquiolitis', action='store_true')
+    parser.add_argument('--reporte')
+    args = parser.parse_args()
+    ejecutar("BRONQUIOLITIS" if args.bronquiolitis else "NEUMONÍA", "OBSERVACIÓN" if args.bronquiolitis else "HOSPITALIZACIÓN", args.reporte)

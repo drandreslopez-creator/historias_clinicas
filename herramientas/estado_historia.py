@@ -1,12 +1,14 @@
 """Estado persistible y revisión del informe final, sin decisiones clínicas."""
 import hashlib
+from datetime import date
 
 from herramientas.revision_documental import huella_revision
 
 
 def claves_auxiliares(key, prefix):
     base = "" if prefix == "urgencias" else prefix + "_"
-    return (key in (base + "aiepi_apoyo", base + "aiepi_registro", base + "consulta_cie10_dx")
+    return ((key.startswith(f"{prefix}_checklist_") and not key.endswith("_revision"))
+            or key in (base + "aiepi_apoyo", base + "aiepi_registro", base + "consulta_cie10_dx")
             or key.startswith((base + "gpc_registro_criterio_", base + "aiepi_registro_criterio_"))
             or (prefix == "urgencias" and key.startswith(("_plan_ejemplo_", "_analisis_ejemplo_")))
             or (prefix != "urgencias" and key.startswith((f"_{prefix}_plan_ejemplo_", f"_{prefix}_analisis_ejemplo_"))))
@@ -21,6 +23,11 @@ def snapshot_formulario(estado, defaults, prefix):
 def restaurar_formulario(estado, datos, defaults, prefix):
     for k, v in datos.items():
         if k in defaults or claves_auxiliares(k, prefix):
+            if (k == "fecha_1" or k.endswith("_fecha_nacimiento")) and isinstance(v, str):
+                try:
+                    v = date.fromisoformat(v)
+                except ValueError:
+                    v = None
             estado[k] = v
 
 

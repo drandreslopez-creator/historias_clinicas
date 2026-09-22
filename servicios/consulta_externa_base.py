@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
+from herramientas.checklist_consulta import quitar_edad_del_inicio, resumen_cuadro, render_checklist, crear_referencias, incorporar_checklist, texto_desde_secciones
 from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual, clave_texto_informe
 from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
 
@@ -112,7 +113,7 @@ EXTREMIDADES: SIN HALLAZGOS PATOLÓGICOS EVIDENTES.
 NEUROLÓGICO: SIN FOCALIZACIONES CLÍNICAS."""
 
 PLAN_DEFAULT = """- MANEJO SEGUN HALLAZGOS CLÍNICOS
-- SE BRINDA INFORMACIÓN A PACIENTE Y/O CUIDADOR RESPONSABLE SOBRE EL MANEJO Y LOS SIGNOS DE ALARMA
+- EXPLICAR AL PACIENTE Y/O CUIDADOR EL MANEJO Y LOS SIGNOS DE ALARMA
 - CONTROL SEGUN EVOLUCIÓN"""
 
 SINTOMAS_GENERALES_HOMEOPATIA_PEDIATRICA_DEFAULT = """- APETITO:
@@ -543,7 +544,7 @@ def _construir_enfermedad_actual_prefijo(texto_libre, sexo, etapa, edad_resumen)
 
 
 def _construir_enfermedad_actual_render(texto_libre, sexo, etapa, edad_resumen):
-    texto = str(texto_libre or "").strip().upper()
+    texto = quitar_edad_del_inicio(str(texto_libre or "").strip().upper())
     if not texto:
         return ""
     encabezado = _construir_encabezado_enfermedad_actual(sexo, etapa, edad_resumen)
@@ -710,7 +711,7 @@ def _guardar_borrador_consulta(prefix, defaults):
     )
     tiene_contenido = tiene_contenido or any(
         bool(str(valor or "").strip()) for clave, valor in snapshot.items()
-        if "_registro_criterio_" in clave or clave.endswith("aiepi_registro")
+        if "_registro_criterio_" in clave or clave.endswith("aiepi_registro") or ("_checklist_" in clave and valor != "Pendiente")
     )
     if not tiene_contenido:
         _borrar_borrador_consulta(prefix)
@@ -1736,7 +1737,7 @@ def render_consulta_externa(
             },
             "examen_fisico": examen,
             "paraclinicos": paraclinicos_texto,
-            "registro_clinico_gpc": registro_gpc_previo,
+            "registro_clinico_gpc": "",
             "imagenes": imagenes_texto,
             "diagnosticos": st.session_state.get(f"{prefix}_diagnosticos", ""),
         }
@@ -1927,8 +1928,12 @@ def render_consulta_externa(
     plan = st.text_area("Plan", key=f"{prefix}_plan", height=220)
 
     fundamento_guias_analisis = ""
+    checklist = {}
     if habilitar_trazabilidad_gpc:
         etapas_guias["cierre"] = crear_etapa_guias(st, "cierre")
+        checklist = render_checklist(st, prefix, etapas_guias, conducta_final_analisis, fr, sat,
+                                      construir_recomendaciones_egreso(diagnosticos, enfermedad_actual) if conducta_final_analisis == "EGRESO" else "")
+        referencias_guias = crear_referencias(st, etapas_guias)
         criterios_compartidos = {}
         texto_guias = "\n".join(
             str(valor or "")
@@ -1947,6 +1952,7 @@ def render_consulta_externa(
             registro_key=f"{prefix}_gpc_registro",
             selector_key=f"{prefix}_gpc_ruta",
             contenedores=etapas_guias,
+            contenedores_detalle=referencias_guias,
             registros_limpieza=(f"{prefix}_gpc_registro", f"{prefix}_gpc_justificacion", f"{prefix}_aiepi_registro"),
             compartidos=criterios_compartidos,
         )
@@ -1956,33 +1962,19 @@ def render_consulta_externa(
             texto_clinico=texto_guias,
             selector_key=f"{prefix}_aiepi_apoyo",
             contenedores=etapas_guias,
+            contenedores_detalle=referencias_guias,
             registros_limpieza=(f"{prefix}_gpc_registro", f"{prefix}_gpc_justificacion", f"{prefix}_aiepi_registro"),
             compartidos=criterios_compartidos,
             registro_key=f"{prefix}_aiepi_registro",
         )
-        constancias_guias = []
-        if trazabilidad_gpc:
-            ruta_nombre = obtener_ruta_gpc(ruta_gpc_clave).get("nombre", "APOYO CLÍNICO")
-            constancias_guias.append(
-                f"SE DOCUMENTA VALORACIÓN Y CONDUCTA ORIENTADAS POR {ruta_nombre}: {registro_gpc.upper()}."
-            )
-        if trazabilidad_aiepi:
-            apoyo_nombre = obtener_apoyo_aiepi(apoyo_aiepi_clave).get("nombre", "EVALUACIÓN AIEPI")
-            constancias_guias.append(
-                f"SE DOCUMENTA {apoyo_nombre}: {registro_aiepi.upper()}."
-            )
-        fundamento_guias_analisis = " ".join(constancias_guias)
-        contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
-        contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
+        contexto_plan_ia["checklist_confirmada"] = checklist
         if permitir_generacion_analisis:
-            contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
-            contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
-        if fundamento_guias_analisis and permitir_generacion_analisis:
-            contexto_analisis_ia["fundamento_guias_documentado"] = fundamento_guias_analisis
+            contexto_analisis_ia["checklist_confirmada"] = checklist
+            contexto_analisis_ia.pop("registro_clinico_gpc", None)
 
     ejemplo_revisado = render_revision_documental(
         st, prefix=prefix,
-        registros=(f"{prefix}_gpc_registro", f"{prefix}_aiepi_registro") if habilitar_trazabilidad_gpc else (),
+        registros=(f"{prefix}_checklist",) if habilitar_trazabilidad_gpc else (),
         claves_revision=list(defaults) + [f"{prefix}_aiepi_apoyo", f"{prefix}_aiepi_registro", f"{prefix}_consulta_cie10_dx"],
     )
 
@@ -2229,7 +2221,10 @@ PLAN:
                 ("PLAN", plan),
             ]
         )
-        if recomendaciones_egreso:
+        if habilitar_trazabilidad_gpc:
+            secciones = incorporar_checklist(secciones, checklist)
+            historia = texto_desde_secciones(titulo.upper(), secciones)
+        elif recomendaciones_egreso:
             secciones.append(("RECOMENDACIONES DE EGRESO", recomendaciones_egreso))
         preparar_informe(st, prefix, huella_formulario(st.session_state, defaults, prefix),
                          titulo.upper(), secciones, historia.upper(), nombre, documento)

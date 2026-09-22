@@ -3,6 +3,7 @@ import hashlib
 import time
 import streamlit as st
 
+from herramientas.checklist_consulta import quitar_edad_del_inicio, resumen_cuadro, render_checklist, crear_referencias, incorporar_checklist, texto_desde_secciones
 from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual, clave_texto_informe
 from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
 import streamlit.components.v1 as components
@@ -1226,6 +1227,7 @@ def limpiar_formulario():
     # Un ejemplo docente guarda estado auxiliar para recalcular sus dosis. Al
     # iniciar otra historia debe desaparecer por completo y no contaminarla.
     prefijos_ejemplo = (
+        "urgencias_checklist_",
         "_plan_ejemplo_",
         "_analisis_ejemplo_",
         "gpc_registro_criterio_",
@@ -1430,7 +1432,7 @@ def guardar_borrador_urgencias():
     )
     tiene_contenido = tiene_contenido or any(
         bool(str(valor or "").strip()) for clave, valor in snapshot.items()
-        if "_registro_criterio_" in clave or clave.endswith("aiepi_registro")
+        if "_registro_criterio_" in clave or clave.endswith("aiepi_registro") or ("_checklist_" in clave and valor != "Pendiente")
     )
     if not tiene_contenido:
         return
@@ -2954,21 +2956,16 @@ def extraer_resumen_examen_para_analisis(examen):
         and sin_hallazgos_respiratorios
         and ("OXIMETRIAS ADECUADAS" in cardio or "OXIMETRÍAS ADECUADAS" in cardio)
     )
-    hemodinamica_estable = (
-        "RUIDOS CARDIACOS RÍTMICOS" in cardio or "RUIDOS CARDIACOS RITMICOS" in cardio
-    ) and ("BIEN PERFUNDIDA" in piel or "ROSADA" in piel)
-    if hemodinamica_estable:
-        resumen.append("HEMODINÁMICAMENTE ESTABLE")
 
     if cardio_normal and sin_dificultad_toracica:
-        resumen.append("BUEN PATRÓN RESPIRATORIO, SIN REQUERIMIENTO DE O2 SUPLEMENTARIO")
+        resumen.append("SIN TIRAJES; OXIMETRÍAS DESCRITAS COMO ADECUADAS EN EL EXAMEN")
     else:
-        if contiene_hallazgo_positivo(torax, ("TIRAJES", "RETRACCIONES", "ALETEO")):
-            resumen.append("CON DIFICULTAD RESPIRATORIA")
+        if contiene_hallazgo_positivo(torax, ("TIRAJE", "RETRACCIONES", "ALETEO")):
+            resumen.append(torax)
         elif sin_dificultad_toracica and sin_hallazgos_respiratorios:
             resumen.append("BUEN PATRÓN RESPIRATORIO, SIN SIGNOS DE DIFICULTAD RESPIRATORIA")
         if contiene_hallazgo_positivo(cardio, ("AGREGADOS PULMONARES", "CREPITANTES", "SIBILANCIAS", "RONCUS")):
-            resumen.append("CON HALLAZGOS RESPIRATORIOS AL EXAMEN")
+            resumen.append(cardio)
 
     if "SIN SIGNOS DE IRRITACIÓN PERITONEAL" in abdomen or "SIN SIGNOS DE IRRITACION PERITONEAL" in abdomen:
         resumen.append("SIN SIGNOS DE ALARMA ABDOMINAL")
@@ -3103,7 +3100,7 @@ def extraer_destinatario_informacion(informante):
 
 
 def construir_encabezado_analisis_pediatrico(
-    grupo, años, meses, dias, sexo, informante, enfermedad_actual, motivo=""
+    grupo, años, meses, dias, sexo, informante, enfermedad_actual, motivo="", edad_conocida=True
 ):
     """Construye el inicio narrativo obligatorio del análisis pediátrico."""
     edad_partes = []
@@ -3115,16 +3112,16 @@ def construir_encabezado_analisis_pediatrico(
         edad_partes.append(f"{dias} {'DÍA' if dias == 1 else 'DÍAS'}")
 
     etapa = limpiar_fragmento_analisis(grupo) or "PACIENTE PEDIÁTRICO"
-    edad_texto = ", ".join(edad_partes)
+    edad_texto = ", ".join(edad_partes) + " DE EDAD" if edad_conocida else "EDAD NO REGISTRADA"
     acompanante = extraer_destinatario_informacion(informante)
     traido = "TRAÍDO" if limpiar_fragmento_analisis(sexo) == "MASCULINO" else "TRAÍDA"
-    cuadro = limpiar_fragmento_analisis(enfermedad_actual)
+    cuadro = quitar_edad_del_inicio(limpiar_fragmento_analisis(enfermedad_actual))
     if not cuadro:
         cuadro = f"MOTIVO DE CONSULTA: {limpiar_fragmento_analisis(motivo)}" if motivo else "CUADRO CLÍNICO EN ESTUDIO"
 
     return (
-        f"SE TRATA DE {etapa} DE {edad_texto} DE EDAD, QUIEN ES {traido} POR {acompanante} "
-        f"POR {cuadro}"
+        f"SE TRATA DE {etapa}, DE {edad_texto}, QUIEN ES {traido} POR {acompanante}. "
+        f"CUADRO ACTUAL: {cuadro}"
     )
 
 
@@ -3180,35 +3177,13 @@ def construir_conducta_final_analisis(conducta_final, conducta_sugerida):
     conducta_final = limpiar_fragmento_analisis(conducta_final)
     sugerida = limpiar_fragmento_analisis(conducta_sugerida).rstrip(".")
 
-    if conducta_final == "OBSERVACIÓN":
-        return (
-            "SE DECIDE DEJAR PACIENTE EN OBSERVACIÓN PEDIÁTRICA, "
-            "SE INDICA MANEJO SINTOMÁTICO Y REALIZACIÓN DE EXÁMENES COMPLEMENTARIOS."
-        )
-
-    if conducta_final == "HOSPITALIZACIÓN":
-        return (
-            "SE DECIDE DEJAR PACIENTE EN HOSPITALIZACIÓN PEDIÁTRICA, "
-            "SE INDICA MANEJO DIRIGIDO Y SE SOLICITAN PARACLÍNICOS DE EXTENSIÓN."
-        )
-
-    if conducta_final == "EGRESO":
-        return (
-            "PACIENTE CON BUEN ESTADO GENERAL, SIGNOS VITALES DENTRO DE LÍMITES ACEPTABLES "
-            "Y AL EXAMEN FÍSICO SIN SIGNOS DE ALARMA NI CRITERIOS DE HOSPITALIZACIÓN, "
-            "POR LO QUE SE DECIDE ALTA MÉDICA CON RECOMENDACIONES E INDICACIONES MÉDICAS, "
-            "SE INFORMAN SIGNOS DE ALARMA PARA RECONSULTAR POR URGENCIAS, "
-            "SE INDICA MANEJO SINTOMÁTICO AMBULATORIO Y SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA."
-        )
-
-    if conducta_final == "REMISIÓN":
-        return (
-            "PACIENTE QUIEN REQUIERE MANEJO Y VIGILANCIA EN MAYOR COMPLEJIDAD, "
-            "POR LO QUE SE DECIDE INICIO DE TRÁMITE DE REMISIÓN, "
-            "MANTENIENDO SEGUIMIENTO Y MANEJO POR NUESTRO SERVICIO HASTA DEFINIR TRASLADO."
-        )
-
-    return ""
+    decisiones = {
+        "OBSERVACIÓN": "SE DECIDE OBSERVACIÓN PEDIÁTRICA.",
+        "HOSPITALIZACIÓN": "SE DECIDE HOSPITALIZACIÓN PEDIÁTRICA.",
+        "EGRESO": "SE DECIDE EGRESO.",
+        "REMISIÓN": "SE DECIDE REMISIÓN.",
+    }
+    return decisiones.get(conducta_final, "")
 
 
 def construir_resumen_signos_para_analisis(fc_num, fr_num, sat_num, temp_num, glucometria_num, peso_num, grupo):
@@ -3342,7 +3317,7 @@ def generar_analisis_asistido_urgencias(
         for hallazgo in ("DIFICULTAD RESPIRATORIA", "HIPOXEMIA", "TAQUIPNEICA")
     )
     if enfermedad_auto:
-        texto_base = limpiar_fragmento_analisis(enfermedad_auto).rstrip(".")
+        texto_base = resumen_cuadro(limpiar_fragmento_analisis(enfermedad_auto))
         if resumen_antecedentes_analisis:
             texto_base = f"{texto_base}, {limpiar_fragmento_analisis(resumen_antecedentes_analisis)}"
         partes.append(f"{texto_base}.")
@@ -3368,15 +3343,8 @@ def generar_analisis_asistido_urgencias(
         partes.append(f"AL INGRESO {cuerpo_texto}.")
 
     conducta_limpia = limpiar_fragmento_analisis(conducta_sugerida).rstrip(".")
-    destinatario_limpio = limpiar_fragmento_analisis(destinatario_informacion) or "FAMILIAR"
     if conducta_limpia:
-        partes.append(
-            f"{conducta_limpia}. SE BRINDA INFORMACIÓN A {destinatario_limpio}, SE ACLARAN DUDAS (REFIERE ENTENDER Y ACEPTAR)."
-        )
-    else:
-        partes.append(
-            f"SE BRINDA INFORMACIÓN A {destinatario_limpio}, SE ACLARAN DUDAS (REFIERE ENTENDER Y ACEPTAR)."
-        )
+        partes.append(f"{conducta_limpia}.")
     return " ".join(partes)
 
 
@@ -3899,6 +3867,8 @@ def complementar_analisis_con_ia(base_analisis, contexto, fingerprint, instrucci
         "No listes ítems; redacta un solo párrafo clínico final, sólido y coherente."
     )
 
+    instrucciones += " No repitas la enfermedad actual completa ni listas de guías. No afirmes educación, comprensión ni estudios solicitados sin registro explícito."
+
     prompt = {
         "borrador_base": base_analisis,
         "contexto_clinico": contexto,
@@ -3948,17 +3918,13 @@ def complementar_analisis_y_plan_con_ia(base_analisis, base_plan, contexto, fing
         "plan debe ser una lista de indicaciones clínicas en MAYÚSCULAS, una por línea. "
         "Toda la salida debe estar exclusivamente en español. "
         "El CONTEXTO CLÍNICO ACTUAL corresponde a la historia ya diligenciada por el profesional y prevalece sobre cualquier borrador o ejemplo previo. "
-        "El análisis debe comenzar literalmente con el ENCABEZADO CLÍNICO del borrador de análisis y conservar su grupo etario, edad exacta, acompañante y enfermedad actual. "
+        "El análisis debe ser una síntesis breve del problema, hallazgos relevantes y fundamento de la conducta; no repitas la enfermedad actual ni el encabezado demográfico. "
         "Si un dato del ejemplo no está consignado en el contexto actual, no lo repitas ni lo uses para justificar la conducta. "
         "Usa únicamente los datos suministrados; no inventes diagnósticos, hallazgos, tratamientos, dosis ni paraclínicos. "
         "Respeta las negaciones clínicas textuales: un síntoma o signo documentado como NIEGA, SIN o AUSENTE no puede transformarse en un hallazgo presente. "
         "Respeta la conducta final registrada y las recomendaciones clínicas entregadas como apoyo. "
-        "Integra de manera natural los hallazgos, clasificación, conducta, educación, signos de alarma y control registrados en los apoyos clínicos. "
-        "Cuando existan REGISTROS GPC O AIEPI POR CRITERIOS, incorpora los hallazgos afirmados o negados de mayor relevancia "
-        "como parte del razonamiento clínico, sin contradecirlos ni repetir toda la lista. "
-        "Si el contexto contiene FUNDAMENTO DE GUÍAS DOCUMENTADO, inclúyelo una sola vez como una frase breve dentro del análisis; "
-        "no inventes ni menciones una guía no registrada. "
-        "No crees apartados separados ni menciones IA, trazabilidad, fuentes o listas de verificación. "
+        "Usa solo hallazgos confirmados y la conducta actual. Las condiciones de un posible egreso NO equivalen a una orden de alta actual. No afirmes educación, comprensión, estabilidad, estudios solicitados ni ausencia de requerimiento de oxígeno sin registro explícito. "
+        "No pegues listas GPC/AIEPI ni constancias de adherencia en el análisis. La aplicación organiza los registros confirmados en sus secciones. "
         "En el PLAN, conserva las dosis, vías e intervalos ya calculados en el BORRADOR PLAN; escríbelos de forma completa y no uses frases como 'SEGÚN PESO'. "
         "Solo incluye medicamentos y medidas terapéuticas justificadas por el diagnóstico, el estado clínico y la conducta final. "
         "Si falta una dosis calculada para un medicamento, no la inventes: conserva el plan base editable para validación médica. "
@@ -4958,7 +4924,7 @@ def construir_recomendaciones_egreso(diagnostico, enfermedad_actual=""):
     alarmas = list(dict.fromkeys(alarmas))
 
     return "\n".join(
-        ["INDICACIONES Y RECOMENDACIONES DE EGRESO:", *(f"- {item}" for item in recomendaciones), "", "SIGNOS DE ALARMA Y RECONSULTA POR URGENCIAS:", *(f"- {item}" for item in alarmas), "", "SE BRINDA INFORMACIÓN A PADRES O CUIDADOR RESPONSABLE, QUIEN REFIERE ENTENDER Y ACEPTAR. SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS, O ANTES SI PRESENTA SIGNOS DE ALARMA."]
+        ["INDICACIONES Y RECOMENDACIONES DE EGRESO:", *(f"- {item}" for item in recomendaciones), "", "SIGNOS DE ALARMA Y RECONSULTA POR URGENCIAS:", *(f"- {item}" for item in alarmas), "", "SE INDICA SEGUIMIENTO POR CONSULTA EXTERNA DE PEDIATRÍA EN 48 A 72 HORAS, O ANTES SI PRESENTA SIGNOS DE ALARMA."]
     )
 
 
@@ -5521,6 +5487,7 @@ def render():
         informante,
         enfermedad_input,
         motivo,
+        edad_conocida=bool(fecha_nacimiento),
     )
     edad_texto_ia = ", ".join(
         parte
@@ -5604,7 +5571,7 @@ def render():
             },
             "examen_fisico": examen,
             "paraclinicos": paraclinicos_texto,
-            "registro_clinico_gpc": registro_gpc_previo,
+            "registro_clinico_gpc": "",
         }
         if ruta_gpc_previa:
             contexto_analisis_ia["recomendaciones_clinicas_gpc"] = resumen_gpc_para_ia(ruta_gpc_previa)
@@ -5823,7 +5790,7 @@ def render():
         "examen_fisico": examen,
         "paraclinicos": paraclinicos_texto,
         "imagenes": imagenes_texto,
-        "registro_clinico_gpc": registro_gpc_previo,
+        "registro_clinico_gpc": "",
     }
     fingerprint_plan_ia = hashlib.md5(
         json.dumps(contexto_plan_ia, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -5872,6 +5839,9 @@ def render():
     )
 
     etapas_guias["cierre"] = crear_etapa_guias(st, "cierre")
+    checklist = render_checklist(st, "urgencias", etapas_guias, conducta_final_analisis, fr, sat,
+                                  construir_recomendaciones_egreso(diagnostico_seleccionado, enfermedad_input) if conducta_final_analisis == "EGRESO" else "")
+    referencias_guias = crear_referencias(st, etapas_guias)
     criterios_compartidos = {}
     texto_guias = "\n".join(
         str(valor or "")
@@ -5890,6 +5860,7 @@ def render():
         registro_key="gpc_registro",
         selector_key="gpc_ruta",
         contenedores=etapas_guias,
+        contenedores_detalle=referencias_guias,
         registros_limpieza=("gpc_registro", "gpc_justificacion", "aiepi_registro"),
         compartidos=criterios_compartidos,
     )
@@ -5899,29 +5870,16 @@ def render():
         texto_clinico=texto_guias,
         selector_key="aiepi_apoyo",
         contenedores=etapas_guias,
+        contenedores_detalle=referencias_guias,
         registros_limpieza=("gpc_registro", "gpc_justificacion", "aiepi_registro"),
         compartidos=criterios_compartidos,
         registro_key="aiepi_registro",
     )
-    constancias_guias = []
-    if trazabilidad_gpc:
-        ruta_nombre = obtener_ruta_gpc(ruta_gpc_clave).get("nombre", "APOYO CLÍNICO")
-        constancias_guias.append(
-            f"SE DOCUMENTA VALORACIÓN Y CONDUCTA ORIENTADAS POR {ruta_nombre}: {registro_gpc.upper()}."
-        )
-    if trazabilidad_aiepi:
-        apoyo_nombre = obtener_apoyo_aiepi(apoyo_aiepi_clave).get("nombre", "EVALUACIÓN AIEPI")
-        constancias_guias.append(
-            f"SE DOCUMENTA {apoyo_nombre}: {registro_aiepi.upper()}."
-        )
-    fundamento_guias_analisis = " ".join(constancias_guias)
+    fundamento_guias_analisis = ""
     if permitir_generacion_analisis:
-        contexto_analisis_ia["ruta_gpc"] = instrucciones_gpc_ia
-        contexto_analisis_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
-    contexto_plan_ia["ruta_gpc"] = instrucciones_gpc_ia
-    contexto_plan_ia["apoyo_aiepi"] = instrucciones_aiepi_ia
-    if fundamento_guias_analisis and permitir_generacion_analisis:
-        contexto_analisis_ia["fundamento_guias_documentado"] = fundamento_guias_analisis
+        contexto_analisis_ia["checklist_confirmada"] = checklist
+        contexto_analisis_ia.pop("registro_clinico_gpc", None)
+    contexto_plan_ia["checklist_confirmada"] = checklist
 
     st.subheader("Código trauma")
     st.caption("Opcional. Este bloque no se incorpora a la historia clínica; solo sirve para copiar y reportar al grupo.")
@@ -6136,7 +6094,7 @@ def render():
         )
 
     ejemplo_revisado = render_revision_documental(
-        st, prefix="urgencias", registros=("gpc_registro", "aiepi_registro"),
+        st, prefix="urgencias", registros=("urgencias_checklist",),
         claves_revision=list(FORM_DEFAULTS) + ["aiepi_apoyo", "aiepi_registro"],
     )
 
@@ -6176,17 +6134,9 @@ def render():
                     contexto_documento_ia,
                     fingerprint_documento_ia,
                     instrucciones_analisis=(
-                        "INTEGRA LOS DATOS CLÍNICOS, ANTECEDENTES, SIGNOS VITALES, EXAMEN, PARACLÍNICOS Y CONDUCTA FINAL. "
+                        "REDACTA UNA SÍNTESIS BREVE DEL PROBLEMA, HALLAZGOS RELEVANTES Y FUNDAMENTO DE LA CONDUCTA. NO REPITAS LA ENFERMEDAD ACTUAL COMPLETA NI LISTAS GPC/AIEPI. NO AFIRMES EDUCACIÓN, COMPRENSIÓN NI ESTUDIOS SOLICITADOS SIN REGISTRO EXPLÍCITO. "
                         "SI LA CONDUCTA FINAL ESTÁ PENDIENTE DEFINIR, NO INVENTES UNA DECISIÓN FINAL."
                     ),
-                )
-                analisis_default_final = asegurar_encabezado_analisis(
-                    analisis_default_final,
-                    enfermedad_auto,
-                )
-                analisis_default_final = integrar_fundamento_guias_en_analisis(
-                    analisis_default_final,
-                    fundamento_guias_analisis,
                 )
                 plan_sugerido_final = ajustar_plan_a_conducta_final(
                     renderizar_plan_editable(plan_sugerido_final, peso),
@@ -6327,8 +6277,8 @@ PLAN:
             ("DIAGNÓSTICO NUTRICIONAL", dx_nutricional),
             ("PLAN", plan),
         ]
-        if recomendaciones_egreso:
-            secciones_informe.append(("RECOMENDACIONES DE EGRESO", recomendaciones_egreso))
+        secciones_informe = incorporar_checklist(secciones_informe, checklist)
+        historia = texto_desde_secciones(titulo_historia.upper(), secciones_informe)
         preparar_informe(st, "urgencias", huella_formulario(st.session_state, FORM_DEFAULTS, "urgencias"),
                          titulo_historia.upper(), secciones_informe, historia.upper(), nombre, documento, tipo_documento)
 

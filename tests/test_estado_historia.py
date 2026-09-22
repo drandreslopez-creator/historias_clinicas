@@ -122,3 +122,12 @@ st.text_area("Informe guardado", texto, key=clave_texto_informe("guardada", text
         self.assertEqual(app.text_area[0].value, 'INFORME B')
         app.selectbox[0].select('A').run()
         self.assertEqual(app.text_area[0].value, 'INFORME A')
+
+    def test_fecha_serializada_se_restaura_como_fecha(self):
+        from datetime import date
+        for prefix, key in [('urgencias', 'fecha_1'), ('ped', 'ped_fecha_nacimiento')]:
+            estado = {}
+            restaurar_formulario(estado, {key: '2025-12-20'}, {key: None}, prefix)
+            self.assertEqual(estado[key], date(2025, 12, 20))
+            restaurar_formulario(estado, {key: 'fecha incorrecta'}, {key: None}, prefix)
+            self.assertIsNone(estado[key])
