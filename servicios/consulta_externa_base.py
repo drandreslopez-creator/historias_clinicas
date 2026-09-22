@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import streamlit as st
 
-from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual
+from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual, clave_texto_informe
 from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
 
 from core.calculos import calcular_edad, edad_en_meses
@@ -635,6 +635,8 @@ def _init_state(defaults):
 
 
 def _clear_state(prefix, defaults):
+    version_key = f"_{prefix}_adjuntos_version"
+    st.session_state[version_key] = st.session_state.get(version_key, 0) + 1
     keys_to_clear = [key for key in st.session_state.keys() if key.startswith((prefix, f"_{prefix}_analisis_ejemplo_", f"_{prefix}_plan_ejemplo_"))]
     for key in keys_to_clear:
         st.session_state.pop(key, None)
@@ -1443,14 +1445,14 @@ def render_consulta_externa(
             "Subir PDF de laboratorios",
             type=["pdf"],
             accept_multiple_files=True,
-            key=f"{prefix}_paraclinicos_pdf_v1",
+            key=f"{prefix}_paraclinicos_pdf_v1_{st.session_state.get(f'_{prefix}_adjuntos_version', 0)}",
         )
     with col_pdf_2:
         pdf_imgs = st.file_uploader(
             "Subir PDF de imágenes",
             type=["pdf"],
             accept_multiple_files=True,
-            key=f"{prefix}_imagenes_pdf_v1",
+            key=f"{prefix}_imagenes_pdf_v1_{st.session_state.get(f'_{prefix}_adjuntos_version', 0)}",
         )
 
     if pdf_labs:
@@ -2296,7 +2298,8 @@ PLAN:
                     "Informe guardado",
                     historia_sel["historia"],
                     height=500,
-                    key=f"{prefix}_historia_guardada_texto",
+                    key=clave_texto_informe(f"{prefix}_historia_guardada_texto", historia_sel["historia"]),
+                    disabled=True,
                 )
                 if st.button("Eliminar esta historia", key=f"{prefix}_eliminar_historia", use_container_width=True):
                     resultado_eliminacion = eliminar_historia_guardada(history_path, historia_consulta_id)

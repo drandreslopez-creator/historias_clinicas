@@ -3,7 +3,7 @@ import hashlib
 import time
 import streamlit as st
 
-from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual
+from herramientas.estado_historia import snapshot_formulario, restaurar_formulario, huella_formulario, preparar_informe, revisar_informe, informe_guardado_actual, clave_texto_informe
 from herramientas.revision_documental import marcar_ejemplo, aviso_ejemplo, render_revision_documental
 import streamlit.components.v1 as components
 import pandas as pd
@@ -1217,6 +1217,7 @@ def puntuar_diagnostico(row, terminos, grupos=None):
 
 
 def limpiar_formulario():
+    st.session_state["_urgencias_adjuntos_version"] = st.session_state.get("_urgencias_adjuntos_version", 0) + 1
     st.session_state.pop("urgencias_ejemplo_confirmado", None)
     st.session_state.pop("urgencias_informe_final", None)
     st.session_state.pop("_analisis_recalculado_pendiente", None)
@@ -1229,6 +1230,8 @@ def limpiar_formulario():
         "_analisis_ejemplo_",
         "gpc_registro_criterio_",
         "aiepi_registro_criterio_",
+        "pdf_paraclinicos_uploader",
+        "pdf_imagenes_uploader",
     )
     claves_adicionales = {
         "dx_cie10_pendiente",
@@ -1384,6 +1387,8 @@ def borrar_borrador_urgencias():
             DRAFT_URGENCIAS_PATH.unlink()
     except Exception:
         pass
+
+    st.session_state.pop("_borrador_urgencias_hash", None)
 
 
 def _snapshot_borrador_urgencias():
@@ -5449,7 +5454,7 @@ def render():
         pdf_paraclinicos = st.file_uploader(
             "Subir PDF de laboratorios",
             type=["pdf"],
-            key=f"pdf_paraclinicos_uploader_{PARSER_PARACLINICOS_VERSION}",
+            key=f"pdf_paraclinicos_uploader_{PARSER_PARACLINICOS_VERSION}_{st.session_state.get('_urgencias_adjuntos_version', 0)}",
             accept_multiple_files=True,
             help="Carga un PDF de laboratorio. La app extrae el texto, lo pone en MAYÚSCULA y lo organiza por fechas."
         )
@@ -5465,7 +5470,7 @@ def render():
         pdf_imagenes = st.file_uploader(
             "Subir PDF de imágenes",
             type=["pdf"],
-            key=f"pdf_imagenes_uploader_{PARSER_PARACLINICOS_VERSION}",
+            key=f"pdf_imagenes_uploader_{PARSER_PARACLINICOS_VERSION}_{st.session_state.get('_urgencias_adjuntos_version', 0)}",
             accept_multiple_files=True,
             help="Carga un PDF de reporte imagenológico. La app extrae el texto, lo pone en MAYÚSCULA y lo organiza por fechas."
         )
@@ -6395,7 +6400,8 @@ PLAN:
                     "Informe guardado",
                     historia_seleccionada["historia"],
                     height=500,
-                    key="historia_guardada_texto"
+                    key=clave_texto_informe("historia_guardada_texto", historia_seleccionada["historia"]),
+                    disabled=True
                 )
                 if st.button("Eliminar esta historia", key="eliminar_historia_guardada", use_container_width=True):
                     resultado_eliminacion = eliminar_historia_guardada(HISTORIAS_PATH, historia_consulta_id)

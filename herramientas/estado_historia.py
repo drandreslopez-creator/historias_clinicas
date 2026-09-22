@@ -1,4 +1,6 @@
 """Estado persistible y revisión del informe final, sin decisiones clínicas."""
+import hashlib
+
 from herramientas.revision_documental import huella_revision
 
 
@@ -48,7 +50,7 @@ def revisar_informe(st, prefix, huella, guardar):
         return
     st.subheader("Informe final para revisión")
     st.caption("Revise el texto definitivo, incluido el análisis y el plan generados. Para corregirlo, modifique el formulario y vuelva a generar.")
-    st.text_area("Texto definitivo", value=informe["historia"], height=500, disabled=True, key=f"{prefix}_vista_final_" + huella[:16])
+    st.text_area("Texto definitivo", value=informe["historia"], height=500, disabled=True, key=clave_texto_informe(f"{prefix}_vista_final", informe["historia"]))
     if not informe["guardado"]:
         if st.button("Confirmar informe final y guardar / enviar a Drive", key=f"{prefix}_guardar_final"):
             guardar(informe)
@@ -65,3 +67,8 @@ def revisar_informe(st, prefix, huella, guardar):
 def informe_guardado_actual(st, prefix, huella):
     informe = st.session_state.get(f"{prefix}_informe_final", {})
     return informe.get("guardado", False) and informe.get("huella") == huella
+
+
+def clave_texto_informe(prefix, texto):
+    """El widget debe representar el contenido actual, incluso con iguales entradas."""
+    return prefix + "_" + hashlib.sha256(texto.encode("utf-8")).hexdigest()

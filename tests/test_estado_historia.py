@@ -26,7 +26,7 @@ class EstadoHistoriaTests(unittest.TestCase):
         ns = dict(st=SimpleNamespace(session_state=estado), FORM_DEFAULTS={}, borrar_borrador_urgencias=lambda:None)
         exec(compile(ast.Module(body=[nodo], type_ignores=[]),str(path),'exec'),ns)
         ns['limpiar_formulario']()
-        self.assertFalse(estado)
+        self.assertEqual(estado, {"_urgencias_adjuntos_version": 1})
 
     def test_huella_detecta_cambios_de_criterio_no_caches(self):
         estado = {'plan': 'A', 'plan_base': 'BASE', 'gpc_registro_criterio_0': 'UNO'}
@@ -61,3 +61,64 @@ revisar_informe(st, "test", texto, guardar)
         app.text_input[0].set_value('OTRO PACIENTE').run()
         self.assertNotIn('test_informe_final', app.session_state)
         self.assertFalse(any(b.key == 'test_guardar_final' for b in app.button))
+
+    def test_regenerar_con_iguales_entradas_muestra_nuevo_resultado(self):
+        app = AppTest.from_string('''
+import streamlit as st
+from herramientas.estado_historia import preparar_informe, revisar_informe
+if st.button("Generar"):
+    numero = st.session_state.get("numero", 0) + 1
+    st.session_state["numero"] = numero
+    preparar_informe(st, "test", "MISMAS ENTRADAS", "T", [], f"RESULTADO {numero}", "", "")
+def guardar(informe):
+    st.session_state["guardado"] = informe["historia"]
+revisar_informe(st, "test", "MISMAS ENTRADAS", guardar)
+''').run()
+        app.button[0].click().run()
+        self.assertEqual(app.text_area[0].value, "RESULTADO 1")
+        app.button[0].click().run()
+        self.assertEqual(app.text_area[0].value, "RESULTADO 2")
+        app.button(key="test_guardar_final").click().run()
+        self.assertEqual(app.session_state["guardado"], "RESULTADO 2")
+
+    def test_borrar_borrador_invalida_cache(self):
+        import tempfile
+        path = Path(__file__).resolve().parents[1] / 'servicios/pediatria_urgencias.py'
+        nodo = next(n for n in ast.parse(path.read_text()).body if isinstance(n, ast.FunctionDef) and n.name == 'borrar_borrador_urgencias')
+        with tempfile.TemporaryDirectory() as tmp:
+            archivo = Path(tmp) / 'borrador.json'
+            archivo.write_text('{}')
+            estado = {'_borrador_urgencias_hash': 'HUELLA ANTERIOR'}
+            ns = dict(st=SimpleNamespace(session_state=estado), DRAFT_URGENCIAS_PATH=archivo)
+            exec(compile(ast.Module(body=[nodo], type_ignores=[]), str(path), 'exec'), ns)
+            ns['borrar_borrador_urgencias']()
+            self.assertFalse(archivo.exists())
+            self.assertNotIn('_borrador_urgencias_hash', estado)
+
+    def test_limpieza_renueva_adjuntos_en_ambos_formularios(self):
+        root = Path(__file__).resolve().parents[1]
+        for archivo, funcion, prefix in [('pediatria_urgencias.py', 'limpiar_formulario', 'urgencias'), ('consulta_externa_base.py', '_clear_state', 'ped')]:
+            path = root / 'servicios' / archivo
+            nodo = next(n for n in ast.parse(path.read_text()).body if isinstance(n, ast.FunctionDef) and n.name == funcion)
+            version_key = f'_{prefix}_adjuntos_version'
+            pdf_key = 'pdf_paraclinicos_uploader_v9_2' if prefix == 'urgencias' else 'ped_paraclinicos_pdf_v1_2'
+            estado = {version_key: 2, pdf_key: ['PDF DEL CASO ANTERIOR']}
+            ns = dict(st=SimpleNamespace(session_state=estado), FORM_DEFAULTS={}, borrar_borrador_urgencias=lambda:None)
+            exec(compile(ast.Module(body=[nodo], type_ignores=[]), str(path), 'exec'), ns)
+            ns[funcion](*(() if prefix == 'urgencias' else (prefix, {})))
+            self.assertNotIn(pdf_key, estado)
+            self.assertEqual(estado[version_key], 3)
+
+    def test_cambiar_historia_guardada_actualiza_texto(self):
+        app = AppTest.from_string('''
+import streamlit as st
+from herramientas.estado_historia import clave_texto_informe
+seleccion = st.selectbox("Historia", ["A", "B"])
+texto = "INFORME " + seleccion
+st.text_area("Informe guardado", texto, key=clave_texto_informe("guardada", texto), disabled=True)
+''').run()
+        self.assertEqual(app.text_area[0].value, 'INFORME A')
+        app.selectbox[0].select('B').run()
+        self.assertEqual(app.text_area[0].value, 'INFORME B')
+        app.selectbox[0].select('A').run()
+        self.assertEqual(app.text_area[0].value, 'INFORME A')
